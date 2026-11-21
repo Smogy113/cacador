@@ -45,12 +45,14 @@ private:
         Vec3f centro{};
         float raio = 0;
         Mesh construcoes{}, arvPerto{}, arvLonge{};
-        bool temConstr = false, temPerto = false, temLonge = false;
+        bool temConstr = false, temPerto = false, temLonge = false, vazioPerto = false;
         float usoPerto = 0;
         std::vector<ArvoreInst> arvores;
     };
     void construirPerto(Pedaco& p);
     std::vector<Pedaco> p_;
+    const Terreno* ter_ = nullptr;
+    const MundoColisao* col_ = nullptr;
     int n_ = 0;
     float tempo_ = 0;
     size_t tris_ = 0;

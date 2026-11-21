@@ -836,6 +836,8 @@ static void espalharVegetacao(Gerador& g, const Mapa& mapa, std::vector<std::vec
 // ================== Cenario ==================
 
 void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, uint32_t semente) {
+    ter_ = &t;
+    col_ = &col;
     n_ = int(std::ceil(2 * Terreno::META / TAM));
     p_.assign(n_ * n_, Pedaco{});
     Gerador g{t, col, luzes, semente, {}, n_, {}};
@@ -897,7 +899,35 @@ void Cenario::construirPerto(Pedaco& p) {
         m.aoVertical(a.pos.y, a.pos.y + 3.5f * a.escala);
         total.anexar(m);
     }
-    if (total.vazio()) return;
+    // grama: tufos de 3 laminas (dos dois lados) no campo aberto, so nos pedacos perto do jogador
+    if (ter_ && col_) {
+        const Terreno& t = *ter_;
+        uint32_t rng = hash32(uint32_t(p.centro.x * 7.f) * 73856093u ^ uint32_t(p.centro.z * 7.f) * 19349663u);
+        for (float gz = -TAM * 0.5f; gz < TAM * 0.5f; gz += 2.2f)
+            for (float gx = -TAM * 0.5f; gx < TAM * 0.5f; gx += 2.2f) {
+                float x = p.centro.x + gx + (aleatorio01(rng) - 0.5f) * 2.f, z = p.centro.z + gz + (aleatorio01(rng) - 0.5f) * 2.f;
+                if (aleatorio01(rng) > 0.75f || !t.dentroDoJogavel(x, z)) continue;
+                float y = t.altura(x, z);
+                if (t.mascaraEstrada(x, z) > 0.25f || t.mascaraRio(x, z) > 0.05f || y < t.nivelAgua() + 0.4f || t.normal(x, z).y < 0.88f) continue;
+                Vec3f base{x, y, z};
+                Vec3f r = col_->resolver(base, 0.35f);
+                if (std::hypot(r.x - x, r.z - z) > 0.01f) continue;  // nao nasce dentro de casa/cerca
+                float h = 0.28f + aleatorio01(rng) * 0.3f, verde = 0.85f + aleatorio01(rng) * 0.3f;
+                Rgb cor{0.36f * verde, 0.5f * verde, 0.2f * verde}, ponta{0.62f * verde, 0.66f * verde, 0.3f * verde};
+                for (int k = 0; k < 3; k++) {
+                    float a = aleatorio01(rng) * 6.2831f, l = 0.07f + aleatorio01(rng) * 0.05f;
+                    Vec3f lado{std::cos(a) * l, 0, std::sin(a) * l};
+                    Vec3f top = base + Vec3f{std::sin(a + 1.3f) * h * 0.35f, h, std::cos(a + 1.3f) * h * 0.35f};
+                    Rgb c = k == 1 ? ponta : cor;
+                    total.triangulo(base - lado, base + lado, top, c);
+                    total.triangulo(base + lado, base - lado, top, c);
+                }
+            }
+    }
+    if (total.vazio()) {
+        p.vazioPerto = true;
+        return;
+    }
     p.arvPerto = paraMesh(total);
     p.temPerto = true;
 }
@@ -910,7 +940,7 @@ void Cenario::atualizar(Vec3f foco, float tempo, int maxConstrucoes) {
     std::vector<std::pair<float, int>> fila;
     for (int k = 0; k < int(p_.size()); k++) {
         Pedaco& p = p_[k];
-        if (p.arvores.empty()) continue;
+        if (p.vazioPerto) continue;
         float d = std::hypot(p.centro.x - foco.x, p.centro.z - foco.z) - TAM * 0.7f;
         if (d < DIST_PERTO && !p.temPerto) fila.push_back({d, k});
         if (p.temPerto && tempo - p.usoPerto > 10.f && d > DIST_PERTO + 30) {

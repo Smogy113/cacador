@@ -178,6 +178,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     marcaAcerto_ = std::max(0.f, marcaAcerto_ - dt);
     mensagemT_ = std::max(0.f, mensagemT_ - dt);
     flashT_ = std::max(0.f, flashT_ - dt);
+    bool recarregavaAntes = arma_.recarregando();
     if (e.recarregar && vivoJ) arma_.recarregar();
 
     Vec3f camPos{cam_.position.x, cam_.position.y, cam_.position.z};
@@ -192,6 +193,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
         if (arma_.balas == 0) arma_.recarregar();
         if (arma_.podeAtirar()) {
             arma_.atirar();
+            sons_.tiro(1.f, 0.5f);
             tiroOuvido_ = true;
             tiroT_ = 0.18f;
             jogador_.yaw = rig_.yaw;
@@ -235,7 +237,11 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     EventosBando ev = cacada_.atualizar(dt, jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.vel : jogador_.vel,
                                         montadoEm_ >= 0, tiroOuvido_, *terreno_, col_);
     if (vivoJ && ev.tirosNoJogador > 0) vida_.dano(DANO_BANDIDO * float(ev.tirosNoJogador));
+    if (!recarregavaAntes && arma_.recarregando()) sons_.recarga();
     for (Vec3f c : ev.claroes) {
+        Vec3f d = c - jogador_.pos;
+        float dist = std::hypot(d.x, d.z), lado = dist > 0.1f ? dot(d * (1.f / dist), direitaDe(rig_.yaw)) : 0.f;
+        sons_.tiro(std::clamp(1.f - dist / 220.f, 0.05f, 1.f) * 0.85f, 0.5f - 0.4f * lado);
         flashT_ = 0.06f;
         flashPos_ = c;
         particulas_.push_back({c, Vec3f{0, 0.6f, 0}, 0.7f, 0.05f, Rgb{0.7f, 0.7f, 0.68f}});

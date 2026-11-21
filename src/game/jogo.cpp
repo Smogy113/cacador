@@ -88,6 +88,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
         rig_.distAlvo = 6.f;
     }
     iniciarCombate();
+    sons_.carregar();
     if (op.recompensa >= 0) aceitarCartaz(0, op.recompensa);
     sombra_.carregar();
     if (op.distCamera > 0) rig_.distAlvo = op.distCamera;
@@ -182,6 +183,7 @@ void Jogo::desenharInterface() {
 
 Jogo::~Jogo() {
     descarregarCombate();
+    sons_.descarregar();
     for (auto& m : roupasNpc_) m.descarregar();
     for (auto& m : modelosCavalo_) m.descarregar();
     cenario_.descarregar();
@@ -240,6 +242,10 @@ void Jogo::atualizar(float dt) {
             aoDesmontar();
         } else {
             moverCavalo(c, e, dt, *terreno_, col_);
+            if (int(c.passada / 1.5708f) != cascoAntes_) {  // quatro patas por ciclo
+                cascoAntes_ = int(c.passada / 1.5708f);
+                if (c.corpo.vel > 0.3f) sons_.casco(0.25f + 0.04f * c.corpo.vel);
+            }
             jogador_.pos = c.corpo.pos;
             jogador_.yaw = c.corpo.yaw;
             jogador_.vel = 0;
@@ -253,6 +259,10 @@ void Jogo::atualizar(float dt) {
         moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);
         if (mira_ > 0.5f) jogador_.yaw = rig_.yaw;
         passada_ += dt * jogador_.vel * FASE_POR_METRO;
+        if (int(passada_ / 3.14159f) != passoAntes_) {  // um som por passo
+            passoAntes_ = int(passada_ / 3.14159f);
+            if (jogador_.vel > 0.1f) sons_.passo(jogador_.vel > 3.f ? 0.55f : 0.35f);
+        }
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
         quadroPerto_ = -1;
@@ -272,6 +282,7 @@ void Jogo::atualizar(float dt) {
         }
     }
     atualizarCombate(dt, e);
+    sons_.ambiente(dt, relogio_.intensidadeTochas());
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
         if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);

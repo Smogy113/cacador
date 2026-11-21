@@ -10,6 +10,7 @@
 #include "core/motion.h"
 #include "core/npc.h"
 #include "game/actors.h"
+#include "game/sons.h"
 #include "core/places.h"
 #include "core/bounty.h"
 #include "core/cacada.h"
@@ -121,6 +122,8 @@ private:
     ModeloHumano modeloXerife_;
     uint32_t rngTiro_ = 12345;
     bool tiroOuvido_ = false;
+    Sons sons_;
+    int passoAntes_ = 0, cascoAntes_ = 0;
     EstadoBandido estadoChefeAntes_ = EstadoBandido::Vigiando;
     void iniciarCombate();
     void descarregarCombate();

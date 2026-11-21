@@ -72,6 +72,7 @@ int main(int argc, char** argv) {
     g_op = lerArgs(argc, argv);
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 720, "Caçador");
+    if (g_op.screenshot.empty() && !g_op.benchmark) InitAudioDevice();  // sons gerados por codigo
     if (!IsWindowReady()) {
 #if defined(_WIN32)
         MessageBoxA(nullptr, "Nao foi possivel abrir a janela do jogo.\n\nO Cacador precisa de uma placa de video com OpenGL 3.3.\nAtualize o driver de video e tente de novo.", "Cacador", 0x10);
@@ -149,6 +150,7 @@ int main(int argc, char** argv) {
     }
 #endif
     delete g_jogo;
+    if (IsAudioDeviceReady()) CloseAudioDevice();
     CloseWindow();
     return 0;
 }

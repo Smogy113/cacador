@@ -6,7 +6,7 @@
 #include "raymath.h"
 
 namespace {
-const float PASSOS[3] = {2.f, 4.f, 8.f};
+const float PASSOS[3] = {1.5f, 4.f, 8.f};  // perto: 1,5 m (chao com mais detalhe)
 const float DIST_LOD[2] = {110.f, 240.f};
 
 struct Buf {
