@@ -548,7 +548,7 @@ void main() {
     float e = step(0.9965, hash(q)) * smoothstep(0.0, 0.25, d.y);
     c += vec3(e) * 0.9 * noite;
     // ---- nuvens volumetricas ----
-    if (d.y > 0.01) {
+    if (d.y > 0.01 && passosNuvem > -0.5) {
         vec3 cam = posCamera;
         float t0 = (NUV_BASE - cam.y) / d.y, t1 = min((NUV_TOPO - cam.y) / d.y, 30000.0);
         float cosSol = dot(d, dirSol);

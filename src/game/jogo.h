@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -41,7 +42,8 @@ struct OpcoesJogo {
     int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
     bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
     bool mirar = false;    // segura a mira (screenshots)
-    bool abrirMapa = false;  // comeca com o mapa grande aberto (screenshots)
+    bool abrirMapa = false;
+    bool abrirDepuracao = false;  // comeca com o painel F1 aberto (screenshots)  // comeca com o mapa grande aberto (screenshots)
     float pitch = -999;    // inclinacao da camera em graus (screenshots; < 0 = olhando para cima)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
@@ -137,6 +139,14 @@ private:
     Vec3f objetivoRota_{};
     float tempoRota_ = 0;
     void atualizarRota(float dt);
+    // painel de depuracao (F1)
+    struct Dbg {
+        bool aberto = false, pausado = false, invencivel = false, municaoInf = false;
+        float velTempo = 1.f, velJogador = 1.f, fov = 60.f, raioGrama = -1.f, densGrama = -1.f;
+        float msQuadro = 0;
+    } dbg_;
+    void desenharDepuracao();
+    Vec3f direitaJogador() const { return {-std::cos(jogador_.yaw), 0, std::sin(jogador_.yaw)}; }
     Vec3f cabeloX_{}, cabeloV_{}, cabecaAntes_{}, velCabecaAntes_{};  // fisica do cabelo (mola)
     float yawCabeloAntes_ = 0;
     bool cabeloIniciado_ = false;

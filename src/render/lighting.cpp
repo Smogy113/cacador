@@ -216,7 +216,8 @@ void Iluminacao::uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noi
     setV3(s, "dirSol", sol);
     setF(s, "densNeblina", p.densidadeNeblina);
     setF(s, "distVisao", ef_.distanciaVisao);
-    setF(s, "exposicao", p.exposicao);
+    setF(s, "exposicao", p.exposicao * dbg.exposicao);
+    if (dbg.semNeblina) setF(s, "densNeblina", 0.f);
     setRgb(s, "grading", p.grading);
     setV3(s, "dirLua", lua_);
     (void)noite;
@@ -269,7 +270,9 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     setF(ceu_, "noite", noite_);
     setV3(ceu_, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
     setF(ceu_, "tempoVento", tempo);
-    setF(ceu_, "passosNuvem", nivel_ == Nivel::Alto ? 22.f : (nivel_ == Nivel::Medio ? 12.f : 0.f));
+    float pn = nivel_ == Nivel::Alto ? 22.f : (nivel_ == Nivel::Medio ? 12.f : 0.f);
+    if (dbg.passosNuvem >= 0) pn = dbg.passosNuvem;
+    setF(ceu_, "passosNuvem", dbg.semNuvens ? -1.f : pn);
 }
 
 void Iluminacao::modoHorizonte(float d) { setF(lit_, "descartarPerto", d); }
@@ -362,7 +365,7 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     EndTextureMode();
     // 2) raios de luz a partir do sol
     bool raios = false;
-    if (ef_.raiosDeLuz && sol_.y > -0.02f) {
+    if (ef_.raiosDeLuz && !dbg.semRaios && sol_.y > -0.02f) {
         Vector3 ps{cam.position.x + sol_.x * 300, cam.position.y + sol_.y * 300, cam.position.z + sol_.z * 300};
         Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
         float olhaSol = Vector3DotProduct(fwd, {sol_.x, sol_.y, sol_.z});
@@ -389,7 +392,7 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
         }
     }
     // 3) desfoca o brilho (horizontal e vertical, 2 vezes)
-    for (int k = 0; k < 2 && ef_.bloom; k++) {
+    for (int k = 0; k < 2 && ef_.bloom && !dbg.semBloom; k++) {
         float dh[2] = {1.f / mw * (k + 1), 0}, dv[2] = {0, 1.f / mh * (k + 1)};
         BeginTextureMode(meiaB_);
         BeginShaderMode(blur_);
@@ -405,7 +408,7 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
         EndTextureMode();
     }
     // 3b) oclusao de ambiente em tela (meia resolucao, desfocada)
-    bool ao = ef_.ssao && cenaComProfundidade_;
+    bool ao = ef_.ssao && cenaComProfundidade_ && !dbg.semSSAO;
     if (ao) {
         BeginTextureMode(aoA_);
         BeginShaderMode(ssao_);
@@ -433,7 +436,7 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     }
     // 4) junta tudo na tela
     BeginShaderMode(junta_);
-    float fb = ef_.bloom ? 0.65f : 0.f, ur = raios ? 1.f : 0.f;
+    float fb = ef_.bloom && !dbg.semBloom ? 0.65f : 0.f, ur = raios ? 1.f : 0.f;
     float aspJ = float(largPos_) / float(altPos_);
     Vector3 crJ{paleta_.sol.r, paleta_.sol.g, paleta_.sol.b};
     SetShaderValue(junta_, GetShaderLocation(junta_, "posSol"), posSolTela_, SHADER_UNIFORM_VEC2);

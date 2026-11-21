@@ -110,6 +110,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     for (int i = 0; i < 300; i++) populacao_.atualizar(0.1f, relogio_, *terreno_, col_, {1e4f, 0, 1e4f});
     if (op.tiroteio) prepararTiroteio();
     mapaAberto_ = op.abrirMapa;
+    dbg_.aberto = op.abrirDepuracao;
     atualizarRota(0.f);
     if (!op.semEntrada) DisableCursor();
 }
@@ -126,6 +127,10 @@ Entrada Jogo::lerEntrada() {
     e.mirar = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
     e.atirar = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     e.recarregar = IsKeyPressed(KEY_R);
+    if (dbg_.aberto) {  // o mouse e do painel
+        e.mirar = e.atirar = false;
+        e.mouseDx = e.mouseDy = 0;
+    }
     Vector2 md = GetMouseDelta();
     e.mouseDx = md.x;
     e.mouseDy = md.y;
@@ -174,6 +179,7 @@ void Jogo::desenharInterface() {
         else
             mapaTela_.desenharCheio(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rota_, cacada_.ativa(),
                                     objetivoRota_);
+        if (dbg_.aberto) desenharDepuracao();
         if (cacada_.podeAmarrar(jogador_.pos)) desenharDica(amarrarT_ > 0 ? "" : "Segure E", amarrarT_ > 0 ? "Amarrando..." : "amarrar");
         else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E", "entregar ao xerife");
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E", "puxar pela corda");
@@ -209,14 +215,21 @@ void Jogo::atualizar(float dt) {
         if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) cartazSel_ = (cartazSel_ + n - 1) % n;
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) aceitarCartaz(quadroAberto_, cartazSel_);
         if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) quadroAberto_ = -1;
-        if (!op_.congelarHora) relogio_.avancar(dt);
+        if (!op_.congelarHora) relogio_.avancar(dt * dbg_.velTempo);
         return;
     }
+    // painel de depuracao (F1): mouse livre; "pausar mundo" congela tudo menos o painel
+    dbg_.msQuadro = dbg_.msQuadro * 0.9f + GetFrameTime() * 1000.f * 0.1f;
+    if (!op_.semEntrada && IsKeyPressed(KEY_F1)) {
+        dbg_.aberto = !dbg_.aberto;
+        if (dbg_.aberto) EnableCursor(); else if (!pausado_) DisableCursor();
+    }
+    if (dbg_.aberto && dbg_.pausado) return;
     // mapa grande (M): o jogo continua, o jogador fica parado
     if (!op_.semEntrada && IsKeyPressed(KEY_M) && !pausado_) mapaAberto_ = !mapaAberto_;
     if (mapaAberto_) {
         if (IsKeyPressed(KEY_ESCAPE)) mapaAberto_ = false;
-        if (!op_.congelarHora) relogio_.avancar(dt);
+        if (!op_.congelarHora) relogio_.avancar(dt * dbg_.velTempo);
         atualizarRota(dt);
         return;
     }
@@ -226,9 +239,9 @@ void Jogo::atualizar(float dt) {
             pausado_ = !pausado_;
             if (pausado_) EnableCursor(); else DisableCursor();
         }
-        if (!IsWindowFocused() && !pausado_) { pausado_ = true; EnableCursor(); }
+        if (!IsWindowFocused() && !pausado_ && !dbg_.aberto) { pausado_ = true; EnableCursor(); }
         if (pausado_) {
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { pausado_ = false; DisableCursor(); }
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !dbg_.aberto) { pausado_ = false; DisableCursor(); }
             if (IsKeyPressed(KEY_Q)) sair_ = true;
             if (IsKeyPressed(KEY_ONE)) trocarNivel(Nivel::Baixo);
             if (IsKeyPressed(KEY_TWO)) trocarNivel(Nivel::Medio);
@@ -237,7 +250,7 @@ void Jogo::atualizar(float dt) {
         }
     }
     tempo_ += dt;
-    if (!op_.congelarHora) relogio_.avancar(dt);
+    if (!op_.congelarHora) relogio_.avancar(dt * dbg_.velTempo);
     Entrada e = lerEntrada();
     if (morteT_ >= 0) {  // caido: sem controle
         Entrada nada;
@@ -256,7 +269,7 @@ void Jogo::atualizar(float dt) {
             rig_.distAlvo = 4.f;
             aoDesmontar();
         } else {
-            moverCavalo(c, e, dt, *terreno_, col_);
+            moverCavalo(c, e, dt * dbg_.velJogador, *terreno_, col_);
             if (int(c.passada / 1.5708f) != cascoAntes_) {  // quatro patas por ciclo
                 cascoAntes_ = int(c.passada / 1.5708f);
                 if (c.corpo.vel > 0.3f) sons_.casco(0.25f + 0.04f * c.corpo.vel);
@@ -271,7 +284,7 @@ void Jogo::atualizar(float dt) {
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
         interagirCacada(e);
         if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
-        moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);
+        moverAPe(jogador_, e, rig_.yaw, dt * dbg_.velJogador, *terreno_, col_);
         if (mira_ > 0.5f) jogador_.yaw = rig_.yaw;
         passada_ += dt * jogador_.vel * fasePorMetro(jogador_.vel);
         if (int(passada_ / 3.14159f) != passoAntes_) {  // um som por passo

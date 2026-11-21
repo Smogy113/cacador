@@ -172,7 +172,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
         rig_.distAlvo = 4.f - 1.7f * mira_;
         rig_.ombroAlvo = 0.45f + 0.45f * mira_;
     }
-    cam_.fovy = 60.f - 12.f * mira_;
+    cam_.fovy = dbg_.fov - 12.f * mira_;
     arma_.atualizar(dt);
     tiroT_ = std::max(0.f, tiroT_ - dt);
     marcaAcerto_ = std::max(0.f, marcaAcerto_ - dt);
@@ -193,6 +193,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
         if (arma_.balas == 0) arma_.recarregar();
         if (arma_.podeAtirar()) {
             arma_.atirar();
+            if (dbg_.municaoInf) arma_.balas = Revolver::CAPACIDADE;
             sons_.tiro(1.f, 0.5f);
             tiroOuvido_ = true;
             tiroT_ = 0.18f;
@@ -236,7 +237,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     // ---- bando ----
     EventosBando ev = cacada_.atualizar(dt, jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.vel : jogador_.vel,
                                         montadoEm_ >= 0, tiroOuvido_, *terreno_, col_);
-    if (vivoJ && ev.tirosNoJogador > 0) vida_.dano(DANO_BANDIDO * float(ev.tirosNoJogador));
+    if (vivoJ && ev.tirosNoJogador > 0 && !dbg_.invencivel) vida_.dano(DANO_BANDIDO * float(ev.tirosNoJogador));
     if (!recarregavaAntes && arma_.recarregando()) sons_.recarga();
     for (Vec3f c : ev.claroes) {
         Vec3f d = c - jogador_.pos;

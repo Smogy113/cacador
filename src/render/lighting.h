@@ -32,7 +32,13 @@ public:
     void definirCabelo(Vec3f deslocamentoModelo);  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
-    bool usaSombras() const { return ef_.sombras && sombraOk_; }
+    // painel de depuracao (F1): desliga efeitos do nivel atual e ajusta valores na hora
+    struct Depuracao {
+        bool semSombras = false, semSSAO = false, semBloom = false, semRaios = false, semNuvens = false, semNeblina = false;
+        float passosNuvem = -1;   // -1 = do nivel
+        float exposicao = 1.f;    // multiplica a exposicao da paleta
+    } dbg;
+    bool usaSombras() const { return ef_.sombras && sombraOk_ && !dbg.semSombras; }
     void comecarSombra(Vec3f centro);
     void terminarSombra();
     // Sombra de perto (3 m, alta resolucao) so para o personagem: chapeu no rosto, braco no corpo.
@@ -46,6 +52,7 @@ public:
 
     // Pos-processamento (brilho e raios de luz): envolve o desenho da cena.
     bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) && posOk_; }
+    const Efeitos& efeitosNivel() const { return ef_; }
     void comecarPos();
     void terminarPos(const Camera3D& cam);
 
