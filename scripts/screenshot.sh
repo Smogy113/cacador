@@ -6,6 +6,8 @@ cd "$(dirname "$0")/.."
 SAIDA="$(realpath -m "$1")"; shift
 rm -f "$SAIDA"
 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1280x720x24" ./build/cacador --screenshot "$SAIDA" "$@" > /tmp/cacador-run.log 2>&1 || { tail -20 /tmp/cacador-run.log; exit 1; }
+grep -E "^triangulos=" /tmp/cacador-run.log || true
+grep -iE "WARNING: SHADER|error" /tmp/cacador-run.log | head -20 || true
 python3 - "$SAIDA" <<'PY'
 import sys, zlib, struct
 d = open(sys.argv[1], 'rb').read()
