@@ -135,6 +135,10 @@ void Jogo::desenharDepuracao() {
     if (caixa(luz_.nivel() == Nivel::Baixo ? "Cabeça por raymarching (Médio/Alto)" : b, raio)) d.semCabecaRaio = !raio;
     bool lp = !d.semLuzPersonagem;
     if (caixa("Luz de personagem", lp)) d.semLuzPersonagem = !lp;
+    bool fo = !d.semFoco, gr = !d.semGrao;
+    bool alto = luz_.nivel() == Nivel::Alto;
+    if (caixa(alto ? "Profundidade de campo" : "Profundidade de campo (Alto)", fo)) d.semFoco = !fo;
+    if (caixa(alto ? "Granulação e aberração" : "Granulação e aberração (Alto)", gr)) d.semGrao = !gr;
     float pn = d.passosNuvem < 0 ? (luz_.nivel() == Nivel::Alto ? 22.f : (luz_.nivel() == Nivel::Medio ? 12.f : 0.f)) : d.passosNuvem;
     if (barra("Passos das nuvens", pn, 0.f, 24.f, "%.0f")) d.passosNuvem = std::round(pn);
     barra("Exposição", d.exposicao, 0.4f, 2.f, "x%.2f");

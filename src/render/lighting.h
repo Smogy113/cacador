@@ -30,14 +30,16 @@ public:
     void definirRaioGrama(float r);
     float posSolTela_[2] = {-1.f, -1.f};
     void definirCabelo(Vec3f deslocamentoModelo);
-    void definirHeroi(bool sim);  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
+    void definirHeroi(bool sim);
+    void definirFoco(float distHeroi);  // camera de cinema: o heroi fica em foco  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
     // painel de depuracao (F1): desliga efeitos do nivel atual e ajusta valores na hora
     struct Depuracao {
         bool semSombras = false, semSSAO = false, semBloom = false, semRaios = false, semNuvens = false, semNeblina = false;
         bool semCabecaRaio = false;
-        bool semLuzPersonagem = false;  // contraluz/preenchimento e olhos de cinema no heroi  // cabeca do heroi de triangulos (comparar com o raymarching)
+        bool semLuzPersonagem = false;  // contraluz/preenchimento e olhos de cinema no heroi
+        bool semFoco = false, semGrao = false;  // profundidade de campo; granulacao e aberracao (Alto)  // cabeca do heroi de triangulos (comparar com o raymarching)
         float passosNuvem = -1;   // -1 = do nivel
         float exposicao = 1.f;    // multiplica a exposicao da paleta
     } dbg;
@@ -77,7 +79,8 @@ private:
     Matrix luzVPPerto_{};
     bool sombraPertoOk_ = false;
     Vec3f dirSombra_{0, 1, 0};
-    RenderTexture2D sombraRT_{}, cena_{}, meiaA_{}, meiaB_{}, raiosRT_{}, aoA_{}, aoB_{};
+    RenderTexture2D sombraRT_{}, cena_{}, meiaA_{}, meiaB_{}, raiosRT_{}, aoA_{}, aoB_{}, focoA_{}, focoB_{};
+    float distFoco_ = 4.f;
     bool cenaComProfundidade_ = false;
     Matrix luzVP_{};
     bool sombraOk_ = false, posOk_ = false;

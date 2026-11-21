@@ -886,8 +886,30 @@ uniform float usarAO;
 uniform vec2 posSol;
 uniform float aspecto;
 uniform vec3 corRaio;
+// camera de cinema (Alto): profundidade de campo, granulacao e aberracao cromatica
+uniform sampler2D texProf;      // profundidade da cena
+uniform sampler2D texDesfoque;  // cena desfocada (meia resolucao)
+uniform float usarFoco;
+uniform float distFoco;         // distancia da camera ao heroi
+uniform float forcaFoco;
+uniform float usarGrao;
+uniform float tempo;
+uniform vec2 texelTela;
+float hashJ(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
     vec3 c = TEX(texture0, fragTexCoord).rgb;
+    if (usarGrao > 0.5) {  // aberracao: vermelho e azul se separam um pouco nas bordas da tela
+        vec2 dc = fragTexCoord - 0.5;
+        vec2 off = dc * dot(dc, dc) * 4.3 * texelTela.x;
+        c.r = TEX(texture0, fragTexCoord + off).r;
+        c.b = TEX(texture0, fragTexCoord - off).b;
+    }
+    if (usarFoco > 0.5) {  // o fundo distante desfoca; o heroi e o que esta perto dele nunca
+        float z = TEX(texProf, fragTexCoord).r * 2.0 - 1.0;
+        float dist = (2.0 * 0.1 * 1000.0) / (1000.0 + 0.1 - z * (1000.0 - 0.1));
+        float coc = smoothstep(distFoco + 25.0, distFoco + 150.0, dist) * forcaFoco;
+        c = mix(c, TEX(texDesfoque, fragTexCoord).rgb, coc);
+    }
     if (usarAO > 0.5) c *= TEX(texAO, fragTexCoord).r;
     c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
     if (usarRaios > 0.5) {
@@ -916,6 +938,11 @@ void main() {
     // vinheta suave
     vec2 v = fragTexCoord - 0.5;
     c *= 1.0 - dot(v, v) * 0.35;
+    if (usarGrao > 0.5) {  // granulacao de filme: fina, mais visivel nos meios-tons
+        float g = hashJ(fragTexCoord / texelTela + fract(tempo * 7.31) * 113.0) - 0.5;
+        float lum2 = dot(c, vec3(0.3, 0.59, 0.11));
+        c += g * 0.045 * (1.0 - abs(lum2 - 0.5) * 1.4);
+    }
     FRAG = vec4(c, 1.0);
 }
 )";

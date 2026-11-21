@@ -489,6 +489,10 @@ void Jogo::desenhar() {
     luz_.desenharCeu(cam_);  // depois da cena: o ceu (e as nuvens) so e calculado onde aparece
     desenharEfeitos();
     EndMode3D();
+    {
+        Vec3f heroi = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.3f : 1.5f, 0};
+        luz_.definirFoco(len(heroi - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z}));
+    }
     if (luz_.usaPos()) luz_.terminarPos(cam_);
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_ + grama_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_ + grama_.chamadas();

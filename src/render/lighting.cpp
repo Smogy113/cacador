@@ -84,6 +84,8 @@ void Iluminacao::liberarEfeitos() {
             rlUnloadFramebuffer(cena_.id);
             UnloadRenderTexture(aoA_);
             UnloadRenderTexture(aoB_);
+            UnloadRenderTexture(focoA_);
+            UnloadRenderTexture(focoB_);
         } else
             UnloadRenderTexture(cena_);
         cenaComProfundidade_ = false;
@@ -198,6 +200,10 @@ void Iluminacao::carregar(Nivel nivel) {
                 aoB_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
                 SetTextureFilter(aoA_.texture, TEXTURE_FILTER_BILINEAR);
                 SetTextureFilter(aoB_.texture, TEXTURE_FILTER_BILINEAR);
+                focoA_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
+                focoB_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
+                SetTextureFilter(focoA_.texture, TEXTURE_FILTER_BILINEAR);
+                SetTextureFilter(focoB_.texture, TEXTURE_FILTER_BILINEAR);
             }
         }
         if (!cenaComProfundidade_) cena_ = LoadRenderTexture(largPos_, altPos_);
@@ -456,8 +462,44 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
             EndTextureMode();
         }
     }
+    // 3c) camera de cinema (Alto): copia desfocada da cena para a profundidade de campo
+    bool cinema = nivel_ == Nivel::Alto && cenaComProfundidade_;
+    bool foco = cinema && !dbg.semFoco;
+    if (foco) {
+        BeginTextureMode(focoA_);
+        desenharTela(cena_, mw, mh);
+        EndTextureMode();
+        for (int k = 0; k < 4; k++) {
+            float esp = k < 2 ? 1.f : 2.2f;
+            float d[2] = {k % 2 == 0 ? esp / mw : 0.f, k % 2 == 0 ? 0.f : esp / mh};
+            RenderTexture2D& de = k % 2 == 0 ? focoA_ : focoB_;
+            RenderTexture2D& para = k % 2 == 0 ? focoB_ : focoA_;
+            BeginTextureMode(para);
+            BeginShaderMode(blur_);
+            SetShaderValue(blur_, GetShaderLocation(blur_, "direcao"), d, SHADER_UNIFORM_VEC2);
+            DrawTexturePro(de.texture, {0, 0, float(mw), float(mh)}, {0, 0, float(mw), float(mh)}, {0, 0}, 0, WHITE);
+            EndShaderMode();
+            EndTextureMode();
+        }
+    }
     // 4) junta tudo na tela
     BeginShaderMode(junta_);
+    {
+        float uf = foco ? 1.f : 0.f, ug = cinema && !dbg.semGrao ? 1.f : 0.f, t = float(GetTime());
+        // mais desfoque com a camera perto do heroi (close, mira); de longe quase nada
+        float forca = 0.35f + 0.5f * (1.f - smoothstep(1.2f, 4.5f, distFoco_));
+        float tx[2] = {1.f / largPos_, 1.f / altPos_};
+        SetShaderValue(junta_, GetShaderLocation(junta_, "usarFoco"), &uf, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(junta_, GetShaderLocation(junta_, "usarGrao"), &ug, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(junta_, GetShaderLocation(junta_, "distFoco"), &distFoco_, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(junta_, GetShaderLocation(junta_, "forcaFoco"), &forca, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(junta_, GetShaderLocation(junta_, "tempo"), &t, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(junta_, GetShaderLocation(junta_, "texelTela"), tx, SHADER_UNIFORM_VEC2);
+        if (foco) {
+            SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texProf"), cena_.depth);
+            SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texDesfoque"), focoA_.texture);
+        }
+    }
     float fb = ef_.bloom && !dbg.semBloom ? 0.65f : 0.f, ur = raios ? 1.f : 0.f;
     float aspJ = float(largPos_) / float(altPos_);
     Vector3 crJ{paleta_.sol.r, paleta_.sol.g, paleta_.sol.b};
@@ -514,5 +556,6 @@ bool Iluminacao::usaCabecaRaio() const { return cabecaOk_ && nivel_ != Nivel::Ba
 void Iluminacao::definirHeroi(bool sim) {
     for (Shader sh : personagens()) setF(sh, "heroi", sim && !dbg.semLuzPersonagem ? 1.f : 0.f);
 }
+void Iluminacao::definirFoco(float d) { distFoco_ = d; }
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
 void Iluminacao::definirCabelo(Vec3f d) { SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloDesl"), &d, SHADER_UNIFORM_VEC3); }

@@ -16,6 +16,8 @@ FetchContent_Declare(raylib
 FetchContent_MakeAvailable(raylib)
 # plano de corte proximo a 10 cm: muito mais precisao de profundidade (sombras e SSAO)
 target_compile_definitions(raylib PUBLIC RL_CULL_DISTANCE_NEAR=0.1)
+# a juncao final da tela le 5 texturas alem da cena (brilho, raios, oclusao, profundidade, desfoque)
+target_compile_definitions(raylib PUBLIC RL_DEFAULT_BATCH_MAX_TEXTURE_UNITS=8)
 
 # --- logica pura (sem raylib) ---
 file(GLOB CORE_SRC CONFIGURE_DEPENDS src/core/*.cpp)
