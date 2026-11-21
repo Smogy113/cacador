@@ -51,7 +51,8 @@ public:
     bool querSair() const { return sair_; }
     void teleportar(float x, float z, float yawGraus, float hora);  // benchmark
     size_t triangulos() const { return tris_; }  // terreno + cenario + personagens
-    void prepararTiroteio();                      // jogador a ~22 m do esconderijo da recompensa ativa
+    // jogador a ~22 m do esconderijo da recompensa ativa; bandoGrande = aceita o cartaz mais caro (3 capangas)
+    void prepararTiroteio(bool bandoGrande = false);
     int chamadas() const { return chamadas_; }
 
 private:

@@ -77,7 +77,13 @@ void Jogo::aceitarCartaz(int q, int i) {
     avisar("Recompensa aceita: " + cartazes_[q][i].nome + ". Siga a bussola.");
 }
 
-void Jogo::prepararTiroteio() {
+void Jogo::prepararTiroteio(bool bandoGrande) {
+    if (bandoGrande && !cartazes_.empty()) {
+        int melhor = 0;
+        for (int i = 0; i < int(cartazes_[0].size()); i++)
+            if (cartazes_[0][i].recompensaVivo > cartazes_[0][melhor].recompensaVivo) melhor = i;
+        aceitarCartaz(0, melhor);
+    }
     if (!cacada_.ativa()) aceitarCartaz(0, op_.recompensa >= 0 ? op_.recompensa : 0);
     if (!cacada_.ativa()) return;
     Vec3f e = cacada_.esconderijo();

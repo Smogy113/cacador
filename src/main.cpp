@@ -117,6 +117,18 @@ int main(int argc, char** argv) {
                 maxT = std::max(maxT, t); maxC = std::max(maxC, c);
                 somaT += t; somaC += c; n++;
             }
+        // tiroteio: o cartaz mais caro (alvo + 3 capangas atirando, claroes), ~3 s de jogo
+        g_jogo->prepararTiroteio(true);
+        size_t maxTT = 0;
+        int maxCT = 0;
+        for (int f = 0; f < 60; f++) {
+            quadro();
+            maxTT = std::max(maxTT, g_jogo->triangulos());
+            maxCT = std::max(maxCT, g_jogo->chamadas());
+        }
+        maxT = std::max(maxT, maxTT);
+        maxC = std::max(maxC, maxCT);
+        std::printf("tiroteio: triangulos max=%zu | chamadas max=%d\n", maxTT, maxCT);
         std::printf("benchmark: triangulos max=%zu media=%zu | chamadas max=%d media=%d | quadros=%d\n", maxT, somaT / n, maxC, somaC / n, n);
         delete g_jogo;
         CloseWindow();
