@@ -357,7 +357,7 @@ void Jogo::desenharCombatentes(Material& matPele, bool sombraBolha, float distMa
             yaw = c.corpo.yaw + 1.5708f;
             pose = poseGarupa(e);
         } else {
-            float fase = tempo_ * std::max(b.corpo.vel, 0.f) * FASE_POR_METRO;
+            float fase = tempo_ * std::max(b.corpo.vel, 0.f) * fasePorMetro(b.corpo.vel);
             switch (b.estado) {
             case EstadoBandido::Vigiando: pose = poseParado(e, tempo_ + float(b.semente % 97)); break;
             case EstadoBandido::Alerta: pose = poseMirar(e, 0, 0); break;

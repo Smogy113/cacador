@@ -128,9 +128,10 @@ Vec3f TerrenoRender::centro(int ci, int cj) const {
 int TerrenoRender::lodPara(float d) const { return d < DIST_LOD[0] ? 0 : (d < DIST_LOD[1] ? 1 : 2); }
 
 void TerrenoRender::construir(int ci, int cj, int lod) {
-    float s = PASSOS[lod];
+    // o passo e ajustado para dividir o pedaco exatamente: sem fenda na borda entre pedacos
+    int k = std::max(1, int(std::lround(TAM / PASSOS[lod])));
+    float s = TAM / float(k);
     float x0 = -Terreno::META + ci * TAM, z0 = -Terreno::META + cj * TAM;
-    int k = int(TAM / s);
     Buf b;
     auto P = [&](int i, int j) {
         float x = x0 + i * s, z = z0 + j * s;

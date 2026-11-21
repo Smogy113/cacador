@@ -31,7 +31,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.chapeu = {0.2f, 0.15f, 0.11f};
     r.pele = {0.78f, 0.58f, 0.45f};
     r.lenco = {0.55f, 0.12f, 0.1f};
-    r.cabelo = {0.18f, 0.13f, 0.09f};
+    r.cabelo = {0.25f, 0.17f, 0.1f};  // castanho (mostra as mechas)
     r.barba = false;  // rosto limpo (pedido do usuario)
     r.equipamento = !op.estudio;
     r.heroi = true;
@@ -265,7 +265,7 @@ void Jogo::atualizar(float dt) {
         if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
         moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);
         if (mira_ > 0.5f) jogador_.yaw = rig_.yaw;
-        passada_ += dt * jogador_.vel * FASE_POR_METRO;
+        passada_ += dt * jogador_.vel * fasePorMetro(jogador_.vel);
         if (int(passada_ / 3.14159f) != passoAntes_) {  // um som por passo
             passoAntes_ = int(passada_ / 3.14159f);
             if (jogador_.vel > 0.1f) sons_.passo(jogador_.vel > 3.f ? 0.55f : 0.35f);

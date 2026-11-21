@@ -18,7 +18,9 @@ Pose poseCair(const Esqueleto& e, float t);         // 0 = em pe, 1 = deitado de
 Pose poseRendido(const Esqueleto& e, float tempo);  // ajoelhado, maos acima da cabeca
 Pose poseAmarrado(const Esqueleto& e, float tempo); // sentado no chao, maos para tras
 Pose poseGarupa(const Esqueleto& e);                // dobrado na cintura (atravessado no cavalo); raiz sem ajuste
-constexpr float FASE_POR_METRO = 4.2f;                  // passada: ~1,5 m por ciclo
+constexpr float FASE_POR_METRO = 4.2f;                  // passada: ~1,5 m por ciclo (andando)
+// Passada que casa com o tamanho do passo (o pe de apoio nao escorrega): andando ~0,75 m por passo, correndo ~1,3 m.
+float fasePorMetro(float velocidade);
 
 // andadura: 0 parado, 1 passo, 2 trote, 3 galope
 Pose poseCavalo(const Esqueleto& e, float fase, int andadura, float tempo);

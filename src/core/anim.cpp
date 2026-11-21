@@ -43,20 +43,70 @@ Pose poseParado(const Esqueleto& e, float t) {
     return p;
 }
 
+// tamanho de um passo (m) e fracao do ciclo com o pe no chao, pela velocidade
+static float passoDe(float v) { return std::clamp(0.62f + 0.1f * (v - 1.6f), 0.5f, 0.95f); }
+static float apoioDe(float v) { return std::clamp(0.58f - 0.06f * (v - 1.6f), 0.36f, 0.58f); }
+float fasePorMetro(float v) { return 3.14159265f / passoDe(std::max(v, 0.3f)); }
+
 Pose poseAndar(const Esqueleto& e, float f, float v) {
     Pose p = vazia(e);
     float amp = std::clamp(v / 5.f, 0.f, 1.2f);
     float andar = std::min(1.f, v / 1.6f);
-    float perna = (0.42f + 0.38f * amp) * andar;
     float s = std::sin(f), c = std::cos(f);
-    // pernas: esquerda vai a frente com sin > 0
-    p.rot[COXA_E].x = -s * perna;
-    p.rot[COXA_D].x = s * perna;
-    // joelho dobra quando a perna passa para a frente (fase de voo)
-    p.rot[CANELA_E].x = (0.12f + (0.55f + 0.7f * amp) * std::max(0.f, std::cos(f - 0.6f))) * andar;  // joelho nunca travado
-    p.rot[CANELA_D].x = (0.12f + (0.55f + 0.7f * amp) * std::max(0.f, -std::cos(f - 0.6f))) * andar;
-    p.rot[PE_E].x = -0.25f * s * andar;
-    p.rot[PE_D].x = 0.25f * s * andar;
+    // ---- pernas: pes plantados (o pe de apoio fica parado no chao) + cinematica inversa ----
+    const float PI = 3.14159265f;
+    float L = passoDe(std::max(v, 0.3f)), beta = apoioDe(std::max(v, 0.3f));
+    float zMax = beta * L;                                   // o pe de apoio anda zMax*2 para tras
+    float alcance = amp > 0.5f ? 1.35f : 1.f;               // correndo, a perna vai mais longe no ar
+    float altPasso = (0.07f + 0.07f * std::clamp(amp - 0.3f, 0.f, 1.f)) * andar;
+    const Osso &cxE = e.ossos[COXA_E], &caE = e.ossos[CANELA_E];
+    float L1 = len(cxE.fim - cxE.inicio), L2 = len(caE.fim - caE.inicio), quadril0 = cxE.inicio.y, tornozelo0 = caE.fim.y;
+    float alvoQuadril = quadril0 - (0.025f + 0.05f * amp) * andar;
+    float quadrilY = alvoQuadril;
+    bool algumApoio = false;
+    struct PeAlvo { float z, y, inclina; bool apoio; } pe[2];
+    for (int lado = 0; lado < 2; lado++) {
+        float u = std::fmod((f - PI * 0.5f) / (2 * PI) + (lado ? 0.5f : 0.f) + 10.f, 1.f);  // 0 = pisa a frente
+        PeAlvo& a = pe[lado];
+        if (u < beta) {  // apoio: o pe anda para tras na velocidade do corpo
+            float t = u / beta;
+            a.z = zMax * (1 - 2 * t);
+            float solta = std::clamp((t - 0.7f) / 0.3f, 0.f, 1.f);
+            a.y = 0.07f * solta * solta;                      // o calcanhar sobe no fim
+            a.inclina = -0.22f * (1 - std::min(1.f, amp)) * std::clamp(1 - t / 0.15f, 0.f, 1.f) + 0.55f * solta;  // andando pisa com o calcanhar, correndo com a planta; a ponta empurra
+            a.apoio = true;
+            algumApoio = true;
+        } else {          // no ar: volta para a frente, levantado
+            float t = (u - beta) / (1 - beta), sm = t * t * (3 - 2 * t);
+            a.z = -zMax * alcance + 2 * zMax * alcance * sm;
+            if (t > 0.8f) a.z = lerp(a.z, zMax, (t - 0.8f) / 0.2f);  // desce no lugar de pisar
+            a.y = altPasso * std::sin(PI * t) + 0.07f * std::max(0.f, 1 - t * 4);
+            a.inclina = 0.55f * std::max(0.f, 1 - t * 3) - 0.25f * std::clamp((t - 0.6f) / 0.4f, 0.f, 1.f);
+            a.apoio = false;
+        }
+        a.z *= andar;
+        a.y *= andar;
+        a.inclina *= andar;
+        if (a.apoio) {  // o quadril baixa o necessario para o pe alcancar o chao
+            float dz = a.z, maxD = (L1 + L2) * 0.995f;
+            float alto = tornozelo0 + a.y + std::sqrt(std::max(0.f, maxD * maxD - dz * dz));
+            quadrilY = std::min(quadrilY, alto);
+        }
+    }
+    if (!algumApoio) quadrilY = alvoQuadril + 0.05f * amp * andar;  // correndo: fase de voo
+    p.raiz.y = quadrilY - quadril0;
+    for (int lado = 0; lado < 2; lado++) {
+        int cx = lado ? COXA_D : COXA_E, ca = lado ? CANELA_D : CANELA_E, pp = lado ? PE_D : PE_E;
+        float dz = pe[lado].z - e.ossos[cx].inicio.z, dy = (tornozelo0 + pe[lado].y) - quadrilY;
+        float D = std::clamp(std::sqrt(dz * dz + dy * dy), 0.05f, (L1 + L2) * 0.999f);
+        float ang = std::atan2(dz, -dy);  // angulo do quadril ao tornozelo, a partir da vertical (> 0 = a frente)
+        float a1 = std::acos(std::clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1.f, 1.f));
+        float joelho = 3.14159265f - std::acos(std::clamp((L1 * L1 + L2 * L2 - D * D) / (2 * L1 * L2), -1.f, 1.f));
+        float coxa = ang + a1;  // o joelho dobra para a frente
+        p.rot[cx].x = -coxa;
+        p.rot[ca].x = joelho;
+        p.rot[pp].x = (coxa - joelho) + pe[lado].inclina;  // pe reto no chao (+ calcanhar/ponta)
+    }
     // bracos opostos as pernas
     float braco = (0.32f + 0.45f * amp) * andar;
     p.rot[BRACO_E].x = s * braco;
@@ -78,7 +128,7 @@ Pose poseAndar(const Esqueleto& e, float f, float v) {
     p.rot[CABECA].x = -0.04f * andar - 0.1f * amp;
     p.rot[QUADRIL].z = c * 0.07f * andar;   // quadril cai para o lado do pe no ar
     p.rot[COLUNA].z = -c * 0.05f * andar;
-    apoiarNoChao(e, p);
+    if (v < 0.05f || algumApoio) apoiarNoChao(e, p);  // calcanhar/ponta girando nao afundam
     return p;
 }
 

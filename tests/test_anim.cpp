@@ -14,13 +14,22 @@ TEST_CASE("parado: pernas paradas, mas respira") {
     CHECK(std::abs(a.rot[PEITO].x - b.rot[PEITO].x) > 0.005f);
 }
 TEST_CASE("andar: pernas em oposição") {
+    // com cinematica inversa o angulo da coxa inclui o joelho: compara onde estao os pes
     Pose p = poseAndar(esq(), 1.5707963f, 1.6f);
-    CHECK(p.rot[COXA_E].x * p.rot[COXA_D].x < 0);
-    CHECK(p.rot[BRACO_E].x * p.rot[COXA_E].x < 0);  // braco oposto a perna do mesmo lado
+    std::vector<Mat4> m;
+    calcularMatrizes(esq(), p, m);
+    float zE = m[PE_E].ponto(esq().ossos[PE_E].inicio).z, zD = m[PE_D].ponto(esq().ossos[PE_D].inicio).z;
+    CHECK(zE > 0.15f);   // pe esquerdo a frente
+    CHECK(zD < -0.15f);  // direito atras
+    CHECK(p.rot[BRACO_E].x > 0);  // braco esquerdo atras (oposto a perna do mesmo lado)
 }
 TEST_CASE("correr balança mais que andar") {
-    Pose a = poseAndar(esq(), 1.5707963f, 1.6f), c = poseAndar(esq(), 1.5707963f, 5.f);
-    CHECK(std::abs(c.rot[COXA_E].x) > std::abs(a.rot[COXA_E].x) * 1.3f);
+    float ja = 0, jc = 0;  // dobra maxima do joelho no ciclo
+    for (float f = 0; f < 6.3f; f += 0.1f) {
+        ja = std::max(ja, poseAndar(esq(), f, 1.6f).rot[CANELA_E].x);
+        jc = std::max(jc, poseAndar(esq(), f, 5.f).rot[CANELA_E].x);
+    }
+    CHECK(jc > ja * 1.3f);
 }
 TEST_CASE("montado: coxas para a frente") {
     for (int and_ = 0; and_ < 4; and_++) {
@@ -33,7 +42,12 @@ TEST_CASE("pés no chão em todas as fases") {
     for (float v : {0.f, 1.6f, 5.f})
         for (float f = 0; f < 6.3f; f += 0.3f) {
             Pose p = v > 0 ? poseAndar(esq(), f, v) : poseParado(esq(), f);
-            CHECK(alturaDosPes(esq(), p) == doctest::Approx(0).epsilon(0.01));
+            float h = alturaDosPes(esq(), p);
+            if (v < 3.f) CHECK(h == doctest::Approx(0).epsilon(0.01));
+            else {  // correndo ha fase de voo: os pes nunca afundam e sobem pouco
+                CHECK(h > -0.01f);
+                CHECK(h < 0.1f);
+            }
         }
 }
 TEST_CASE("proporções diferentes também ficam no chão") {
@@ -171,4 +185,35 @@ TEST_CASE("garupa: dobrado na cintura") {
     float q = juntaPose(p, QUADRIL, false).y;
     CHECK(juntaPose(p, CABECA, true).y < q);
     CHECK(juntaPose(p, PE_E, true).y < q);
+}
+// mede quanto o pe de apoio (o mais baixo) escorrega no chao enquanto o corpo anda v m/s
+static float escorregaoPorMetro(float v) {
+    const Esqueleto& e = esq();
+    float dist = 0, esc = 0, zAnt = 0;
+    int peAnt = -1;
+    std::vector<Mat4> m;
+    for (int k = 0; k < 400; k++) {
+        float d = k * 0.01f;  // metros andados
+        Pose p = poseAndar(e, d * fasePorMetro(v), v);
+        calcularMatrizes(e, p, m);
+        int pe = -1;
+        float baixo = 1e9f, z = 0;
+        for (int o : {PE_E, PE_D}) {  // calcanhar e ponta (os pontos que tocam o chao)
+            const Osso& ob = e.ossos[o];
+            Vec3f pts[2] = {{ob.inicio.x, 0.f, ob.inicio.z - 0.045f}, {ob.fim.x, 0.f, ob.fim.z + 0.01f}};
+            for (int h = 0; h < 2; h++) {
+                Vec3f q = m[o].ponto(pts[h]);
+                if (q.y < baixo) { baixo = q.y; pe = o * 2 + h; z = q.z + d; }
+            }
+        }
+        if (pe == peAnt && baixo < 0.01f) esc += std::abs(z - zAnt);  // so conta com o pe no chao (nao no voo)
+        peAnt = pe;
+        zAnt = z;
+        dist = d;
+    }
+    return esc / dist;
+}
+TEST_CASE("andar e correr: o pe de apoio nao escorrega") {
+    CHECK(escorregaoPorMetro(1.6f) < 0.12f);
+    CHECK(escorregaoPorMetro(5.f) < 0.12f);
 }
