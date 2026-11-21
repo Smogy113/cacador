@@ -65,10 +65,70 @@ void ModeloPessoa::desenharSentado(Material& mat, Vec3f q, float yaw) const {
     Matrix base = MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(q.x, q.y - 0.92f, q.z));
     DrawMesh(corpo_, mat, base);
     for (int lado = -1; lado <= 1; lado += 2) {
-        Matrix perna = MatrixMultiply(MatrixMultiply(MatrixMultiply(MatrixRotateX(-1.1f), MatrixRotateZ(0.35f * lado)), MatrixTranslate(0.14f * lado, 0.92f, 0)), base);
+        Matrix perna = MatrixMultiply(MatrixMultiply(MatrixMultiply(MatrixRotateX(-1.1f), MatrixRotateZ(0.3f * lado)), MatrixTranslate(0.38f * lado, 0.92f, 0)), base);
         DrawMesh(perna_, mat, perna);
         Matrix braco = MatrixMultiply(MatrixMultiply(MatrixRotateX(-0.7f), MatrixTranslate(0.3f * lado, 1.5f, 0)), base);
         DrawMesh(braco_, mat, braco);
+    }
+}
+
+void ModeloCavalo::carregar(Rgb pelo, Rgb crina, bool selado) {
+    MeshBuilder c;
+    c.caixa({0, 1.38f, 0}, {0.72f, 0.72f, 1.85f}, 0, pelo);
+    c.caixa({0, 1.42f, 0.88f}, {0.66f, 0.62f, 0.3f}, 0, pelo * 1.04f);  // peito
+    c.caixa({0, 1.45f, -0.85f}, {0.68f, 0.6f, 0.3f}, 0, pelo * 0.97f);  // anca
+    c.caixa({0, 1.82f, 1.0f}, {0.4f, 0.62f, 0.5f}, 0, pelo);            // pescoco
+    c.caixa({0, 2.15f, 1.22f}, {0.36f, 0.5f, 0.42f}, 0, pelo * 1.03f);
+    c.caixa({0, 2.22f, 1.55f}, {0.3f, 0.32f, 0.62f}, 0, pelo);           // cabeca
+    c.caixa({0, 2.14f, 1.86f}, {0.26f, 0.24f, 0.2f}, 0, pelo * 0.75f);  // focinho
+    for (float s : {-1.f, 1.f}) {
+        c.caixa({s * 0.1f, 2.46f, 1.36f}, {0.07f, 0.18f, 0.07f}, 0, pelo * 0.9f);  // orelhas
+        c.caixa({s * 0.155f, 2.28f, 1.62f}, {0.02f, 0.06f, 0.06f}, 0, Rgb{0.05f, 0.04f, 0.03f});  // olhos
+    }
+    c.caixa({0, 2.18f, 1.05f}, {0.12f, 0.62f, 0.62f}, 0, crina);         // crina
+    c.caixa({0, 2.42f, 1.32f}, {0.1f, 0.12f, 0.3f}, 0, crina);
+    c.caixa({0, 1.3f, -1.1f}, {0.16f, 0.8f, 0.2f}, 0, crina);            // cauda
+    if (selado) {
+        Rgb couro{0.32f, 0.2f, 0.12f};
+        c.caixa({0, 1.77f, -0.12f}, {0.8f, 0.06f, 0.85f}, 0, Rgb{0.55f, 0.15f, 0.12f});  // manta
+        c.caixa({0, 1.85f, -0.12f}, {0.6f, 0.12f, 0.62f}, 0, couro);
+        c.caixa({0, 1.98f, 0.14f}, {0.22f, 0.18f, 0.12f}, 0, couro);         // cabeça da sela
+        for (float s : {-1.f, 1.f}) c.caixa({s * 0.4f, 1.35f, -0.1f}, {0.04f, 0.6f, 0.06f}, 0, couro);  // estribos
+        c.caixa({0, 2.2f, 1.7f}, {0.34f, 0.06f, 0.06f}, 0, couro);           // redea
+    }
+    corpo_ = paraMesh(c);
+    MeshBuilder p;
+    p.caixa({0, -0.5f, 0}, {0.16f, 1.0f, 0.2f}, 0, pelo * 0.95f);
+    p.caixa({0, -1.0f, 0.02f}, {0.17f, 0.12f, 0.22f}, 0, Rgb{0.12f, 0.1f, 0.08f});  // casco
+    pata_ = paraMesh(p);
+    ok_ = true;
+}
+
+void ModeloCavalo::descarregar() {
+    if (!ok_) return;
+    UnloadMesh(corpo_);
+    UnloadMesh(pata_);
+    ok_ = false;
+}
+
+Vec3f ModeloCavalo::assento(Vec3f pos, float yaw) { return pos + rotY({0, 1.95f, -0.15f}, yaw); }
+
+void ModeloCavalo::desenhar(Material& mat, Vec3f p, float yaw, float fase, int and_) const {
+    Matrix base = MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z));
+    float amp = and_ == 0 ? 0.f : (and_ == 1 ? 0.35f : (and_ == 2 ? 0.55f : 0.85f));
+    float sobe = and_ >= 2 ? std::abs(std::sin(fase)) * 0.08f * amp : 0.f;
+    Matrix corpo = MatrixMultiply(MatrixTranslate(0, sobe, 0), base);
+    DrawMesh(corpo_, mat, corpo);
+    // fases por pata: diant. esq, diant. dir, tras. esq, tras. dir
+    float ph[4];
+    if (and_ == 3) { ph[0] = 0; ph[1] = 0.4f; ph[2] = 3.14f; ph[3] = 3.54f; }   // galope
+    else if (and_ == 2) { ph[0] = 0; ph[1] = 3.14f; ph[2] = 3.14f; ph[3] = 0; } // trote (diagonais)
+    else { ph[0] = 0; ph[1] = 3.14f; ph[2] = 1.57f; ph[3] = 4.71f; }            // passo
+    const float px[4] = {0.22f, -0.22f, 0.22f, -0.22f}, pz[4] = {0.75f, 0.75f, -0.75f, -0.75f};
+    for (int k = 0; k < 4; k++) {
+        float giro = std::sin(fase + ph[k]) * amp;
+        Matrix m = MatrixMultiply(MatrixMultiply(MatrixRotateX(giro), MatrixTranslate(px[k], 1.08f, pz[k])), corpo);
+        DrawMesh(pata_, mat, m);
     }
 }
 

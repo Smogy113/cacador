@@ -12,7 +12,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     float x = op.temPos ? op.x : -40.f, z = op.temPos ? op.z : 10.f, yaw = (op.temPos ? op.yaw : 160.f) * DEG2RAD;
     jogador_.pos = {x, terreno_->altura(x, z), z};
     jogador_.yaw = yaw;
-    rig_.yaw = yaw;
+    rig_.yaw = yaw + op.girarCamera * DEG2RAD;
     rig_.pitch = 0.22f;
     cam_.up = {0, 1, 0};
     cam_.fovy = 60.f;
@@ -25,8 +25,27 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.pele = {0.78f, 0.58f, 0.45f};
     r.lenco = {0.55f, 0.12f, 0.1f};
     modeloJogador_.carregar(r);
+    // cavalos nos estabulos
+    const Rgb pelos[] = {{0.40f, 0.25f, 0.16f}, {0.16f, 0.13f, 0.12f}, {0.78f, 0.74f, 0.68f}, {0.6f, 0.42f, 0.24f}};
+    const Rgb crinas[] = {{0.15f, 0.1f, 0.07f}, {0.08f, 0.07f, 0.07f}, {0.55f, 0.5f, 0.45f}, {0.85f, 0.8f, 0.65f}};
+    std::vector<Vec3f> posCav = cenario_.cavalos;
+    if (op.comecarMontado) posCav.insert(posCav.begin(), jogador_.pos);
+    for (size_t i = 0; i < posCav.size(); i++) {
+        Cavalo c;
+        c.corpo.pos = posCav[i];
+        c.corpo.pos.y = terreno_->altura(c.corpo.pos.x, c.corpo.pos.z);
+        c.corpo.yaw = i == 0 && op.comecarMontado ? yaw : float(i) * 1.7f;
+        cavalos_.push_back(c);
+        modelosCavalo_.emplace_back();
+        modelosCavalo_.back().carregar(pelos[i % 4], crinas[i % 4], true);
+    }
+    if (op.comecarMontado && !cavalos_.empty()) {
+        cavalos_[0].montado = true;
+        montadoEm_ = 0;
+        rig_.distAlvo = 6.f;
+    }
     sombra_.carregar();
-    for (int i = 0; i < 40; i++) rig_.atualizar(jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
+    for (int i = 0; i < 40; i++) rig_.atualizar(montadoEm_ >= 0 ? jogador_.pos + Vec3f{0, 0.9f, 0} : jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
     atualizarCamera(0, Entrada{});
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, 0, 100000);
     cenario_.atualizar(jogador_.pos, 0, 100000);
@@ -47,14 +66,25 @@ Entrada Jogo::lerEntrada() {
 }
 
 void Jogo::atualizarCamera(float dt, const Entrada& e) {
-    rig_.atualizar(jogador_.pos, e.mouseDx, e.mouseDy, *terreno_, col_, dt);
+    Vec3f alvo = montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.pos + Vec3f{0, 0.9f, 0} : jogador_.pos;
+    rig_.atualizar(alvo, e.mouseDx, e.mouseDy, *terreno_, col_, dt);
     Vec3f p = rig_.posicao(), o = rig_.olhar();
     cam_.position = {p.x, p.y, p.z};
     cam_.target = {o.x, o.y, o.z};
 }
 
+static void dica(const char* t) {
+    int w = GetScreenWidth(), h = GetScreenHeight();
+    int tw = MeasureText(t, 22);
+    DrawRectangle(w / 2 - tw / 2 - 14, h - 92, tw + 28, 38, {20, 16, 12, 170});
+    DrawText(t, w / 2 - tw / 2, h - 84, 22, {240, 225, 195, 255});
+}
+
 void Jogo::desenharInterface() {
-    if (!pausado_) return;
+    if (!pausado_) {
+        if (cavaloPerto_ >= 0) dica("E  -  Montar");
+        return;
+    }
     int w = GetScreenWidth(), h = GetScreenHeight();
     DrawRectangle(0, 0, w, h, {0, 0, 0, 140});
     const char* t1 = "PAUSADO";
@@ -64,6 +94,7 @@ void Jogo::desenharInterface() {
 }
 
 Jogo::~Jogo() {
+    for (auto& m : modelosCavalo_) m.descarregar();
     cenario_.descarregar();
     modeloJogador_.descarregar();
     sombra_.descarregar();
@@ -89,8 +120,32 @@ void Jogo::atualizar(float dt) {
     tempo_ += dt;
     if (!op_.congelarHora) relogio_.avancar(dt);
     Entrada e = lerEntrada();
-    moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);
-    passada_ += dt * jogador_.vel * 3.2f;
+    cavaloPerto_ = -1;
+    if (montadoEm_ >= 0) {
+        Cavalo& c = cavalos_[montadoEm_];
+        if (e.interagir) {
+            desmontar(c, jogador_, col_);
+            montadoEm_ = -1;
+            rig_.distAlvo = 4.f;
+        } else {
+            moverCavalo(c, e, dt, *terreno_, col_);
+            jogador_.pos = c.corpo.pos;
+            jogador_.yaw = c.corpo.yaw;
+            jogador_.vel = 0;
+        }
+    } else {
+        moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);
+        passada_ += dt * jogador_.vel * 3.2f;
+        for (size_t i = 0; i < cavalos_.size(); i++)
+            if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
+        if (e.interagir && cavaloPerto_ >= 0 && tentarMontar(cavalos_[cavaloPerto_], jogador_)) {
+            montadoEm_ = cavaloPerto_;
+            rig_.distAlvo = 6.f;
+            cavaloPerto_ = -1;
+        }
+    }
+    for (size_t i = 0; i < cavalos_.size(); i++)
+        if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);
     atualizarCamera(dt, e);
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_);
     cenario_.atualizar(jogador_.pos, tempo_);
@@ -121,9 +176,25 @@ void Jogo::desenhar() {
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
     cenario_.desenhar(cam_, dv, luz_.material());
-    float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
-    modeloJogador_.desenhar(luz_.material(), jogador_.pos, jogador_.yaw, passada_, amp);
-    sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
+    for (size_t i = 0; i < cavalos_.size(); i++) {
+        const Cavalo& c = cavalos_[i];
+        Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
+        if (d.x * d.x + d.z * d.z > dv * dv) continue;
+        modelosCavalo_[i].desenhar(luz_.material(), c.corpo.pos, c.corpo.yaw, c.passada, int(c.andadura));
+        if (int(i) == montadoEm_) modeloJogador_.desenharSentado(luz_.material(), ModeloCavalo::assento(c.corpo.pos, c.corpo.yaw), c.corpo.yaw);
+    }
+    if (montadoEm_ < 0) {
+        float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
+        modeloJogador_.desenhar(luz_.material(), jogador_.pos, jogador_.yaw, passada_, amp);
+        sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
+    }
+    for (auto& c : cavalos_) {
+        Vec3f f = frenteDe(c.corpo.yaw);
+        for (float s : {0.6f, -0.6f}) {
+            Vec3f q = c.corpo.pos + f * s;
+            sombra_.desenhar({q.x, terreno_->altura(q.x, q.z), q.z}, terreno_->normal(q.x, q.z), 0.6f);
+        }
+    }
     EndMode3D();
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas();

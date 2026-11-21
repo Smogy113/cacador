@@ -22,6 +22,8 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--frames") o.frames = std::atoi(prox());
         else if (a == "--hora") o.jogo.hora = (float)std::atof(prox());
         else if (a == "--pos") { o.jogo.temPos = true; o.jogo.x = (float)std::atof(prox()); o.jogo.z = (float)std::atof(prox()); }
+        else if (a == "--girar-camera") o.jogo.girarCamera = (float)std::atof(prox());
+        else if (a == "--montado") o.jogo.comecarMontado = true;
         else if (a == "--yaw") o.jogo.yaw = (float)std::atof(prox());
         else if (a == "--qualidade") {
             std::string q = prox();

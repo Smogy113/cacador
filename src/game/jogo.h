@@ -6,6 +6,7 @@
 #include "core/camrig.h"
 #include "core/collision.h"
 #include "core/daytime.h"
+#include "core/horse.h"
 #include "core/motion.h"
 #include "game/actors.h"
 #include "core/places.h"
@@ -22,6 +23,8 @@ struct OpcoesJogo {
     Nivel nivel = Nivel::Baixo;
     bool congelarHora = false;
     bool semEntrada = false;  // modo screenshot
+    bool comecarMontado = false;
+    float girarCamera = 0;  // graus (so para screenshots)
     std::string arquivoMapa = "data/lugares.txt";
 };
 
@@ -49,6 +52,10 @@ private:
     Corpo jogador_{};
     RigCamera rig_;
     ModeloPessoa modeloJogador_;
+    std::vector<Cavalo> cavalos_;
+    std::vector<ModeloCavalo> modelosCavalo_;
+    int montadoEm_ = -1;
+    int cavaloPerto_ = -1;
     SombraBolha sombra_;
     float passada_ = 0;
     bool pausado_ = false, sair_ = false;

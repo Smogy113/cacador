@@ -1,0 +1,70 @@
+#include "core/horse.h"
+#include <algorithm>
+#include <cmath>
+#include "core/terrain.h"
+
+bool tentarMontar(Cavalo& c, const Corpo& j) {
+    float d = std::hypot(c.corpo.pos.x - j.pos.x, c.corpo.pos.z - j.pos.z);
+    if (d > DIST_MONTAR) return false;
+    c.montado = true;
+    return true;
+}
+
+void desmontar(Cavalo& c, Corpo& j, const MundoColisao& col) {
+    float y = c.corpo.yaw;
+    Vec3f esquerda{std::cos(y), 0, -std::sin(y)}, frente = frenteDe(y);
+    const Vec3f opcoes[] = {esquerda * 1.4f, esquerda * -1.4f, frente * -2.2f, frente * 2.2f, esquerda * 2.2f, esquerda * -2.2f};
+    Vec3f escolhido = c.corpo.pos + esquerda * 1.4f;
+    for (auto o : opcoes) {
+        Vec3f p = c.corpo.pos + o;
+        if (len(col.resolver(p, RAIO_PESSOA) - p) < 1e-4f) { escolhido = p; break; }
+    }
+    j.pos = col.resolver(escolhido, RAIO_PESSOA);
+    j.pos.y = c.corpo.pos.y;
+    j.yaw = y;
+    j.vel = 0;
+    c.montado = false;
+}
+
+bool inclinacaoPermitida(const Terreno& t, Vec3f de, Vec3f para) {
+    float dh = t.altura(para.x, para.z) - t.altura(de.x, de.z);
+    float d = std::hypot(para.x - de.x, para.z - de.z);
+    if (d < 1e-4f || dh <= 0) return true;
+    return dh / d <= INCLINACAO_MAX;
+}
+
+static Andadura classificar(float v) {
+    if (v < 0.3f) return Andadura::Parado;
+    if (v < 3.5f) return Andadura::Passo;
+    if (v < 8.5f) return Andadura::Trote;
+    return Andadura::Galope;
+}
+
+void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const MundoColisao& col) {
+    Corpo& k = c.corpo;
+    float chao = std::max(t.altura(k.pos.x, k.pos.z), col.alturaPiso(k.pos.x, k.pos.z, std::max(k.pos.y, t.altura(k.pos.x, k.pos.z))));
+    float alvo = 0, taxa = 8.f;
+    if (c.montado) {
+        if (e.frente > 0.1f) { alvo = e.correr ? VEL_GALOPE : VEL_TROTE; taxa = ACEL_CAVALO; }
+        else if (e.frente < -0.1f) taxa = 14.f;
+        if (chao < t.nivelAgua() - 0.6f) alvo = std::min(alvo, VEL_PASSO);  // agua funda
+        float giro = 2.4f * (1.f - 0.55f * k.vel / VEL_GALOPE);
+        k.yaw -= e.lado * giro * dt;
+    }
+    if (k.vel < alvo) k.vel = std::min(alvo, k.vel + taxa * dt);
+    else k.vel = std::max(alvo, k.vel - (alvo > 0 ? ACEL_CAVALO : taxa) * dt);
+
+    float total = k.vel * dt;
+    int passos = std::max(1, int(std::ceil(total / 0.25f)));
+    Vec3f f = frenteDe(k.yaw);
+    for (int i = 0; i < passos && total > 0; i++) {
+        Vec3f prox = k.pos + f * (total / passos);
+        if (!inclinacaoPermitida(t, k.pos, prox)) { k.vel = 0; break; }
+        prox = col.resolver(prox, RAIO_CAVALO);
+        prox.y = std::max(t.altura(prox.x, prox.z), col.alturaPiso(prox.x, prox.z, k.pos.y));
+        k.pos = prox;
+    }
+    k.pos.y = std::max(t.altura(k.pos.x, k.pos.z), col.alturaPiso(k.pos.x, k.pos.z, k.pos.y));
+    c.andadura = classificar(k.vel);
+    c.passada += dt * (k.vel * 1.1f + (c.andadura == Andadura::Parado ? 0 : 1.f));
+}
