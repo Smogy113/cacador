@@ -31,13 +31,13 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.chapeu = {0.2f, 0.15f, 0.11f};
     r.pele = {0.78f, 0.58f, 0.45f};
     r.lenco = {0.55f, 0.12f, 0.1f};
-    r.cabelo = {0.25f, 0.17f, 0.1f};  // castanho (mostra as mechas)
+    r.cabelo = {0.27f, 0.2f, 0.14f};  // castanho com mechas mais claras
     r.barba = false;  // rosto limpo (pedido do usuario)
     r.equipamento = !op.estudio;
     r.heroi = true;
     r.revolver = !op.estudio;
     r.cabeloLongo = true;
-    if (op.estudio) r.chapeuAba = false;
+    r.chapeuAba = false;  // sem chapeu: cabelo penteado para tras
     modeloJogador_.carregar(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
     // moradores: roupas variadas
     {

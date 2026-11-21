@@ -749,7 +749,8 @@ void main() {
     mat4 S = matrizPele();
     vec4 pl = S * vec4(vertexPosition, 1.0);
     if (vertexTexCoord.y > 24.25 && vertexTexCoord.y < 24.75) {  // cabelo comprido: a raiz fica, a ponta balanca
-        float w = pow(vertexTangent.w, 1.6);
+        float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);  // peso da fisica (0 na raiz/cranio)
+        w = w * w;
         pl.xyz += cabeloDesl * w;
         pl.x += sin(tempoVento * 2.3 + vertexPosition.y * 40.0) * 0.004 * w;  // brisa
     }
