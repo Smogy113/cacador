@@ -20,7 +20,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     jogador_.pos = {x, terreno_->altura(x, z), z};
     jogador_.yaw = yaw;
     rig_.yaw = yaw + op.girarCamera * DEG2RAD;
-    rig_.pitch = 0.22f;
+    rig_.pitch = op.pitch > -900 ? op.pitch * DEG2RAD : 0.22f;
     cam_.up = {0, 1, 0};
     cam_.fovy = 60.f;
     cam_.projection = CAMERA_PERSPECTIVE;
@@ -439,7 +439,6 @@ void Jogo::desenhar() {
     if (luz_.usaPos()) luz_.comecarPos();
     ClearBackground(BLACK);
     BeginMode3D(cam_);
-    luz_.desenharCeu(cam_);
     float dv = luz_.efeitos().distanciaVisao;
     luz_.modoHorizonte(dv - 40.f);
     terrenoR_->desenharHorizonte(luz_.material());
@@ -453,6 +452,7 @@ void Jogo::desenhar() {
     trisAtores_ = 0;
     chamadasAtores_ = 0;
     desenharAtores(luz_.material(), luz_.materialPele(), !luz_.usaSombras(), dv);
+    luz_.desenharCeu(cam_);  // depois da cena: o ceu (e as nuvens) so e calculado onde aparece
     desenharEfeitos();
     EndMode3D();
     if (luz_.usaPos()) luz_.terminarPos(cam_);

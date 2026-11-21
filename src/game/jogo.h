@@ -39,6 +39,7 @@ struct OpcoesJogo {
     int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
     bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
     bool mirar = false;    // segura a mira (screenshots)
+    float pitch = -999;    // inclinacao da camera em graus (screenshots; < 0 = olhando para cima)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };

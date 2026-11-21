@@ -252,7 +252,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     setF(ceu_, "noite", noite_);
     setV3(ceu_, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
     setF(ceu_, "tempoVento", tempo);
-    setF(ceu_, "passosNuvem", nivel_ == Nivel::Alto ? 24.f : (nivel_ == Nivel::Medio ? 12.f : 0.f));
+    setF(ceu_, "passosNuvem", nivel_ == Nivel::Alto ? 28.f : (nivel_ == Nivel::Medio ? 14.f : 0.f));
 }
 
 void Iluminacao::modoHorizonte(float d) { setF(lit_, "descartarPerto", d); }

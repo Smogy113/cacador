@@ -124,6 +124,7 @@ float hash12(vec2 p) {
 
 // Sombra suave (PCSS simplificado): procura quem bloqueia a luz e borra mais
 // quanto mais longe o bloqueador esta do chao. Perto do pe: nitida; na ponta: borrada.
+float gGrama = 0.0;  // fragmento de grama: sombra com 1 amostra (sao muitas folhas sobrepostas)
 float sombraEm(vec3 p, vec3 n) {
     if (usarSombra < 0.5) return 1.0;
     float nl = clamp(dot(n, dirSombra), 0.0, 1.0);
@@ -132,6 +133,7 @@ float sombraEm(vec3 p, vec3 n) {
     vec3 q = pl.xyz / pl.w * 0.5 + 0.5;
     if (q.x <= 0.0 || q.x >= 1.0 || q.y <= 0.0 || q.y >= 1.0 || q.z >= 1.0) return 1.0;
     float bias = 0.00012 + 0.0005 * (1.0 - nl);
+    if (gGrama > 0.5) return (q.z - bias > TEX(texSombra, q.xy).r) ? 0.0 : 1.0;
     float giro = hash12(p.xz * 7.13) * 6.2831;
     float soma = 0.0, cont = 0.0;
     for (int i = 0; i < 8; i++) {
@@ -205,6 +207,7 @@ void main() {
         float dg = length(posMundo.xz - posCamera.xz);
         float hg = fract(sin(dot(floor(posMundo.xz * 9.0), vec2(12.9898, 78.233))) * 43758.5453);
         if (dg > raioGrama - 9.0 * hg) discard;
+        gGrama = 1.0;
     }
 #ifdef PERSONAGEM
     float m = extra.y;
@@ -486,7 +489,8 @@ uniform mat4 mvp;
 VARY vec3 dirLocal;
 void main() {
     dirLocal = vertexPosition;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
+    vec4 pc = mvp * vec4(vertexPosition, 1.0);
+    gl_Position = vec4(pc.xy, pc.w * 0.99999, pc.w);  // no fundo: so os pixels onde o ceu aparece sao calculados
 }
 )";
 
@@ -510,16 +514,22 @@ float vruido(vec3 p) {
     return mix(mix(mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
                mix(mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
 }
-// densidade da nuvem num ponto do mundo (metros): formas grandes recortadas por detalhes
-const float NUV_BASE = 900.0, NUV_TOPO = 1700.0;
-float densNuvem(vec3 p, int oitavas) {
+// nuvens cumulus: base reta, topo arredondado, bordas recortadas por ruido fino
+const float NUV_BASE = 1200.0, NUV_TOPO = 2300.0;
+float formaNuvem(vec3 p) {  // so as formas grandes (barato: usado tambem para a luz)
     float h = (p.y - NUV_BASE) / (NUV_TOPO - NUV_BASE);
     if (h < 0.0 || h > 1.0) return 0.0;
-    vec3 q = p * 0.0011 + vec3(tempoVento * 0.006, 0.0, tempoVento * 0.002);
-    float n = vruido(q) * 0.55 + vruido(q * 2.03) * 0.27;
-    if (oitavas > 2) n += vruido(q * 4.1) * 0.12 + vruido(q * 8.3) * 0.06;
-    float forma = 4.0 * h * (1.0 - h);                 // arredonda a base e o topo
-    return clamp((n - 0.5) * 3.2 * forma - (1.0 - forma) * 0.3, 0.0, 1.0);
+    vec3 q = p * 0.00045 + vec3(tempoVento * 0.0025, 0.0, tempoVento * 0.001);
+    float n = vruido(q) * 0.62 + vruido(q * 2.1 + 3.7) * 0.38;
+    float perfil = smoothstep(0.0, 0.07, h) * smoothstep(1.0, 0.35, h);  // base reta, topo redondo
+    return clamp((n - 0.56) * 4.0 * perfil - (1.0 - perfil) * 0.25, 0.0, 1.0);
+}
+float densNuvem(vec3 p, int detalhe) {
+    float b = formaNuvem(p);
+    if (b <= 0.0 || detalhe == 0) return b;
+    vec3 q = p * 0.004 + vec3(tempoVento * 0.01, tempoVento * 0.004, 0.0);
+    float e = vruido(q) * 0.6 + vruido(q * 2.3) * 0.4;  // erosao nas bordas (fiapos)
+    return clamp((b - e * 0.32 * (1.0 - b)) * 1.6, 0.0, 1.0);
 }
 void main() {
     vec3 d = normalize(dirLocal);
@@ -536,37 +546,44 @@ void main() {
     float e = step(0.9965, hash(q)) * smoothstep(0.0, 0.25, d.y);
     c += vec3(e) * 0.9 * noite;
     // ---- nuvens volumetricas ----
-    if (d.y > 0.015) {
+    if (d.y > 0.01) {
         vec3 cam = posCamera;
-        float t0 = (NUV_BASE - cam.y) / d.y, t1 = min((NUV_TOPO - cam.y) / d.y, 28000.0);
-        vec3 luzNuv = corSol * 1.3 + vec3(0.7, 0.75, 0.9) * 0.08 * noite;
-        vec3 sombraNuv = mix(ceuHorizonte, ceuTopo, 0.5) * 0.55;
+        float t0 = (NUV_BASE - cam.y) / d.y, t1 = min((NUV_TOPO - cam.y) / d.y, 30000.0);
+        float cosSol = dot(d, dirSol);
+        float g = 0.55;  // espalhamento para a frente: borda prateada contra o sol
+        float fase = mix(1.0, (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosSol, 1.5), 0.5);
+        vec3 luzSol = corSol * 1.6;
+        vec3 ambCeuN = mix(ceuHorizonte, ceuTopo, 0.6) * 0.9 + vec3(0.6, 0.65, 0.8) * 0.06 * noite;
         float T = 1.0;
         vec3 acc = vec3(0.0);
-        if (passosNuvem < 0.5) {  // Baixo: uma amostra no meio da camada (barato)
-            vec3 p = cam + d * ((t0 + t1) * 0.5);
-            float dn = densNuvem(p, 2);
-            float luz = clamp(0.55 + 0.45 * dot(dirSol, vec3(0.0, 1.0, 0.0)) - dn * 0.4, 0.0, 1.0);
-            acc = mix(sombraNuv, luzNuv, luz) * dn;
-            T = 1.0 - dn;
+        if (passosNuvem < 0.5) {  // Baixo: uma amostra no meio da camada
+            vec3 p = cam + d * mix(t0, t1, 0.35);
+            float dn = formaNuvem(p);
+            acc = mix(ambCeuN * 0.8, luzSol * 0.8, 0.55 + 0.3 * dirSol.y) * dn;
+            T = 1.0 - dn * 0.9;
         } else {
             float passo = (t1 - t0) / passosNuvem;
-            float jit = hash(d * 937.0);
-            for (int i = 0; i < 24; i++) {
-                if (float(i) >= passosNuvem || T < 0.03) break;
+            float jit = hash(d * 937.0 + tempoVento);
+            for (int i = 0; i < 32; i++) {
+                if (float(i) >= passosNuvem || T < 0.04) break;
                 vec3 p = cam + d * (t0 + (float(i) + jit) * passo);
-                float dn = densNuvem(p, passosNuvem > 16.0 ? 4 : 3);
-                if (dn > 0.001) {
-                    float sol = densNuvem(p + dirSol * 160.0, 2) + densNuvem(p + dirSol * 420.0, 2) * 0.6;  // nuvem entre o ponto e o sol
-                    vec3 col = mix(sombraNuv, luzNuv, exp(-sol * 2.4)) * (0.75 + 0.25 * smoothstep(NUV_BASE, NUV_TOPO, p.y));
-                    float a = 1.0 - exp(-dn * passo * 0.006);
+                float dn = densNuvem(p, 1);
+                if (dn > 0.002) {
+                    // luz: nuvem entre o ponto e o sol (Beer) + "powder" (bordas internas escuras)
+                    float od = formaNuvem(p + dirSol * 120.0) * 1.0 + formaNuvem(p + dirSol * 380.0) * 1.4;
+                    float luz = exp(-od * 2.2) * (1.0 - exp(-dn * 4.0)) * 1.6;
+                    float alt = clamp((p.y - NUV_BASE) / (NUV_TOPO - NUV_BASE), 0.0, 1.0);
+                    vec3 col = luzSol * luz * fase + ambCeuN * (0.35 + 0.65 * alt);
+                    float a = 1.0 - exp(-dn * passo * 0.012);
                     acc += col * a * T;
                     T *= 1.0 - a;
                 }
             }
         }
-        float longe = smoothstep(0.015, 0.12, d.y);  // perto do horizonte as nuvens somem na neblina
-        c = mix(c, acc + c * T, longe);
+        // longe, a nuvem some no ar (perspectiva aerea)
+        float longe = smoothstep(0.01, 0.1, d.y);
+        vec3 comNuvem = acc + c * T;
+        c = mix(c, comNuvem, longe);
     }
     // abaixo do horizonte: neblina
     float abaixo = smoothstep(0.02, -0.12, d.y);
