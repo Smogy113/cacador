@@ -54,6 +54,10 @@ Mapa lerMapa(const std::string& texto) {
                 m.erros.push_back({n, "lugar fora do mundo: " + nome});
                 continue;
             }
+            if (l.raio > 300.f) {
+                m.erros.push_back({n, "raio grande demais (maximo 300): " + nome});
+                continue;
+            }
             if (l.raio <= 0) {
                 m.erros.push_back({n, "raio precisa ser positivo: " + nome});
                 continue;
@@ -72,8 +76,12 @@ Mapa lerMapa(const std::string& texto) {
         }
     }
     for (auto& [linhaN, e] : pendentes) {
-        if (!m.achar(e.de) || !m.achar(e.para))
+        const Lugar* a = m.achar(e.de);
+        const Lugar* b = m.achar(e.para);
+        if (!a || !b)
             m.erros.push_back({linhaN, "estrada liga lugar inexistente: " + e.de + " -> " + e.para});
+        else if (std::hypot(a->x - b->x, a->z - b->z) < 1.f)
+            m.erros.push_back({linhaN, "estrada liga dois pontos no mesmo lugar: " + e.de + " -> " + e.para});
         else
             m.estradas.push_back(e);
     }

@@ -132,6 +132,7 @@ Terreno::Terreno(const Mapa& mapa, uint32_t semente) : semente_(semente) {
         if (!a || !b) continue;
         float dx = b->x - a->x, dz = b->z - a->z;
         float comp = std::sqrt(dx * dx + dz * dz);
+        if (comp < 1e-3f) continue;
         float px = -dz / comp, pz = dx / comp;
         int n = std::max(4, int(comp / 20.f));
         std::vector<Vec3f> pts;

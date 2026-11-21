@@ -1,4 +1,7 @@
 #include <algorithm>
+#if defined(_WIN32)
+extern "C" __declspec(dllimport) int __stdcall MessageBoxA(void* janela, const char* texto, const char* titulo, unsigned int tipo);
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -62,6 +65,13 @@ int main(int argc, char** argv) {
     g_op = lerArgs(argc, argv);
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 720, "Caçador");
+    if (!IsWindowReady()) {
+#if defined(_WIN32)
+        MessageBoxA(nullptr, "Nao foi possivel abrir a janela do jogo.\n\nO Cacador precisa de uma placa de video com OpenGL 3.3.\nAtualize o driver de video e tente de novo.", "Cacador", 0x10);
+#endif
+        std::fprintf(stderr, "Nao foi possivel abrir a janela (OpenGL 3.3 necessario)\n");
+        return 1;
+    }
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
 #if !defined(PLATFORM_WEB)

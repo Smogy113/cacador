@@ -40,3 +40,19 @@ TEST_CASE("data/lugares.txt real é válido") {
     CHECK(m.erros.empty());
     CHECK(m.lugares.size() >= 9);
 }
+
+TEST_CASE("estrada de um lugar para ele mesmo é erro") {
+    auto m = lerMapa("lugar cidade A 0 0 0 10\nestrada A A\n");
+    CHECK(m.estradas.empty());
+    CHECK(m.erros.size() == 1);
+}
+TEST_CASE("estrada entre lugares no mesmo ponto é erro") {
+    auto m = lerMapa("lugar cidade A 5 5 0 10\nlugar vilarejo B 5.2 5 0 10\nestrada A B\n");
+    CHECK(m.estradas.empty());
+    CHECK(m.erros.size() == 1);
+}
+TEST_CASE("raio grande demais é erro") {
+    auto m = lerMapa("lugar cidade A 0 0 0 100000\n");
+    CHECK(m.lugares.empty());
+    CHECK(m.erros.size() == 1);
+}

@@ -126,3 +126,18 @@ TEST_CASE("piso alto demais não teletransporta para cima") {
     col.adicionarPiso({{-2, h, 0}, {2, h + 5.0f, 40}});  // telhado, nao e degrau
     CHECK(col.alturaPiso(0, 5, h) < h + 1.f);
 }
+
+TEST_CASE("câmera não entra na parede colada no lado direito do jogador") {
+    Terreno const& t = plano();
+    float h = t.altura(0, 0);
+    for (float yawOff : {0.f, 0.6f}) {
+        MundoColisao col;
+        col.adicionar({{-3, h - 1, -6}, {-0.4f, h + 8, 6}});  // parede a direita (camera olhando +z: direita = -x)
+        RigCamera r;
+        r.yaw = yawOff;
+        r.pitch = 0.15f;
+        for (int k = 0; k < 40; k++) r.atualizar({0, h, 0}, 0, 0, t, col, 0.05f);
+        Vec3f c = r.posicao();
+        CHECK_MESSAGE(c.x > -0.4f, "camera dentro da parede: x=" << c.x);
+    }
+}

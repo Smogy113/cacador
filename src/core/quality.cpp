@@ -10,6 +10,7 @@ Efeitos efeitosDe(Nivel n) {
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 
 static std::string minusculo(std::string s) {
@@ -20,6 +21,13 @@ static std::string minusculo(std::string s) {
 Nivel sugerirNivel(const std::string& r) {
     std::string s = minusculo(r);
     auto tem = [&](const char* p) { return s.find(p) != std::string::npos; };
+    // AMD integrada (APU de notebook): nao e placa dedicada
+    bool radeonR = false;  // "Radeon R2..R9" (integradas), mas nao "Radeon RX"
+    for (const char* p : {"radeon r", "radeon(tm) r"}) {
+        size_t i = s.find(p);
+        if (i != std::string::npos && i + std::strlen(p) < s.size() && std::isdigit((unsigned char)s[i + std::strlen(p)])) radeonR = true;
+    }
+    if (tem("radeon(tm) graphics") || tem("vega") || radeonR) return Nivel::Medio;
     if (tem("nvidia") || tem("geforce") || tem("radeon") || tem("amd") || tem("arc(tm)") || tem(" arc ")) return Nivel::Alto;
     if (tem("intel") || tem("llvmpipe") || tem("softpipe") || tem("swiftshader") || tem("mali") || tem("adreno") || tem("powervr") ||
         tem("mesa"))

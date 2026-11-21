@@ -171,6 +171,7 @@ void TerrenoRender::construir(int ci, int cj, int lod) {
     Pedaco& p = p_[cj * n_ + ci];
     p.lod[lod] = b.subir();
     p.tem[lod] = true;
+    p.uso[lod] = tempo_ + 0.001f;  // conta como usado agora: se nunca for desenhado, ainda e descartado
 }
 
 void TerrenoRender::construirAgua(int ci, int cj) {

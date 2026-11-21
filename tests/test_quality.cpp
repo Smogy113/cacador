@@ -51,3 +51,9 @@ TEST_CASE("salvar e ler config") {
     CHECK(lerConfig(p, Nivel::Baixo) == Nivel::Medio);
     std::remove(p);
 }
+TEST_CASE("AMD integrada não começa no Alto") {
+    CHECK(sugerirNivel("AMD Radeon(TM) Graphics") != Nivel::Alto);
+    CHECK(sugerirNivel("AMD Radeon(TM) Vega 8 Graphics") != Nivel::Alto);
+    CHECK(sugerirNivel("AMD Radeon R5 Graphics") != Nivel::Alto);
+    CHECK(sugerirNivel("AMD Radeon RX 580") == Nivel::Alto);
+}
