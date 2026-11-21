@@ -32,7 +32,7 @@ void MalhaEsqueleto::carregar(const MalhaPele& p) {
         m.texcoords[i * 2] = v.ao; m.texcoords[i * 2 + 1] = v.material;
         m.texcoords2[i * 2] = float(v.osso[0]);
         m.texcoords2[i * 2 + 1] = float(v.osso[1]) + std::clamp(v.peso, 0.f, 1.f) * 0.99f;
-        m.colors[i * 4] = c8(v.cor.r); m.colors[i * 4 + 1] = c8(v.cor.g); m.colors[i * 4 + 2] = c8(v.cor.b); m.colors[i * 4 + 3] = 255;
+        m.colors[i * 4] = c8(v.cor.r); m.colors[i * 4 + 1] = c8(v.cor.g); m.colors[i * 4 + 2] = c8(v.cor.b); m.colors[i * 4 + 3] = c8(v.pelos);
     }
     std::copy(p.idx.begin(), p.idx.end(), m.indices);
     UploadMesh(&m, false);

@@ -180,10 +180,28 @@ void main() {
     if (m > 9.5) {
         vec3 nr = normalize(nRep);
         vec3 pr = posRep;
-        if (m < 10.5) {          // pele: poros, manchas, luz que atravessa
-            nr = relevo(nr, pr, vec3(420.0), 0.06);
-            albedo *= 0.93 + 0.12 * vnoise(pr * 35.0);
-            brilho = 0.35; aspereza = 0.42; sss = 1.0;
+        if (m > 19.5) {          // casca de pelo (barba, sobrancelha, cabelo, cilios): recorta em fios
+            float h = (m - 20.0) / 3.0;                    // altura da casca: 0..1
+            vec3 q = pr * vec3(1500.0, 650.0, 1500.0);     // fio ~0,7 mm de largura
+            vec3 cel = floor(q);
+            float r = h3(cel);
+            vec2 dentro = fract(q.xz) - 0.5 + (vec2(h3(cel + 7.0), h3(cel + 13.0)) - 0.5) * 0.3;
+            if (r > cor.a * 0.95 || length(dentro) > 0.42 * (1.0 - h * 0.65)) discard;
+            albedo *= (0.55 + 0.6 * h) * (0.8 + 0.4 * h3(cel + 3.0));
+            nr = relevo(nr, pr, vec3(1500.0, 120.0, 1500.0), 0.3);
+            brilho = 0.35; aspereza = 0.4;
+            ao *= 0.6 + 0.4 * h;
+        } else if (m > 17.5 && m < 18.5) {  // labios: marcas verticais, umidos
+            nr = relevo(nr, pr, vec3(120.0, 900.0, 120.0), 0.07);
+            brilho = 0.45; aspereza = 0.34; sss = 1.0;
+        } else if (m < 10.5) {   // pele: poros, sardas, manchas, barba por fazer, luz que atravessa
+            nr = relevo(nr, pr, vec3(420.0), 0.05);
+            nr = relevo(nr, pr, vec3(1100.0), 0.025);
+            albedo *= 0.94 + 0.1 * vnoise(pr * 35.0) + 0.05 * (vnoise(pr * 140.0) - 0.5);
+            if (h3(floor(pr * 520.0)) > 0.993) albedo *= vec3(0.78, 0.7, 0.65);              // sardas
+            float barbaRala = step(0.5, h3(floor(pr * 2600.0))) * cor.a;
+            albedo *= 1.0 - 0.45 * barbaRala;                                                // pontinhos da barba
+            brilho = 0.32; aspereza = 0.45; sss = 1.0;
         } else if (m < 11.5) {   // tecido: trama + fiapos
             nr = relevo(nr, pr, vec3(220.0), 0.12);
             float trama = sin(pr.x * 700.0 + pr.z * 700.0) * sin(pr.y * 700.0);
@@ -201,7 +219,22 @@ void main() {
             nr = relevo(nr, pr, vec3(900.0, 120.0, 900.0), 0.18);
             albedo *= 0.8 + 0.4 * vnoise(pr * vec3(900.0, 90.0, 900.0));
             brilho = 0.4; aspereza = 0.35;
-        } else if (m < 15.5) {   // olho: molhado
+        } else if (m < 15.5) {   // olho: esclera, iris com fibras, pupila; cornea molhada
+            vec2 e = nr.xy;
+            float rr = length(e);
+            float frente = step(0.0, nr.z);
+            float ang = atan(e.y, e.x);
+            float fibras = vnoise(vec3(ang * 14.0, rr * 40.0, 0.0)) * 0.6 + vnoise(vec3(ang * 40.0, rr * 90.0, 3.0)) * 0.4;
+            vec3 irisCor = albedo * (0.55 + 0.9 * fibras);
+            irisCor = mix(irisCor, irisCor * 1.6 + vec3(0.05, 0.04, 0.0), smoothstep(0.3, 0.22, rr) * 0.6);  // anel claro perto da pupila
+            irisCor *= mix(1.0, 0.35, smoothstep(0.42, 0.49, rr));                                         // anel escuro da borda
+            vec3 esclera = vec3(0.78, 0.74, 0.7);
+            esclera = mix(esclera, vec3(0.8, 0.55, 0.5), smoothstep(0.7, 0.95, rr) * 0.5);                // canto rosado
+            esclera = mix(esclera, vec3(0.6, 0.2, 0.18), step(0.9, vnoise(vec3(ang * 25.0, rr * 8.0, 1.0))) * smoothstep(0.55, 0.9, rr) * 0.5);  // veias
+            float naIris = smoothstep(0.5, 0.47, rr) * frente;
+            albedo = mix(esclera, irisCor, naIris);
+            albedo = mix(albedo, vec3(0.01), smoothstep(0.175, 0.15, rr) * frente);                       // pupila
+            albedo *= mix(1.0, 0.45, smoothstep(0.15, 0.55, nr.y));                                       // sombra da palpebra
             brilho = 2.2; aspereza = 0.04;
         } else {                 // feltro do chapeu
             nr = relevo(nr, pr, vec3(500.0), 0.08);

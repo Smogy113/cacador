@@ -6,3 +6,10 @@
 - Ruling: dobras no sobretudo (mais fortes na barra) e rugas na manga do cotovelo, deslocando a geometria.
 - Ruling: teste de contagem do HD subiu de ≤14 mil para ≤16 mil triângulos (globos oculares + dobras).
 - Limite conhecido: sem texturas, cores ficam nos vértices — o rosto ainda tem ar de ilustração. Próximo passo possível: textura de pele/roupa gerada por código (poucas centenas de KB).
+
+## Rosto real (pedido: "rosto real, barba real, olhos reais")
+- Ruling: cabeça refeita do zero (src/core/head_hd.cpp) a partir de medidas antropométricas de homem adulto: distância entre pupilas 63 mm, nariz 54 mm (raiz→subnasal) com ~20 mm de projeção, boca 53 mm, lábio superior 22 mm, queixo 45 mm abaixo da boca; perfil lateral em tabela (testa→queixo) + curvatura lateral por altura + relevos (asas do nariz, órbitas, arco da sobrancelha, maçãs, olheira, sulco nariz-boca, filtro, cantos da boca). Testes fixam pupilas 60–66 mm, nariz 15–45 mm à frente da bochecha, boca 45–60 mm.
+- Ruling: malha da cabeça com anéis a cada 2,7 mm no rosto e 56 lados 3,6× mais densos na frente (tuboA com ângulos não uniformes) — detalhe onde a câmera olha.
+- Ruling: olhos com pálpebras de verdade (faixas de pele sobre o globo, com borda arredondada e vinco), cílios superiores e inferiores, e íris desenhada por pixel a partir da normal do globo (fibras radiais, colarete, anel limbar, pupila, veias e sombra da pálpebra na esclera).
+- Ruling: barba, sobrancelhas, cílios e cabelo por cascas de pelo (4 cascas na barba de 5 mm, 2 no resto), recortadas em fios no shader; máscara de barba "fechada" curta (linha da bochecha, bigode, queixo, pescoço) sem cobrir os lábios; cabelo escondido pelo chapéu não gera cascas.
+- Ruling: teste de triângulos do HD subiu para ≤24 mil (cabeça + cascas); benchmark Baixo máx. 207 mil / 113 chamadas.

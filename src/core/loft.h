@@ -29,6 +29,14 @@ struct Construtor {
     // Liga uma sequencia de aneis. tampaIni/tampaFim fecham as pontas.
     void tubo(const std::vector<Anel>& an, int n, Vec3f refFrente, bool tampaIni, bool tampaFim, const Pintor& pintar,
               float pontaIni = 0.f, float pontaFim = 0.f) {
+        std::vector<float> angs(n);
+        for (int q = 0; q < n; q++) angs[q] = 2 * PI_F * q / n;
+        tuboA(an, angs, refFrente, tampaIni, tampaFim, pintar, pontaIni, pontaFim);
+    }
+    // Igual a tubo, mas com os angulos de cada lado dados (permite malha mais densa onde importa).
+    void tuboA(const std::vector<Anel>& an, const std::vector<float>& angs, Vec3f refFrente, bool tampaIni, bool tampaFim,
+               const Pintor& pintar, float pontaIni = 0.f, float pontaFim = 0.f) {
+        const int n = int(angs.size());
         size_t base = m.v.size();
         size_t triIni = m.idx.size();
         std::vector<Vec3f> eixos(an.size());
@@ -41,7 +49,7 @@ struct Construtor {
             Vec3f fr = normalizar(refFrente - ax * dot(refFrente, ax));
             Vec3f la = cross(fr, ax);
             for (int k = 0; k < n; k++) {
-                float ang = 2 * PI_F * k / n;
+                float ang = angs[k];
                 Vec3f p = an[i].c + la * (std::cos(ang) * an[i].rx) + fr * (std::sin(ang) * an[i].rz);
                 VertPele v;
                 v.ao = 1.f;
@@ -97,5 +105,9 @@ inline Rgb mix(Rgb a, Rgb b, float t) { return lerp(a, b, clamp01(t)); }
 
 // Ponto e raios interpolados entre aneis (Catmull-Rom), com mistura de ossos correta.
 std::vector<Anel> suavizar(const std::vector<Anel>& an, int sub);
+// Cabeca com proporcoes de um rosto real (head_hd.cpp)
+void cabecaHD(Construtor& k, float s, float ms, const Visual& vis);
+// Cascas de pelo para todo vertice com pelos > 0 (chamar depois das normais)
+void cascasDePelo(MalhaPele& m, Rgb corPelo);
 void normaisSuaves(MalhaPele& m);
 }  // namespace loft

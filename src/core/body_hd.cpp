@@ -30,7 +30,7 @@ const T TRONCO[] = {
     {1.31f, .172f, .118f, .015f, PEITO, PEITO, 1},       {1.39f, .185f, .122f, .010f, PEITO, PEITO, 1},
     {1.44f, .192f, .112f, .002f, PEITO, PEITO, 1},       {1.475f, .168f, .098f, .000f, PEITO, PEITO, 1},
     {1.505f, .120f, .080f, .000f, PEITO, PESCOCO, .6f},
-    {1.54f, .068f, .066f, .005f, PESCOCO, PESCOCO, 1},   {1.59f, .064f, .064f, .010f, PESCOCO, CABECA, .6f},
+    {1.54f, .074f, .07f, .005f, PESCOCO, PESCOCO, 1},   {1.59f, .066f, .066f, .010f, PESCOCO, CABECA, .6f},
     {1.625f, .066f, .078f, .020f, CABECA, CABECA, 1},    {1.655f, .075f, .092f, .015f, CABECA, CABECA, 1},
     {1.69f, .083f, .100f, .010f, CABECA, CABECA, 1},     {1.72f, .088f, .103f, .000f, CABECA, CABECA, 1},
     {1.75f, .087f, .100f, -.005f, CABECA, CABECA, 1},    {1.775f, .075f, .088f, -.010f, CABECA, CABECA, 1},
@@ -72,12 +72,13 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
     {
         std::vector<Anel> an;
         for (auto& t : TRONCO) {
+            if (t.y > 1.595f) break;  // a cabeca e feita a parte (head_hd.cpp)
             float largura = t.y < 1.0f ? lq : (t.y > 1.25f && t.y < 1.52f ? lo : 1.f);
             an.push_back(Anel{{0, t.y * s, t.z * s}, t.rx * largura * s * ms, t.rz * s * ms, uint8_t(t.a), uint8_t(t.b), t.p});
         }
         auto sv = suavizar(an, 3);
         k.material = MAT_PELE;
-        k.tubo(sv, 36, {0, 0, 1}, true, true,
+        k.tubo(sv, 36, {0, 0, 1}, true, false,
                [&](int, float ang, Vec3f& p, Vec3f la, Vec3f fr, float& ao) -> Rgb {
                    float y = p.y / s;
                    if (ang < 0) {
@@ -140,37 +141,9 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
                },
                0.03f * s, 0.012f * s);
     }
-    // globos oculares (esclera, iris e pupila), dentro das orbitas
-    {
-        float rx, rz, z;
-        perfil(1.712f, rx, rz, z);
-        float r = 0.0125f * s;
-        for (float sx : {1.f, -1.f}) {
-            Vec3f c{sx * 0.36f * rx * s * ms, 1.712f * s, z * s + 0.93f * rz * s * ms - 0.0105f * s};
-            std::vector<Anel> olho;
-            const int NR = 9;
-            for (int i = 0; i <= NR; i++) {
-                float th = 3.14159f * (1.f - i / float(NR)) * 0.96f + 0.02f;  // de tras para a frente
-                olho.push_back(Anel{c + Vec3f{0, 0, std::cos(th) * r}, std::sin(th) * r + 0.0005f, std::sin(th) * r + 0.0005f, CABECA, CABECA, 1});
-            }
-            k.material = MAT_OLHO;
-            Rgb iris = vis.cabelo.r > 0.4f ? Rgb{0.25f, 0.38f, 0.5f} : Rgb{0.32f, 0.2f, 0.1f};
-            k.tubo(olho, 16, {0, 1, 0}, true, true, [&](int i, float ang, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
-                if (ang < 0 && i > 0) return Rgb{0.02f, 0.02f, 0.02f};  // pupila
-                if (i >= NR - 2) return iris;
-                return Rgb{0.85f, 0.83f, 0.8f};
-            }, 0.f, 0.0008f * s);
-        }
-    }
+    // cabeca com proporcoes reais, olhos, palpebras, cilios e orelhas
+    cabecaHD(k, s, ms, vis);
 
-    // orelhas
-    for (float sx : {1.f, -1.f}) {
-        float x = sx * 0.088f * s * ms;
-        std::vector<Anel> o = {An({x, 1.676f * s, -0.004f * s}, .005f, .011f, CABECA, CABECA, 1), An({x + sx * 0.006f * s, 1.70f * s, -0.008f * s}, .008f, .02f, CABECA, CABECA, 1),
-                               An({x + sx * 0.005f * s, 1.726f * s, -0.01f * s}, .006f, .015f, CABECA, CABECA, 1)};
-        k.material = MAT_PELE;
-        k.tubo(o, 8, {0, 0, 1}, true, true, cor(vis.pele * 0.96f), 0.004f * s, 0.006f * s);
-    }
     // lenco com no
     {
         std::vector<Anel> l = {An({0, 1.525f * s, 0.006f * s}, .082f, .078f, PESCOCO, PEITO, .5f), An({0, 1.56f * s, 0.008f * s}, .074f, .072f, PESCOCO, PESCOCO, 1)};
@@ -440,5 +413,6 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
     }
 
     normaisSuaves(m);
+    cascasDePelo(m, vis.cabelo);
     return m;
 }

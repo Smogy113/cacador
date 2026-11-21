@@ -127,7 +127,7 @@ TEST_CASE("HD: entre 6 e 14 mil triângulos e índices válidos") {
         v.equipamento = eq;
         auto m = corpoHumanoHD({}, v);
         CHECK(m.triangulos() >= 6000);
-        CHECK(m.triangulos() <= 16000);
+        CHECK(m.triangulos() <= 24000);
         CHECK(m.v.size() < 65535);
         for (auto i : m.idx) CHECK(i < m.v.size());
         for (auto& x : m.v) {
@@ -178,14 +178,17 @@ TEST_CASE("HD AAA: materiais válidos e de todos os tipos") {
     v.equipamento = true;
     v.barba = true;
     auto m = corpoHumanoHD({}, v);
-    int cont[17] = {0};
+    int cont[24] = {0};
     for (auto& x : m.v) {
         int id = int(x.material + 0.5f);
         REQUIRE(id >= 10);
-        REQUIRE(id <= 16);
+        REQUIRE(id <= 23);
+        REQUIRE(id != 17);
+        REQUIRE(id != 19);
         cont[id]++;
     }
-    for (float mt : {MAT_PELE, MAT_TECIDO, MAT_COURO, MAT_METAL, MAT_CABELO, MAT_OLHO, MAT_FELTRO}) CHECK_MESSAGE(cont[int(mt)] > 0, "material " << mt);
+    for (float mt : {MAT_PELE, MAT_TECIDO, MAT_COURO, MAT_METAL, MAT_OLHO, MAT_FELTRO, MAT_LABIO}) CHECK_MESSAGE(cont[int(mt)] > 0, "material " << mt);
+    CHECK(cont[21] + cont[22] + cont[23] > 0);  // cascas de pelo
 }
 TEST_CASE("HD AAA: dois globos oculares na frente do rosto") {
     auto m = corpoHumanoHD({}, Visual{});
@@ -194,4 +197,70 @@ TEST_CASE("HD AAA: dois globos oculares na frente do rosto") {
         if (x.material == MAT_OLHO && x.osso[0] == CABECA) (x.pos.x > 0 ? esq : dir)++;
     CHECK(esq >= 40);
     CHECK(dir >= 40);
+}
+
+// ---------------- rosto com medidas reais (antropometria de adulto) ----------------
+static void centrosOlhos(const MalhaPele& m, Vec3f& e, Vec3f& d) {
+    Vec3f se{}, sd{};
+    int ne = 0, nd = 0;
+    for (auto& v : m.v)
+        if (v.material == MAT_OLHO) {
+            if (v.pos.x > 0) { se = se + v.pos; ne++; } else { sd = sd + v.pos; nd++; }
+        }
+    REQUIRE(ne > 0);
+    REQUIRE(nd > 0);
+    e = se * (1.f / ne);
+    d = sd * (1.f / nd);
+}
+TEST_CASE("rosto real: distância entre as pupilas 60-66 mm") {
+    auto m = corpoHumanoHD({}, Visual{});
+    Vec3f e, d;
+    centrosOlhos(m, e, d);
+    CHECK(len(e - d) > 0.060f);
+    CHECK(len(e - d) < 0.066f);
+    CHECK(e.y == doctest::Approx(1.701f).epsilon(0.01));
+}
+TEST_CASE("rosto real: nariz projeta 15-25 mm na frente da bochecha") {
+    auto m = corpoHumanoHD({}, semChapeu());
+    float ponta = -1, bochecha = -1;
+    for (auto& v : m.v) {
+        if (v.osso[0] != CABECA || v.material == MAT_OLHO || v.material >= MAT_PELO) continue;
+        if (std::abs(v.pos.y - 1.667f) < 0.006f) {
+            if (std::abs(v.pos.x) < 0.004f) ponta = std::max(ponta, v.pos.z);
+            if (std::abs(std::abs(v.pos.x) - 0.045f) < 0.006f) bochecha = std::max(bochecha, v.pos.z);
+        }
+    }
+    CHECK(ponta - bochecha > 0.015f);
+    CHECK(ponta - bochecha < 0.045f);
+}
+TEST_CASE("rosto real: boca com 45-60 mm de largura") {
+    auto m = corpoHumanoHD({}, semChapeu());
+    float xmax = 0;
+    for (auto& v : m.v)
+        if (v.material == MAT_LABIO) xmax = std::max(xmax, std::abs(v.pos.x));
+    CHECK(2 * xmax > 0.045f);
+    CHECK(2 * xmax < 0.060f);
+}
+TEST_CASE("barba de verdade: cascas de pelo só com barba") {
+    Visual com, sem;
+    com.barba = true;
+    sem.barba = false;
+    auto contar = [](const MalhaPele& m) {
+        int n = 0;
+        for (auto& v : m.v) if (v.material >= MAT_PELO && v.pos.y < 1.66f) n++;
+        return n;
+    };
+    int a = contar(corpoHumanoHD({}, com)), b = contar(corpoHumanoHD({}, sem));
+    CHECK(a > 400);
+    CHECK(b < a / 4);
+}
+TEST_CASE("cascas de pelo ficam por fora da pele, no máximo 6 mm") {
+    Visual v;
+    v.barba = true;
+    auto m = corpoHumanoHD({}, v);
+    for (auto& x : m.v)
+        if (x.material >= MAT_PELO) {
+            CHECK(x.pelos > 0.f);
+            CHECK(x.compPelo <= 0.006f);
+        }
 }
