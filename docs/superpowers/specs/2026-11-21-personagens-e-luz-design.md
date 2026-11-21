@@ -66,5 +66,5 @@ Anti-objetivos
 
 - ~1.200 triângulos por humano, ~1.600 por cavalo.
 - Até 2 ossos por vértice; índices e pesos guardados em `texcoords2`.
-- Distância > 35 m: mesma malha (sem LOD extra) — 1 chamada já basta.
+- Modelo HD (~9 mil triângulos) perto da câmera (jogador sempre; moradores a menos de 12 m); modelo leve longe e no passe de sombra.
 - SSAO e sombra de contato só no Alto; sombra suave no Médio e Alto.

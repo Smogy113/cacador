@@ -75,6 +75,7 @@ private:
     void atualizarCamera(float dt, const Entrada& e);
     void desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax);
     void trocarNivel(Nivel n);
+    bool atrasDaCamera(Vec3f p) const;
     float tempo_ = 0;
     std::vector<LuzPontual> luzes_;
     size_t tris_ = 0;

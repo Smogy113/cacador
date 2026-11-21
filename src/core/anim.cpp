@@ -12,7 +12,7 @@ static void pontosDoPe(const Esqueleto& e, int pe, Vec3f out[2]) {
 }
 
 float alturaDosPes(const Esqueleto& e, const Pose& p) {
-    std::vector<Mat4> m;
+    static thread_local std::vector<Mat4> m;  // reaproveitado: sem alocar a cada quadro
     calcularMatrizes(e, p, m);
     float menor = 1e9f;
     for (int pe : {PE_E, PE_D}) {
@@ -104,7 +104,7 @@ Pose poseMontado(const Esqueleto& e, float f, int andadura) {
 // =====================================================================
 
 float alturaDosCascos(const Esqueleto& e, const Pose& p) {
-    std::vector<Mat4> m;
+    static thread_local std::vector<Mat4> m;
     calcularMatrizes(e, p, m);
     float menor = 1e9f;
     for (int c : {C_CASCO_DE, C_CASCO_DD, C_CASCO_TE, C_CASCO_TD}) {

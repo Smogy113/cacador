@@ -8,7 +8,8 @@ Pose poseRepouso(const Esqueleto& e) {
 
 void calcularMatrizes(const Esqueleto& e, const Pose& p, std::vector<Mat4>& saida) {
     size_t n = e.ossos.size();
-    std::vector<Mat4> mundo(n);
+    static thread_local std::vector<Mat4> mundo;
+    mundo.resize(n);
     saida.resize(n);
     for (size_t i = 0; i < n; i++) {
         const Osso& o = e.ossos[i];

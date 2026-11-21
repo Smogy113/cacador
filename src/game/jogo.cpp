@@ -243,12 +243,22 @@ void Jogo::atualizar(float dt) {
     }
 }
 
+// fora do campo de visao (atras da camera, com folga): nao calcula pose nem desenha
+bool Jogo::atrasDaCamera(Vec3f p) const {
+    Vec3f f = normalizar(Vec3f{cam_.target.x - cam_.position.x, cam_.target.y - cam_.position.y, cam_.target.z - cam_.position.z});
+    Vec3f d = p - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z};
+    float dist = len(d);
+    if (dist < 4.f) return false;
+    return dot(d, f) < dist * 0.35f;  // ~70 graus para cada lado (a tela tem ~53)
+}
+
 void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax) {
     for (auto& n : populacao_.npcs()) {
         if (!n.ativo) continue;
         float dx = n.corpo.pos.x - cam_.position.x, dz = n.corpo.pos.z - cam_.position.z;
         float d2 = dx * dx + dz * dz;
         if (d2 > distMax * distMax) continue;
+        if (passePrincipal_ && atrasDaCamera(n.corpo.pos)) continue;
         const ModeloHumano& m = roupasNpc_[n.semente % roupasNpc_.size()];
         Pose pose = n.corpo.vel > 0.1f ? poseAndar(m.esqueleto(), n.passada, n.corpo.vel) : poseParado(m.esqueleto(), tempo_ + float(n.semente % 97));
         bool hd = passePrincipal_ && d2 < 12.f * 12.f;
@@ -261,6 +271,7 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         const Cavalo& c = cavalos_[i];
         Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
         if (d.x * d.x + d.z * d.z > distMax * distMax) continue;
+        if (passePrincipal_ && int(i) != montadoEm_ && atrasDaCamera(c.corpo.pos)) continue;
         Pose pc = poseCavalo(modelosCavalo_[i].esqueleto(), c.passada, int(c.andadura), tempo_ + float(i) * 3.7f);
         modelosCavalo_[i].desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc);
         trisAtores_ += modelosCavalo_[i].triangulos();

@@ -54,7 +54,14 @@ void MalhaEsqueleto::desenhar(Material& mat, const std::vector<Mat4>& ossos, Mat
     // rlSetUniformMatrices transpoe no PC mas nao no WebGL (que nao aceita transpose=true)
     for (int i = 0; i < 17; i++) buf[i] = MatrixTranspose(buf[i]);
 #endif
+    // cache da posicao do uniform por shader (evita glGetUniformLocation a cada desenho)
+    static unsigned int ultimoShader = 0;
+    static int ultimoLoc = -1;
+    if (mat.shader.id != ultimoShader) {
+        ultimoShader = mat.shader.id;
+        ultimoLoc = GetShaderLocation(mat.shader, "ossos");
+    }
     rlEnableShader(mat.shader.id);
-    rlSetUniformMatrices(GetShaderLocation(mat.shader, "ossos"), buf, 17);
+    rlSetUniformMatrices(ultimoLoc, buf, 17);
     DrawMesh(mesh_, mat, modelo);
 }
