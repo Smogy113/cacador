@@ -70,7 +70,7 @@ void Populacao::passo(Npc& n, float dt, bool deveFicar, const Terreno& t, const 
     }
     float andou = len(n.corpo.pos - antes);
     n.corpo.vel = andou / std::max(dt, 1e-4f);
-    n.passada += andou * 3.2f;
+    n.passada += andou * 4.2f;  // mesma passada das animacoes (anim.h: FASE_POR_METRO)
     n.corpo.yaw = std::atan2(dir.x, dir.z);
     // preso numa parede: desiste deste ponto
     n.parado = andou < total * 0.3f ? n.parado + dt : 0;

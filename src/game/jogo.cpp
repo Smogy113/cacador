@@ -1,6 +1,7 @@
 #include "game/jogo.h"
 #include <cmath>
 #include "game/ui.h"
+#include "core/anim.h"
 
 Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     mapa_ = carregarMapa(op.arquivoMapa);
@@ -192,7 +193,7 @@ void Jogo::atualizar(float dt) {
         }
     } else {
         moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);
-        passada_ += dt * jogador_.vel * 3.2f;
+        passada_ += dt * jogador_.vel * FASE_POR_METRO;
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
         quadroPerto_ = -1;
@@ -238,7 +239,8 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         float d2 = dx * dx + dz * dz;
         if (d2 > distMax * distMax) continue;
         const ModeloHumano& m = roupasNpc_[n.semente % roupasNpc_.size()];
-        m.desenhar(matPele, n.corpo.pos, n.corpo.yaw, poseRepouso(m.esqueleto()));
+        Pose pose = n.corpo.vel > 0.1f ? poseAndar(m.esqueleto(), n.passada, n.corpo.vel) : poseParado(m.esqueleto(), tempo_ + float(n.semente % 97));
+        m.desenhar(matPele, n.corpo.pos, n.corpo.yaw, pose);
         if (sombraBolha && d2 < 35.f * 35.f) sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
     }
     for (size_t i = 0; i < cavalos_.size(); i++) {
@@ -248,13 +250,16 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         modelosCavalo_[i].desenhar(mat, c.corpo.pos, c.corpo.yaw, c.passada, int(c.andadura));
         if (int(i) == montadoEm_) {
             Vec3f q = ModeloCavalo::assento(c.corpo.pos, c.corpo.yaw);
-            modeloJogador_.desenhar(matPele, q - Vec3f{0, 0.95f, 0}, c.corpo.yaw, poseRepouso(modeloJogador_.esqueleto()));
+            float quadril = modeloJogador_.esqueleto().ossos[QUADRIL].inicio.y;
+            modeloJogador_.desenhar(matPele, q - Vec3f{0, quadril, 0}, c.corpo.yaw, poseMontado(modeloJogador_.esqueleto(), c.passada, int(c.andadura)));
         }
     }
     if (montadoEm_ < 0) {
         float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
         (void)amp;
-        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseRepouso(modeloJogador_.esqueleto()));
+        const Esqueleto& ej = modeloJogador_.esqueleto();
+        Pose pj = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseParado(ej, tempo_);
+        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, pj);
         if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     }
     for (auto& c : cavalos_) {
