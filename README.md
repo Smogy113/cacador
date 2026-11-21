@@ -5,6 +5,9 @@ numa fronteira com cidade murada, vilarejo, fazendas, floresta, rio, ruínas de 
 acampamento de bandidos, mina e cemitério. Feito em C++ com raylib, sem texturas nem arquivos de
 modelo: tudo é gerado pelo código.
 
+Pessoas e cavalos têm corpo anatômico (~1.200 e ~1.500 triângulos) com esqueleto animado na placa
+de vídeo: andar, correr, respirar parado e cavalgar (passo, trote e galope).
+
 Esta é a **v1: só o mundo aberto**. Combate, captura, perseguições e missões vêm depois.
 
 ## Como jogar (Windows)
@@ -19,8 +22,9 @@ Abra `cacador.exe` (a pasta `data/` precisa estar ao lado dele).
 | E | montar, desmontar, ver o quadro de recompensas |
 | Esc | pausa (lá dentro: 1/2/3 trocam a qualidade gráfica, Q sai) |
 
-Qualidade gráfica: **Baixo** (PC fraco), **Médio** (com sombras) e **Alto** (sombras, brilho
-em volta das luzes e raios de sol). Na primeira vez o jogo escolhe um nível pela placa de vídeo e
+Qualidade gráfica: **Baixo** (PC fraco), **Médio** (sombras suaves) e **Alto** (sombras suaves,
+oclusão de ambiente em tela, brilho em volta das luzes e raios de sol). Em todos os níveis há luz
+rebatida do chão e contorno de luz do céu. Na primeira vez o jogo escolhe um nível pela placa de vídeo e
 salva em `config.txt`.
 
 Um dia completo dura 20 minutos. À noite as tochas acendem, a maioria dos moradores vai para casa

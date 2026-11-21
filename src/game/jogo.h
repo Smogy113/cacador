@@ -42,7 +42,7 @@ public:
     void desenharInterface();
     bool querSair() const { return sair_; }
     void teleportar(float x, float z, float yawGraus, float hora);  // benchmark
-    size_t triangulos() const { return tris_; }
+    size_t triangulos() const { return tris_; }  // terreno + cenario + personagens
     int chamadas() const { return chamadas_; }
 
 private:
@@ -78,4 +78,6 @@ private:
     std::vector<LuzPontual> luzes_;
     size_t tris_ = 0;
     int chamadas_ = 0;
+    size_t trisAtores_ = 0;
+    int chamadasAtores_ = 0;
 };

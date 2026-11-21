@@ -245,6 +245,8 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         const ModeloHumano& m = roupasNpc_[n.semente % roupasNpc_.size()];
         Pose pose = n.corpo.vel > 0.1f ? poseAndar(m.esqueleto(), n.passada, n.corpo.vel) : poseParado(m.esqueleto(), tempo_ + float(n.semente % 97));
         m.desenhar(matPele, n.corpo.pos, n.corpo.yaw, pose);
+        trisAtores_ += m.triangulos();
+        chamadasAtores_++;
         if (sombraBolha && d2 < 35.f * 35.f) sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
     }
     for (size_t i = 0; i < cavalos_.size(); i++) {
@@ -253,6 +255,8 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         if (d.x * d.x + d.z * d.z > distMax * distMax) continue;
         Pose pc = poseCavalo(modelosCavalo_[i].esqueleto(), c.passada, int(c.andadura), tempo_ + float(i) * 3.7f);
         modelosCavalo_[i].desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc);
+        trisAtores_ += modelosCavalo_[i].triangulos();
+        chamadasAtores_++;
         if (int(i) == montadoEm_) {
             Vec3f q = modelosCavalo_[i].assento(c.corpo.pos, c.corpo.yaw, pc);
             float quadril = modeloJogador_.esqueleto().ossos[QUADRIL].inicio.y;
@@ -265,6 +269,8 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         const Esqueleto& ej = modeloJogador_.esqueleto();
         Pose pj = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseParado(ej, tempo_);
         modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, pj);
+        trisAtores_ += modeloJogador_.triangulos();
+        chamadasAtores_++;
         if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     }
     for (auto& c : cavalos_) {
@@ -314,9 +320,11 @@ void Jogo::desenhar() {
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
     cenario_.desenhar(cam_, dv, luz_.material());
+    trisAtores_ = 0;
+    chamadasAtores_ = 0;
     desenharAtores(luz_.material(), luz_.materialPele(), !luz_.usaSombras(), dv);
     EndMode3D();
     if (luz_.usaPos()) luz_.terminarPos(cam_);
-    tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos();
-    chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas();
+    tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_;
+    chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_;
 }
