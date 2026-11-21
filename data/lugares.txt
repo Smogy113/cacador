@@ -1,1 +1,28 @@
-# lugares do mapa (preenchido na Etapa 3)
+# Mapa do mundo. Coordenadas em metros; centro do mundo = 0 0.
+# Norte = z negativo. Area jogavel: -700..700. Montanhas a partir de 650.
+# Nomes com espaco usam _ (aparecem com espaco no jogo).
+#
+# lugar <tipo> <nome> <x> <z> <rotacao_graus> <raio>
+# tipos: cidade vilarejo fazenda castelo acampamento mina cemiterio ponte floresta
+
+lugar castelo     Ruinas_de_Corvalto     -150 -480   20  70
+lugar acampamento Acampamento_Garra_Rubra 330 -420  -30  45
+lugar floresta    Mata_Sombria           -420 -230    0 210
+lugar ponte       Ponte_Velha              60 -120   25  12
+lugar vilarejo    Pedrabranca             -60   60   10  55
+lugar fazenda     Fazenda_dos_Moura      -230  150  -15  45
+lugar fazenda     Sitio_Alto               110  190   30  40
+lugar cidade      Valdoro                  320  340    0 100
+lugar cemiterio   Campo_dos_Silenciosos  -300  420    5  35
+lugar mina        Mina_Funda             -470  520   40  35
+
+# estrada <lugarA> <lugarB>
+estrada Valdoro Sitio_Alto
+estrada Sitio_Alto Pedrabranca
+estrada Pedrabranca Ponte_Velha
+estrada Ponte_Velha Ruinas_de_Corvalto
+estrada Ponte_Velha Acampamento_Garra_Rubra
+estrada Pedrabranca Fazenda_dos_Moura
+estrada Fazenda_dos_Moura Campo_dos_Silenciosos
+estrada Campo_dos_Silenciosos Mina_Funda
+estrada Valdoro Campo_dos_Silenciosos
