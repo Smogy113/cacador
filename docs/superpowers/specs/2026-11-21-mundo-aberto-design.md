@@ -27,7 +27,8 @@ missões legais) vem depois, construída em cima dele.
   tochas/fogueiras mudando de acordo.
 - **Pessoas circulando** (NPCs simples andando entre pontos) nos vilarejos/estradas.
 - **Quadro de recompensas** no xerife: mostra cartazes, ainda sem missões jogáveis.
-- 60 FPS em notebook antigo com vídeo integrado (Intel HD).
+- 60 FPS em notebook antigo com vídeo integrado (Intel HD) no nível **Baixo**.
+- **Iluminação realista** como principal atrativo visual, com **níveis de qualidade** (seção 5).
 
 ### Não-objetivos da v1 (vêm depois)
 - Combate (besta, arco, faca, punhos, "foco do caçador").
@@ -91,6 +92,22 @@ controle total sobre onde a história acontece; fácil adicionar lugares depois.
 - **Neblina na distância** esconde o fim da visão (leveza + clima, cor muda com a hora).
 - Objetos distantes em versão mais simples (LOD) ou não desenhados.
 
+### Iluminação (decisão do usuário: realista, com níveis de qualidade)
+Luz realista sobre modelos simples, como nas referências. É o que mais chama atenção.
+
+| # | Efeito | Custo | Baixo | Alto |
+|---|---|---|---|---|
+| 1 | Oclusão de ambiente (cantos/frestas escuros), calculada na criação do mapa e guardada nos vértices | ~zero | ✅ | ✅ |
+| 2 | Luz do céu: em cima pega a cor do céu, embaixo a do chão (hemisférica) | ~zero | ✅ | ✅ |
+| 3 | Tochas/fogueiras com luz suave e tremulando (até ~8 mais próximas) | baixo | ✅ | ✅ |
+| 4 | Correção de cor "de cinema" (tone mapping + grading por hora do dia) | baixo | ✅ | ✅ |
+| 5 | Sombras reais do sol/lua, acompanhando o dia (shadow map em volta do jogador) | médio | ❌ (sombra "bolha") | ✅ |
+| 6 | Brilho em volta das luzes (bloom) | médio | ❌ | ✅ |
+| 7 | Raios de luz na neblina/entre árvores (god rays) | alto | ❌ | ✅ |
+
+- Níveis no menu de opções; o jogo pode sugerir um nível automaticamente.
+- Nível intermediário (ex.: "Médio" com 5 e sem 6–7) fica a critério de quem constrói.
+
 ### Para depois (já combinado, fora da v1)
 - Armas: besta (principal), arco, faca/espada curta, punhos.
 - Captura: laço, boleadeira, amarrar e levar no cavalo; vivo paga mais.
@@ -103,9 +120,6 @@ controle total sobre onde a história acontece; fácil adicionar lugares depois.
 - Escala: mapa de ~1,5 km × 1,5 km; galope ~12 m/s.
 - Terreno em blocos (chunks) com altura gerada por ruído; o código aplaina
   onde há construção e "pinta" as estradas entre lugares.
-- Iluminação: shader próprio simples (luz do sol/lua + até ~8 tochas mais
-  próximas por vez), cores por vértice, sem texturas. Sem sombras reais na v1:
-  sombra "bolha" escura embaixo de personagens e cavalo.
 - Animação dos personagens e do cavalo feita no código (pernas/braços balançando).
 - Construções sólidas (colisão por caixas); sem interiores na v1.
 - Build com CMake; raylib baixada pelo próprio build.
