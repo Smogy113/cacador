@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cmath>
 #include "core/head_volume.h"
+#include "core/pescoco.h"
 #include "core/sdf_head.h"
 
 static const VolumeCabeca& vol() {
@@ -97,4 +98,30 @@ TEST_CASE("volume: gera em menos de 2 s") {
     double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     MESSAGE("gerou em " << s << " s, " << v.nx << "x" << v.ny << "x" << v.nz);
     CHECK(s < 2.0);
+}
+TEST_CASE("caixa da cabeca: contem a escultura e segue o pescoco") {
+    const auto& v = vol();
+    MalhaPele c = caixaCabeca(v, 1.f, 1.f);
+    REQUIRE(c.v.size() >= 8);
+    REQUIRE(c.idx.size() % 3 == 0);
+    Vec3f lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
+    for (auto& x : c.v) {
+        lo = {std::min(lo.x, x.pos.x), std::min(lo.y, x.pos.y), std::min(lo.z, x.pos.z)};
+        hi = {std::max(hi.x, x.pos.x), std::max(hi.y, x.pos.y), std::max(hi.z, x.pos.z)};
+        CHECK(x.peso == doctest::Approx(pesoCabeca(x.pos.y)));  // mesma mistura de ossos da malha
+    }
+    for (auto& e : esc().v) {
+        CHECK(e.pos.x > lo.x + 0.005f);
+        CHECK(e.pos.x < hi.x - 0.005f);
+        CHECK(e.pos.y > lo.y);
+        CHECK(e.pos.y < hi.y - 0.005f);
+        CHECK(e.pos.z > lo.z + 0.005f);
+        CHECK(e.pos.z < hi.z - 0.005f);
+    }
+    // faces para fora: a normal de cada triangulo aponta para longe do centro
+    Vec3f centro = (lo + hi) * 0.5f;
+    for (size_t t = 0; t < c.idx.size(); t += 3) {
+        Vec3f a = c.v[c.idx[t]].pos, b = c.v[c.idx[t + 1]].pos, d = c.v[c.idx[t + 2]].pos;
+        CHECK(dot(cross(b - a, d - a), (a + b + d) * (1.f / 3.f) - centro) > 0);
+    }
 }

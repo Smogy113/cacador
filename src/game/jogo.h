@@ -39,6 +39,7 @@ struct OpcoesJogo {
     float retrato = 0;     // > 0: camera de frente para o rosto do jogador, a essa distancia (screenshots)
     bool estudio = false;  // so o jogador, fundo escuro, luz de estudio
     bool argila = false;   // material cinza (comparar com esculturas)
+    bool semCabecaRaio = false;  // cabeca do heroi de triangulos (comparar com o raymarching)
     int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
     bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
     bool mirar = false;    // segura a mira (screenshots)

@@ -1,4 +1,5 @@
 #include "game/actors.h"
+#include <chrono>
 #include <cmath>
 #include "core/meshbuilder.h"
 #include "raymath.h"
@@ -11,14 +12,44 @@ void ModeloHumano::carregar(const Proporcoes& p, const Visual& v) {
     hd_.carregar(corpoHumanoHD(p, v));
 }
 
+void ModeloHumano::carregarHeroi(const Proporcoes& p, const Visual& v) {
+    carregar(p, v);
+#if !defined(PLATFORM_WEB)
+    Visual sp = v;
+    sp.semPeleCabeca = true;
+    sp.ladosExtras = 2.f;
+    MalhaPele m = corpoHumanoHD(p, sp);
+    trisSemPele_ = int(m.triangulos());
+    hdSemPele_.carregar(m);
+    escY_ = p.altura / 1.8f;
+    escXZ_ = escY_ * p.massa;
+    volume_ = std::async(std::launch::async, [v] { return gerarVolume(0.0013f, 0.002f, v); });
+    volumePendente_ = true;
+#endif
+}
+
 void ModeloHumano::descarregar() {
     malha_.descarregar();
     hd_.descarregar();
+    hdSemPele_.descarregar();
+    if (volumePendente_) volume_.wait();
+    volumePendente_ = false;
+    cabeca_.descarregar();
 }
 
-void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose, bool hd) const {
+void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose, bool hd, Material* matCabeca) const {
     calcularMatrizes(esq_, pose, ossos_);
-    (hd ? hd_ : malha_).desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
+    Matrix modelo = MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z));
+    if (volumePendente_ && volume_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        cabeca_.carregar(volume_.get(), escXZ_, escY_);  // envia os atlas a placa (na thread do desenho)
+        volumePendente_ = false;
+    }
+    if (hd && matCabeca && cabeca_.ok()) {
+        hdSemPele_.desenhar(mat, ossos_, modelo);
+        cabeca_.desenhar(*matCabeca, ossos_, modelo);
+        return;
+    }
+    (hd ? hd_ : malha_).desenhar(mat, ossos_, modelo);
 }
 
 void ModeloCavaloAnat::carregar(const VisualCavalo& v) {

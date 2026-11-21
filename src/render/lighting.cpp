@@ -67,10 +67,10 @@ void Iluminacao::liberarEfeitos() {
         rlUnloadFramebuffer(sombraPertoRT_.id);
         sombraPertoOk_ = false;
     }
-    matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
+    matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = matCabeca_.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
     {
         float zero = 0;
-        SetShaderValue(pele_, GetShaderLocation(pele_, "usarSombraPerto"), &zero, SHADER_UNIFORM_FLOAT);
+        for (Shader sh : personagens()) SetShaderValue(sh, GetShaderLocation(sh, "usarSombraPerto"), &zero, SHADER_UNIFORM_FLOAT);
     }
     if (sombraOk_) {
         rlUnloadTexture(sombraRT_.depth.id);
@@ -94,8 +94,8 @@ void Iluminacao::liberarEfeitos() {
     }
     mat_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
     float zero = 0;
-    for (Shader sh : {lit_, pele_}) SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &zero, SHADER_UNIFORM_FLOAT);
-    matPele_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
+    for (Shader sh : sombreados()) SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &zero, SHADER_UNIFORM_FLOAT);
+    matPele_.maps[MATERIAL_MAP_SPECULAR].texture = matCabeca_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
 }
 
 void Iluminacao::carregar(Nivel nivel) {
@@ -146,6 +146,19 @@ void Iluminacao::carregar(Nivel nivel) {
     pele_.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(pele_, "texSombraPerto");
     matPele_ = LoadMaterialDefault();
     matPele_.shader = pele_;
+#if !defined(PLATFORM_WEB)
+    cabeca_ = carregarShaderDef(VS_CABECA, FS_LIT, "#define PERSONAGEM\n#define RAYMARCH\n");
+    cabecaOk_ = cabeca_.id > 0 && cabeca_.id != rlGetShaderIdDefault();
+    if (cabecaOk_) {
+        cabeca_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(cabeca_, "matModel");
+        cabeca_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(cabeca_, "texSombra");
+        cabeca_.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(cabeca_, "texSombraPerto");
+        cabeca_.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(cabeca_, "texDist");
+        cabeca_.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(cabeca_, "texCor");
+        matCabeca_ = LoadMaterialDefault();
+        matCabeca_.shader = cabeca_;
+    }
+#endif
     profPele_ = carregarShader(VS_PROF_PELE, FS_PROF);
     matProfPele_ = LoadMaterialDefault();
     matProfPele_.shader = profPele_;
@@ -158,19 +171,19 @@ void Iluminacao::carregar(Nivel nivel) {
         sombraPertoRT_ = criarMapaSombra(1024);
         sombraPertoOk_ = sombraPertoRT_.id > 0;
         if (sombraPertoOk_) {
-            matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = sombraPertoRT_.depth;
+            matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = matCabeca_.maps[MATERIAL_MAP_ROUGHNESS].texture = sombraPertoRT_.depth;
             float t = 1.f / 1024.f;
-            setF(pele_, "texelSombraPerto", t);
+            for (Shader sh : personagens()) setF(sh, "texelSombraPerto", t);
         }
         if (sombraOk_) {
             mat_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
-            matPele_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
+            matPele_.maps[MATERIAL_MAP_SPECULAR].texture = matCabeca_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
             float texel = 1.f / ef_.resolucaoSombra;
             setF(lit_, "texelSombra", texel);
-            setF(pele_, "texelSombra", texel);
+            for (Shader sh : personagens()) setF(sh, "texelSombra", texel);
             float tm = 2 * AREA_SOMBRA / ef_.resolucaoSombra;
             setF(lit_, "texelMetros", tm);
-            setF(pele_, "texelMetros", tm);
+            for (Shader sh : personagens()) setF(sh, "texelMetros", tm);
         }
     }
     if (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) {
@@ -194,12 +207,18 @@ void Iluminacao::carregar(Nivel nivel) {
         for (auto* t : {&cena_, &meiaA_, &meiaB_, &raiosRT_}) SetTextureFilter(t->texture, TEXTURE_FILTER_BILINEAR);
         posOk_ = cena_.id > 0;
     }
+    if (cabecaOk_) setF(cabeca_, "passosMax", nivel_ == Nivel::Alto ? 64.f : 40.f);
 }
 
 void Iluminacao::descarregar() {
     if (!carregado_) return;
     liberarEfeitos();
     for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_}) UnloadShader(sh);
+    if (cabecaOk_) {
+        for (int i = 0; i < 12; i++) matCabeca_.maps[i].texture = Texture2D{};  // as texturas sao de outros donos
+        UnloadShader(cabeca_);
+        cabecaOk_ = false;
+    }
     esfera_.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = Texture2D{};
     UnloadModel(esfera_);
     UnloadTexture(ruidoNuvem_);
@@ -228,7 +247,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     sol_ = relogio.direcaoSol();
     lua_ = relogio.direcaoLua();
     noite_ = relogio.intensidadeTochas();
-    for (Shader sh : {lit_, pele_}) {
+    for (Shader sh : sombreados()) {
         uniformesComuns(sh, paleta_, sol_, noite_);
         setV3(sh, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
         setF(sh, "tempoVento", tempo);
@@ -278,7 +297,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
 void Iluminacao::modoHorizonte(float d) { setF(lit_, "descartarPerto", d); }
 
 void Iluminacao::modoEstudio(Vec3f dir, bool argila) {
-    for (Shader sh : {lit_, pele_}) {
+    for (Shader sh : sombreados()) {
         setV3(sh, "dirSol", dir);
         setRgb(sh, "corSol", Rgb{1.45f, 1.42f, 1.38f});
         setRgb(sh, "ambCeu", Rgb{0.16f, 0.165f, 0.18f});
@@ -295,7 +314,7 @@ void Iluminacao::modoEstudio(Vec3f dir, bool argila) {
     }
     sol_ = dir;
     dirSombra_ = dir;
-    setF(pele_, "argila", argila ? 1.f : 0.f);
+    for (Shader sh : personagens()) setF(sh, "argila", argila ? 1.f : 0.f);
 }
 
 void Iluminacao::desenharCeu(const Camera3D& cam) {
@@ -325,7 +344,7 @@ void Iluminacao::comecarSombra(Vec3f centro) {
     cl.projection = CAMERA_ORTHOGRAPHIC;
     dirSombra_ = dir;
     setV3(lit_, "dirSombra", dir);
-    setV3(pele_, "dirSombra", dir);
+    for (Shader sh : personagens()) setV3(sh, "dirSombra", dir);
     BeginTextureMode(sombraRT_);
     ClearBackground(WHITE);
     rlClearScreenBuffers();
@@ -337,7 +356,7 @@ void Iluminacao::terminarSombra() {
     EndMode3D();
     EndTextureMode();
     float um = 1;
-    for (Shader sh : {lit_, pele_}) {
+    for (Shader sh : sombreados()) {
         SetShaderValueMatrix(sh, GetShaderLocation(sh, "matLuz"), luzVP_);
         SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &um, SHADER_UNIFORM_FLOAT);
     }
@@ -472,9 +491,22 @@ void Iluminacao::comecarSombraPerto(Vec3f centro) {
 void Iluminacao::terminarSombraPerto() {
     EndMode3D();
     EndTextureMode();
-    SetShaderValueMatrix(pele_, GetShaderLocation(pele_, "matLuzPerto"), luzVPPerto_);
     float um = 1;
-    SetShaderValue(pele_, GetShaderLocation(pele_, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
+    for (Shader sh : personagens()) {
+        SetShaderValueMatrix(sh, GetShaderLocation(sh, "matLuzPerto"), luzVPPerto_);
+        SetShaderValue(sh, GetShaderLocation(sh, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
+    }
 }
+std::vector<Shader> Iluminacao::personagens() const {
+    std::vector<Shader> v{pele_};
+    if (cabecaOk_) v.push_back(cabeca_);
+    return v;
+}
+std::vector<Shader> Iluminacao::sombreados() const {
+    std::vector<Shader> v{lit_, pele_};
+    if (cabecaOk_) v.push_back(cabeca_);
+    return v;
+}
+bool Iluminacao::usaCabecaRaio() const { return cabecaOk_ && nivel_ != Nivel::Baixo && !dbg.semCabecaRaio; }
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
 void Iluminacao::definirCabelo(Vec3f d) { SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloDesl"), &d, SHADER_UNIFORM_VEC3); }

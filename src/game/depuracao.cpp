@@ -130,6 +130,9 @@ void Jogo::desenharDepuracao() {
     if (caixa(ef.raiosDeLuz ? "Raios de sol" : "Raios (não há neste nível)", raios)) d.semRaios = !raios;
     if (caixa("Nuvens", nuvens)) d.semNuvens = !nuvens;
     if (caixa("Neblina", nebl)) d.semNeblina = !nebl;
+    bool raio = !d.semCabecaRaio;
+    std::snprintf(b, sizeof b, "Cabeça por raymarching (%.1f ms)", dbg_.msQuadro);
+    if (caixa(luz_.nivel() == Nivel::Baixo ? "Cabeça por raymarching (Médio/Alto)" : b, raio)) d.semCabecaRaio = !raio;
     float pn = d.passosNuvem < 0 ? (luz_.nivel() == Nivel::Alto ? 22.f : (luz_.nivel() == Nivel::Medio ? 12.f : 0.f)) : d.passosNuvem;
     if (barra("Passos das nuvens", pn, 0.f, 24.f, "%.0f")) d.passosNuvem = std::round(pn);
     barra("Exposição", d.exposicao, 0.4f, 2.f, "x%.2f");

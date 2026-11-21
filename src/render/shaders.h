@@ -11,6 +11,7 @@ Shader carregarShaderPos(const char* fs);  // usa o vertex shader padrao da rayl
 extern const char* VS_PROF;
 extern const char* VS_PELE;
 extern const char* VS_PROF_PELE;
+extern const char* VS_CABECA;
 extern const char* FS_PROF;
 extern const char* FS_BRILHO;
 extern const char* FS_BLUR;

@@ -14,6 +14,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     terrenoR_ = std::make_unique<TerrenoRender>(*terreno_);
     cenario_.construir(mapa_, *terreno_, col_, 1337);
     luz_.carregar(op.nivel);
+    luz_.dbg.semCabecaRaio = op.semCabecaRaio;
     estilo::carregar();
     grama_.iniciar(*terreno_, col_);
     nav_ = std::make_unique<Navegador>(*terreno_, &mapa_);
@@ -43,7 +44,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.revolver = !op.estudio;
     r.cabeloLongo = true;
     r.chapeuAba = false;  // sem chapeu: cabelo penteado para tras
-    modeloJogador_.carregar(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
+    modeloJogador_.carregarHeroi(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
+    if (op.semEntrada) modeloJogador_.esperarCabeca();
     // moradores: roupas variadas
     {
         const Rgb cas[] = {{0.45f, 0.35f, 0.22f}, {0.30f, 0.36f, 0.45f}, {0.55f, 0.22f, 0.18f}, {0.35f, 0.42f, 0.28f}, {0.62f, 0.56f, 0.44f}, {0.25f, 0.22f, 0.25f}};
@@ -348,17 +350,23 @@ bool Jogo::atrasDaCamera(Vec3f p) const {
 
 void Jogo::desenharJogador(Material& matPele, bool hd) {
     const Esqueleto& ej = modeloJogador_.esqueleto();
+    // cabeca por raymarching: so no passe principal (as sombras usam a malha), Alto/Medio, perto da camera
+    Material* matCabeca = nullptr;
+    if (hd && &matPele == &luz_.materialPele() && luz_.usaCabecaRaio()) {
+        Vec3f d = jogador_.pos + Vec3f{0, 1.7f, 0} - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z};
+        if (dot(d, d) < 15.f * 15.f) matCabeca = &luz_.materialCabeca();
+    }
     if (montadoEm_ >= 0) {
         const Cavalo& c = cavalos_[montadoEm_];
         Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_ + float(montadoEm_) * 3.7f);
         Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc);
         luz_.definirCabelo(rotY(cabeloX_, -c.corpo.yaw));
-        modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd);
+        modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd, matCabeca);
         luz_.definirCabelo({});
         return;
     }
     luz_.definirCabelo(rotY(cabeloX_, -jogador_.yaw));
-    modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd);
+    modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd, matCabeca);
     luz_.definirCabelo({});
 }
 

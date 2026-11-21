@@ -1,7 +1,9 @@
 #pragma once
+#include <future>
 #include "raylib.h"
 #include "core/body.h"
 #include "core/math.h"
+#include "render/cabeca_raio.h"
 #include "render/skinned.h"
 
 
@@ -9,15 +11,24 @@
 class ModeloHumano {
 public:
     void carregar(const Proporcoes& p, const Visual& v);
+    // o heroi: tambem a malha sem a pele da cabeca (corpo mais denso) e a cabeca por raymarching
+    void carregarHeroi(const Proporcoes& p, const Visual& v);
+    void esperarCabeca() const { if (volumePendente_) volume_.wait(); }  // capturas de tela: deterministico
     void descarregar();
-    // hd = modelo de alta definicao (perto da camera)
-    void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose, bool hd = false) const;
+    // hd = modelo de alta definicao (perto da camera); matCabeca != null: cabeca por raymarching
+    void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose, bool hd = false, Material* matCabeca = nullptr) const;
+
     const Esqueleto& esqueleto() const { return esq_; }
     int triangulos(bool hd = false) const { return hd ? hd_.triangulos() : malha_.triangulos(); }
 
 private:
     Esqueleto esq_;
-    MalhaEsqueleto malha_, hd_;
+    MalhaEsqueleto malha_, hd_, hdSemPele_;
+    mutable CabecaRaio cabeca_;
+    mutable std::future<VolumeCabeca> volume_;  // gerado em segundo plano (nao atrasa o carregamento)
+    mutable bool volumePendente_ = false;
+    float escXZ_ = 1, escY_ = 1;
+    int trisSemPele_ = 0;
     mutable std::vector<Mat4> ossos_;
 };
 

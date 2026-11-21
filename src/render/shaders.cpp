@@ -82,10 +82,15 @@ void main() {
 )";
 
 const char* FS_LIT = R"(
-VARY vec3 posMundo;
-VARY vec3 normalMundo;
-VARY vec4 cor;
-VARY vec2 extra;   // x = oclusao de ambiente, y = tipo (1 agua, 2 chama, 3 janela)
+#ifdef RAYMARCH
+#define ENTRADA
+#else
+#define ENTRADA VARY
+#endif
+ENTRADA vec3 posMundo;
+ENTRADA vec3 normalMundo;
+ENTRADA vec4 cor;
+ENTRADA vec2 extra;   // x = oclusao de ambiente, y = tipo (1 agua, 2 chama, 3 janela)
 uniform vec3 posCamera;
 uniform vec3 ambCeu;
 uniform vec3 ambChao;
@@ -162,13 +167,13 @@ float sombraEm(vec3 p, vec3 n) {
 
 
 #ifdef PERSONAGEM
-VARY vec4 tanRep;   // cartao: direcao do fio + v; pele do rosto: coordenadas do rosto
-VARY vec3 tanMundo;
-VARY vec3 posRep;   // posicao de repouso (o detalhe acompanha o corpo)
-VARY vec3 nRep;
-VARY vec3 mc0;      // colunas da matriz que leva normais do repouso para o mundo
-VARY vec3 mc1;
-VARY vec3 mc2;
+ENTRADA vec4 tanRep;   // cartao: direcao do fio + v; pele do rosto: coordenadas do rosto
+ENTRADA vec3 tanMundo;
+ENTRADA vec3 posRep;   // posicao de repouso (o detalhe acompanha o corpo)
+ENTRADA vec3 nRep;
+ENTRADA vec3 mc0;      // colunas da matriz que leva normais do repouso para o mundo
+ENTRADA vec3 mc1;
+ENTRADA vec3 mc2;
 float h3(vec3 p) {
     p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
     p *= 17.0;
@@ -190,7 +195,132 @@ vec3 relevo(vec3 n, vec3 p, vec3 k, float amp) {
     return normalize(n - g * amp);  // amp = inclinacao maxima da normal
 }
 #endif
+
+#ifdef RAYMARCH
+// ---- cabeca do heroi desenhada pixel a pixel: o raio anda pelo volume de distancias (atlas de
+// fatias) ate a pele e preenche as mesmas variaveis que a malha traria do vertex shader ----
+VARY vec3 posCaixa;
+uniform mat4 matModel;
+uniform mat4 ossos[17];
+uniform mat4 invModelo;
+uniform mat4 matVP;
+uniform sampler2D texDist;
+uniform sampler2D texCor;
+uniform vec3 volLo;
+uniform vec3 volHi;
+uniform vec3 volN;       // voxels de distancia (x, y, z)
+uniform vec3 corN;       // voxels de cor
+uniform vec4 volInfo;    // h, hCor, colunas (dist), colunas (cor)
+uniform vec4 atlasTam;   // largura e altura dos dois atlas
+uniform vec3 escalaRep;  // escultura -> modelo
+uniform float passosMax;
+mat4 Mc, Mp, iC, iP;
+mat4 inversaR(mat4 m) {
+    mat3 rt = transpose(mat3(m));
+    return mat4(vec4(rt[0], 0.0), vec4(rt[1], 0.0), vec4(rt[2], 0.0), vec4(-(rt * m[3].xyz), 1.0));
+}
+float pesoCab(float y) { return y < 1.585 ? smoothstep(1.53, 1.585, y) : 1.0; }
+float dPeso(float y) {
+    if (y <= 1.53 || y >= 1.585) return 0.0;
+    float t = (y - 1.53) / 0.055;
+    return 6.0 * t * (1.0 - t) / 0.055;
+}
+// ponto da pose atual (modelo) -> pose de repouso; Newton com a derivada do peso (como pescoco.cpp)
+vec3 paraRep(vec3 p) {
+    vec3 r = (iC * vec4(p, 1.0)).xyz;
+    if (r.y > 1.592 * escalaRep.y) return r;
+    vec3 rn = (iP * vec4(p, 1.0)).xyz;
+    if (rn.y < 1.55 * escalaRep.y) r = rn;
+    for (int it = 0; it < 4; it++) {
+        float y = r.y / escalaRep.y, w = pesoCab(y), dw = dPeso(y) / escalaRep.y;
+        vec3 cr = (Mc * vec4(r, 1.0)).xyz, nr = (Mp * vec4(r, 1.0)).xyz;
+        vec3 e = p - mix(nr, cr, w);
+        vec3 ae = mat3(iC) * e * w + mat3(iP) * e * (1.0 - w);
+        vec3 au = mat3(iC) * (cr - nr) * w + mat3(iP) * (cr - nr) * (1.0 - w);
+        float den = 1.0 + dw * au.y;
+        r += ae - au * (dw * ae.y / (abs(den) > 0.05 ? den : 0.05));
+    }
+    return r;
+}
+vec2 naFatia(vec2 xy, float k, vec3 n, float colunas, vec2 tam) {
+    return (vec2(mod(k, colunas) * n.x, floor(k / colunas) * n.y) + xy + 0.5) / tam;
+}
+float distVol(vec3 q) {  // q: coordenadas da escultura
+    vec3 c = clamp(q, volLo, volHi);
+    vec3 f = (c - volLo) / volInfo.x;
+    float k = min(floor(f.z), volN.z - 2.0);
+    float a = TEX(texDist, naFatia(f.xy, k, volN, volInfo.z, atlasTam.xy)).r;
+    float b = TEX(texDist, naFatia(f.xy, k + 1.0, volN, volInfo.z, atlasTam.xy)).r;
+    return mix(a, b, f.z - k) + length(q - c);
+}
+vec4 corVol(vec3 q) {
+    vec3 f = clamp((q - volLo) / volInfo.y, vec3(0.0), corN - 1.001);
+    float k = floor(f.z);
+    vec4 a = TEX(texCor, naFatia(f.xy, k, corN, volInfo.w, atlasTam.zw));
+    vec4 b = TEX(texCor, naFatia(f.xy, k + 1.0, corN, volInfo.w, atlasTam.zw));
+    return mix(a, b, f.z - k);
+}
+vec3 qHit;  // ponto da pele (escultura), para a luz do rosto
+void marchar() {
+    Mc = ossos[4]; Mp = ossos[3];  // CABECA, PESCOCO
+    iC = inversaR(Mc); iP = inversaR(Mp);
+    vec3 ro = (invModelo * vec4(posCamera, 1.0)).xyz;
+    vec3 rd = (invModelo * vec4(posCaixa, 1.0)).xyz - ro;  // a caixa e desenhada pelas faces de tras: posCaixa e a saida
+    float tFim = length(rd);
+    rd /= tFim;
+    float esc = min(escalaRep.x, escalaRep.y);
+    float t = max(tFim - 0.6, 0.0);  // a caixa tem ~0,5 m de diagonal; com a camera dentro, comeca na camera
+    // raio rente a pele gasta os passos andando devagar: se acabarem sem ter saido da caixa e
+    // perto da superficie, fica com o ponto (senao aparecem fios do fundo nas bordas do nariz/queixo)
+    bool achou = false, saiu = false;
+    float d = 1.0;
+    for (int i = 0; i < 96; i++) {
+        if (float(i) >= passosMax) break;
+        d = distVol(paraRep(ro + rd * t) / escalaRep) * esc;
+        if (d < 0.00008 + t * 0.00035) { achou = true; break; }
+        t += d * 0.85;
+        if (t > tFim + 0.01) { saiu = true; break; }
+    }
+    if (!achou && (saiu || d > 0.003)) discard;
+    for (int k = 0; k < 2; k++) t += distVol(paraRep(ro + rd * t) / escalaRep) * esc;  // refino
+    vec3 p = ro + rd * t;
+    vec3 r = paraRep(p);
+    vec3 q = r / escalaRep;
+    qHit = q;
+    float h = volInfo.x;
+    vec3 g = vec3(distVol(q + vec3(h, 0.0, 0.0)) - distVol(q - vec3(h, 0.0, 0.0)),
+                  distVol(q + vec3(0.0, h, 0.0)) - distVol(q - vec3(0.0, h, 0.0)),
+                  distVol(q + vec3(0.0, 0.0, h)) - distVol(q - vec3(0.0, 0.0, h)));
+    vec3 nq = normalize(g);
+    nRep = normalize(nq / escalaRep);
+    float w = pesoCab(q.y);
+    mat3 mn = mat3(matModel) * (mat3(Mc) * w + mat3(Mp) * (1.0 - w));
+    mc0 = mn[0]; mc1 = mn[1]; mc2 = mn[2];
+    posMundo = (matModel * vec4(p, 1.0)).xyz;
+    normalMundo = normalize(mn * nRep);
+    posRep = r;
+    tanRep = vec4(q.x, q.y, 1.0, 0.0);
+    tanMundo = vec3(0.0, 1.0, 0.0);
+    // oclusao pela propria forma (como a malha: 5 amostras ao longo da normal)
+    float occ = 0.0, peso = 1.0;
+    for (int s = 1; s <= 5; s++) {
+        float dist = 0.0025 * float(s);
+        occ += (dist - distVol(q + nq * dist)) * peso;
+        peso *= 0.75;
+    }
+    float ao = clamp(1.0 - occ * 55.0, 0.3, 1.0);
+    vec4 c = corVol(q);
+    cor = vec4(c.rgb, clamp((0.5 - c.a) * 2.0, 0.0, 1.0));
+    extra = vec2(ao, c.a > 0.75 ? 18.0 : 10.0);
+    vec4 cp = matVP * vec4(posMundo, 1.0);
+    gl_FragDepth = (cp.z / cp.w) * 0.5 + 0.5;
+}
+#endif
+
 void main() {
+#ifdef RAYMARCH
+    marchar();
+#endif
     vec3 n = normalize(normalMundo);
     vec3 albedo = pow(cor.rgb, vec3(2.2));
     float ao = extra.x;
@@ -767,6 +897,16 @@ void main() {
     mc0 = mn[0];
     mc1 = mn[1];
     mc2 = mn[2];
+    gl_Position = mvp * pl;
+}
+)";
+
+// caixa da cabeca (raymarching): so leva a posicao ao mundo; o fragment shader faz o resto
+const char* VS_CABECA = CORPO_SKIN R"(
+VARY vec3 posCaixa;
+void main() {
+    vec4 pl = matrizPele() * vec4(vertexPosition, 1.0);
+    posCaixa = (matModel * pl).xyz;
     gl_Position = mvp * pl;
 }
 )";

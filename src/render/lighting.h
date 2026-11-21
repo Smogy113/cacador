@@ -35,6 +35,7 @@ public:
     // painel de depuracao (F1): desliga efeitos do nivel atual e ajusta valores na hora
     struct Depuracao {
         bool semSombras = false, semSSAO = false, semBloom = false, semRaios = false, semNuvens = false, semNeblina = false;
+        bool semCabecaRaio = false;  // cabeca do heroi de triangulos (comparar com o raymarching)
         float passosNuvem = -1;   // -1 = do nivel
         float exposicao = 1.f;    // multiplica a exposicao da paleta
     } dbg;
@@ -49,6 +50,9 @@ public:
     // personagens com esqueleto
     Material& materialPele() { return matPele_; }
     Material& materialSombraPele() { return matProfPele_; }
+    // cabeca do heroi por raymarching (Alto e Medio no PC)
+    bool usaCabecaRaio() const;
+    Material& materialCabeca() { return matCabeca_; }
 
     // Pos-processamento (brilho e raios de luz): envolve o desenho da cena.
     bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) && posOk_; }
@@ -59,9 +63,12 @@ public:
 private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
     void liberarEfeitos();
+    std::vector<Shader> personagens() const;  // pele_ e, se houver, cabeca_
+    std::vector<Shader> sombreados() const;   // lit_, pele_ e cabeca_
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{};
-    Shader pele_{}, profPele_{};
-    Material mat_{}, matProf_{}, matPele_{}, matProfPele_{};
+    Shader pele_{}, profPele_{}, cabeca_{};
+    bool cabecaOk_ = false;
+    Material mat_{}, matProf_{}, matPele_{}, matProfPele_{}, matCabeca_{};
     Model esfera_{};
     Texture2D ruidoNuvem_{};  // ruido 3D barato (1 leitura) para as nuvens
     RenderTexture2D sombraPertoRT_{};

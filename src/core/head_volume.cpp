@@ -4,6 +4,7 @@
 #include <cstring>
 #include <thread>
 #include "core/head_cor.h"
+#include "core/pescoco.h"
 #include "core/sdf_head.h"
 
 namespace {
@@ -172,4 +173,42 @@ std::vector<uint8_t> atlasCor(const VolumeCabeca& v) {
             std::memcpy(&a[((y0 + j) * W + x0) * 4], &v.cor[((size_t(k) * v.cy + j) * v.cx) * 4], size_t(v.cx) * 4);
     }
     return a;
+}
+
+MalhaPele caixaCabeca(const VolumeCabeca& v, float sxz, float sy) {
+    const float pad = 0.008f;
+    const float ys[] = {v.lo.y, 1.53f, 1.545f, 1.5575f, 1.57f, 1.585f, v.hi.y + pad};
+    const float xs[2] = {v.lo.x - pad, v.hi.x + pad}, zs[2] = {v.lo.z - pad, v.hi.z + pad};
+    const int cantos[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    MalhaPele m;
+    for (float y : ys)
+        for (auto& c : cantos) {
+            VertPele p;
+            p.pos = {xs[c[0]] * sxz, y * sy, zs[c[1]] * sxz};
+            p.osso[0] = CABECA;
+            p.osso[1] = PESCOCO;
+            p.peso = pesoCabeca(y);
+            p.material = MAT_PELE;
+            m.v.push_back(p);
+        }
+    const int n = int(sizeof(ys) / sizeof(ys[0]));
+    Vec3f centro{0, (ys[0] + ys[n - 1]) * 0.5f * sy, (zs[0] + zs[1]) * 0.5f * sxz};
+    auto tri = [&](int a, int b, int c) {
+        Vec3f pa = m.v[a].pos, pb = m.v[b].pos, pc = m.v[c].pos;
+        if (dot(cross(pb - pa, pc - pa), (pa + pb + pc) * (1.f / 3.f) - centro) < 0) std::swap(b, c);  // sempre para fora
+        m.idx.insert(m.idx.end(), {uint16_t(a), uint16_t(b), uint16_t(c)});
+    };
+    for (int r = 0; r + 1 < n; r++)
+        for (int k = 0; k < 4; k++) {
+            int a = r * 4 + k, b = r * 4 + (k + 1) % 4, c = a + 4, d = b + 4;
+            tri(a, b, d);
+            tri(a, d, c);
+        }
+    for (int top : {0, n - 1}) {
+        int b0 = top * 4;
+        tri(b0, b0 + 1, b0 + 2);
+        tri(b0, b0 + 2, b0 + 3);
+    }
+    for (auto& p : m.v) p.normal = normalizar(p.pos - centro);
+    return m;
 }

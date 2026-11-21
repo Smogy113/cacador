@@ -28,3 +28,6 @@ std::vector<uint16_t> atlasMeiaPrecisao(const VolumeCabeca& v);  // distancias e
 std::vector<uint8_t> atlasCor(const VolumeCabeca& v);             // RGBA8
 uint16_t floatParaMeia(float f);
 float meiaParaFloat(uint16_t h);
+// Caixa em volta da cabeca (pose de repouso, espaco do modelo: escultura * escala) com aneis no
+// pescoco pesados como a malha (cabeca/pescoco), para seguir o pescoco quando ele dobra.
+MalhaPele caixaCabeca(const VolumeCabeca& v, float escalaXZ, float escalaY);
