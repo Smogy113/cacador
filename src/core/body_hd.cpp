@@ -67,7 +67,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
     const Rgb cinto{0.2f, 0.13f, 0.08f}, metal{0.55f, 0.5f, 0.42f}, madeira{0.4f, 0.27f, 0.15f};
     auto An = [&](Vec3f c, float rx, float rz, int a, int b, float p) { return Anel{c, rx * s * ms, rz * s * ms, uint8_t(a), uint8_t(b), p}; };
     auto L = [](Vec3f a, Vec3f b, float t) { return a + (b - a) * t; };
-    auto Q = [&](int n) { return vis.heroi ? n * 3 / 2 : n; };  // o heroi (perto da camera) ganha mais lados
+    auto Q = [&](int n) { return vis.heroi ? int(std::lround(float(n * 3 / 2) * vis.ladosExtras)) : n; };  // o heroi (perto da camera) ganha mais lados
 
     // ================= tronco, pescoco e cabeca =================
     {

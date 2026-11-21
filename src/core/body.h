@@ -22,6 +22,8 @@ struct Visual {
     bool revolver = false;     // revolver na mao direita
     bool cabeloLongo = false;  // mechas compridas ate a nuca, com fisica (o heroi)
     bool heroi = false;        // cabeca esculpida em resolucao maxima (o jogador); os outros usam celulas maiores
+    bool semPeleCabeca = false;  // a pele esculpida da cabeca nao entra (desenhada por raymarching); olhos, cilios e cabelo sim
+    float ladosExtras = 1.f;     // multiplica os lados dos tubos do heroi (silhueta mais redonda)
 };
 
 // Materiais dos personagens (vao para o shader; 0 = sem material especial)

@@ -392,3 +392,44 @@ TEST_CASE("revolver: na mao direita, leve e HD") {
     CHECK(h1.triangulos() > h0.triangulos());
     CHECK(h1.triangulos() - h0.triangulos() < 600);
 }
+
+// ---------------- heroi com a cabeca desenhada por raymarching ----------------
+static Visual heroiRaio() {
+    Visual v = semChapeu();
+    v.heroi = true;
+    v.cabeloLongo = true;
+    v.equipamento = true;
+    v.revolver = true;
+    v.semPeleCabeca = true;
+    v.ladosExtras = 2.f;
+    return v;
+}
+TEST_CASE("heroi sem pele da cabeca: nenhum vertice de pele acima de 1,55 m") {
+    auto m = corpoHumanoHD({}, heroiRaio());
+    int n = 0;
+    for (auto& v : m.v)
+        if ((v.material == MAT_PELE || v.material == MAT_LABIO) && v.osso[0] == CABECA && v.pos.y > 1.55f) n++;
+    CHECK(n == 0);
+}
+TEST_CASE("heroi sem pele: olhos, cilios e cabelo continuam") {
+    auto m = corpoHumanoHD({}, heroiRaio());
+    int olho = 0, cartao = 0;
+    for (auto& v : m.v) {
+        olho += v.material == MAT_OLHO;
+        cartao += v.material >= MAT_CARTAO;
+    }
+    CHECK(olho > 100);
+    CHECK(cartao > 1000);
+}
+TEST_CASE("heroi sem pele e corpo denso: <= 60 mil triangulos e < 65535 vertices") {
+    auto m = corpoHumanoHD({}, heroiRaio());
+    MESSAGE(m.triangulos() << " triangulos, " << m.v.size() << " vertices");
+    CHECK(m.triangulos() <= 60000);
+    CHECK(m.v.size() < 65535);
+    Visual normal = heroiRaio();
+    normal.semPeleCabeca = false;
+    normal.ladosExtras = 1.f;
+    auto c = corpoHumanoHD({}, normal);
+    CHECK(c.triangulos() <= 95000);
+    CHECK(c.v.size() < 65535);
+}

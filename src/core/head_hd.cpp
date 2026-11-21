@@ -220,7 +220,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
         }
     };
     size_t base = m.v.size();
-    for (const auto& e : esc.v) {
+    for (const auto& e : (vis.semPeleCabeca ? std::vector<sdf::VertSup>{} : esc.v)) {
         VertPele v;
         v.pos = W(e.pos);
         v.normal = Wn(e.normal);
@@ -237,7 +237,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
         v.dirPelo = cp.dirPelo;
         m.v.push_back(v);
     }
-    for (size_t t = 0; t < esc.idx.size(); t += 3)
+    for (size_t t = 0; !vis.semPeleCabeca && t < esc.idx.size(); t += 3)
         m.idx.insert(m.idx.end(), {uint16_t(base + esc.idx[t]), uint16_t(base + esc.idx[t + 1]), uint16_t(base + esc.idx[t + 2])});
 
     // ---- globos oculares: a iris e desenhada no shader a partir da normal ----
