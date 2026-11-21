@@ -17,6 +17,7 @@ extern const char* FS_BRILHO;
 extern const char* FS_BLUR;
 extern const char* FS_BLUR4;
 extern const char* FS_ASSAR_MATERIAL;
+extern const char* FS_LUZ_PAREDE;
 extern const char* FS_LONGE;
 extern const char* FS_RAIOS;
 extern const char* FS_JUNTA;

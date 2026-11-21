@@ -251,6 +251,7 @@ void Iluminacao::descarregar() {
     UnloadModel(esfera_);
     UnloadTexture(ruidoNuvem_);
     UnloadShader(lit_);
+    liberarLuzParedes();
     for (auto& t : texMat_)
         if (t.id) UnloadRenderTexture(t);
     for (auto& t : texMat_) t = RenderTexture2D{};
@@ -619,6 +620,157 @@ void Iluminacao::assarMateriais() {
         litParede_.locs[SHADER_LOC_MAP_DIFFUSE + mapas[k]] = GetShaderLocation(litParede_, nomes[k]);
     }
     UnloadShader(sh);
+}
+
+void Iluminacao::liberarLuzParedes() {
+    if (!luzParedeOk_) return;
+    for (int m : {MATERIAL_MAP_EMISSION, MATERIAL_MAP_HEIGHT, MATERIAL_MAP_BRDF}) matConstr_.maps[m].texture = Texture2D{};
+    UnloadRenderTexture(luz1_);
+    UnloadRenderTexture(luz2_);
+    UnloadTexture(texFaces_);
+    UnloadShader(luzParede_);
+    luzParedeOk_ = false;
+}
+
+void Iluminacao::prepararLuzParedes(const std::vector<FormaCena>& fs) {
+#if !defined(PLATFORM_WEB)
+    liberarLuzParedes();
+    if (!paredeOk_ || fs.empty() || fs.size() > 16000) return;
+    luzParede_ = carregarShaderPos(FS_LUZ_PAREDE);
+    if (luzParede_.id == 0 || luzParede_.id == rlGetShaderIdDefault()) return;
+    formasLuz_ = &fs;
+    atlas_ = alocarAtlas(fs, METRO_TEXEL, TAM_ATLAS);
+    // tabela: por forma, 6 texels RGBA float (centro+rot, meia+parede, 4 retangulos)
+    std::vector<float> tab(fs.size() * 6 * 4, 0.f);
+    for (size_t i = 0; i < fs.size(); i++) {
+        float* t = &tab[i * 24];
+        const FormaCena& f = fs[i];
+        t[0] = f.centro.x, t[1] = f.centro.y, t[2] = f.centro.z, t[3] = f.rotY;
+        t[4] = f.meia.x, t[5] = f.meia.y, t[6] = f.meia.z, t[7] = f.parede ? 1.f : 0.f;
+        for (int k = 0; k < 4; k++) {
+            const RetAtlas& r = atlas_[i][k];
+            t[8 + k * 4] = float(r.x), t[9 + k * 4] = float(r.y), t[10 + k * 4] = float(r.w), t[11 + k * 4] = float(r.h);
+        }
+    }
+    texFaces_.id = rlLoadTexture(tab.data(), 6, int(fs.size()), PIXELFORMAT_UNCOMPRESSED_R32G32B32A32, 1);
+    texFaces_.width = 6, texFaces_.height = int(fs.size()), texFaces_.mipmaps = 1, texFaces_.format = PIXELFORMAT_UNCOMPRESSED_R32G32B32A32;
+    SetTextureFilter(texFaces_, TEXTURE_FILTER_POINT);
+    luz1_ = LoadRenderTexture(TAM_ATLAS, TAM_ATLAS);
+    luz2_ = LoadRenderTexture(TAM_ATLAS, TAM_ATLAS);
+    for (auto* rt : {&luz1_, &luz2_}) {
+        BeginTextureMode(*rt);
+        ClearBackground(BLANK);  // alfa 0: "ainda nao calculada"
+        EndTextureMode();
+        SetTextureFilter(rt->texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(rt->texture, TEXTURE_WRAP_CLAMP);
+    }
+    matConstr_.maps[MATERIAL_MAP_EMISSION].texture = luz1_.texture;
+    matConstr_.maps[MATERIAL_MAP_HEIGHT].texture = texFaces_;
+    matConstr_.maps[MATERIAL_MAP_BRDF].texture = luz2_.texture;
+    litParede_.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(litParede_, "texLuz1");
+    litParede_.locs[SHADER_LOC_MAP_HEIGHT] = GetShaderLocation(litParede_, "texFaces");
+    litParede_.locs[SHADER_LOC_MAP_BRDF] = GetShaderLocation(litParede_, "texLuz2");
+    float ta = float(TAM_ATLAS), mt = METRO_TEXEL;
+    setF(litParede_, "tamAtlas", ta);
+    setF(litParede_, "metroTexel", mt);
+    setF(luzParede_, "metroTexel", mt);
+    pertoFace_.assign(fs.size(), {});
+    feita_.assign(fs.size() * 4, 0);
+    fila_.clear();
+    cursor_ = 0;
+    luzParedeOk_ = true;
+#else
+    (void)fs;
+#endif
+}
+
+void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
+    if (!luzParedeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes) return;
+    const auto& fs = *formasLuz_;
+    // faces no raio de 70 m; as que entram agora vao para a frente da fila
+    std::vector<int> novas, fila;
+    for (size_t i = 0; i < fs.size(); i++) {
+        if (!fs[i].parede) continue;
+        bool perto = distanciaForma(fs[i], cam) < 70.f;
+        for (int k = 0; k < 4; k++) {
+            int f = int(i) * 4 + k;
+            if (atlas_[i][k].w == 0) continue;
+            if (!perto) { feita_[f] = 0; continue; }
+            (feita_[f] ? fila : novas).push_back(f);
+        }
+    }
+    if (novas.empty() && fila.empty()) return;
+    // luz que faz sombra (como comecarSombra) e cor do sol do quadro
+    Vec3f dir = sol_.y > 0.05f ? sol_ : lua_;
+    if (dir.y < 0.05f) dir = {0.3f, 0.9f, 0.2f};
+    dir = normalizar(dir);
+    Rgb cs = paleta_.sol * smoothstep(-0.05f, 0.12f, sol_.y);
+    Shader sh = luzParede_;
+    float d3[3] = {dir.x, dir.y, dir.z}, s3[3] = {sol_.x, sol_.y, sol_.z}, c3[3] = {cs.r, cs.g, cs.b};
+    SetShaderValue(sh, GetShaderLocation(sh, "dirSombra"), d3, SHADER_UNIFORM_VEC3);
+    SetShaderValue(sh, GetShaderLocation(sh, "dirSol"), s3, SHADER_UNIFORM_VEC3);
+    SetShaderValue(sh, GetShaderLocation(sh, "corSol"), c3, SHADER_UNIFORM_VEC3);
+    static int loc[12] = {-2};
+    static unsigned int locShader = 0;
+    if (locShader != sh.id) {
+        locShader = sh.id;
+        const char* nomes[12] = {"formaA", "formaB", "formaCor", "numFormas", "formaCS", "formaR", "faceO", "faceU", "faceN", "faceTam", "faceRet", "saida"};
+        for (int i = 0; i < 12; i++) loc[i] = GetShaderLocation(sh, nomes[i]);
+    }
+    std::vector<int> escolhidas(novas.begin(), novas.begin() + std::min<size_t>(novas.size(), size_t(porQuadro)));
+    for (int n = 0; int(escolhidas.size()) < porQuadro && n < int(fila.size()); n++) escolhidas.push_back(fila[(cursor_ + n) % fila.size()]);
+    if (!fila.empty()) cursor_ = (cursor_ + std::max<size_t>(0, size_t(porQuadro) - std::min<size_t>(novas.size(), size_t(porQuadro)))) % fila.size();
+    int ultimaForma = -1;
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass == 1 && nivel_ != Nivel::Alto) break;  // o rebote so aparece no Alto
+        BeginTextureMode(pass == 0 ? luz1_ : luz2_);
+        BeginShaderMode(sh);
+        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+        BeginBlendMode(BLEND_CUSTOM);
+        float saida = float(pass);
+        SetShaderValue(sh, loc[11], &saida, SHADER_UNIFORM_FLOAT);
+        ultimaForma = -1;
+        for (int f : escolhidas) {
+            int i = f / 4, k = f % 4;
+            if (i != ultimaForma) {  // formas perto desta casa (calculadas uma vez)
+                ultimaForma = i;
+                auto& pf = pertoFace_[i];
+                if (pf.empty()) pf = formasPerto(fs, fs[i].centro, 40.f, 32);
+                float a[32 * 4] = {0}, b[32 * 4] = {0}, c[32 * 3] = {0}, csn[32 * 2] = {0}, r[32] = {0};
+                int nf = int(pf.size());
+                for (int q = 0; q < nf; q++) {
+                    const FormaCena& g = fs[pf[q]];
+                    a[q * 4] = g.centro.x, a[q * 4 + 1] = g.centro.y, a[q * 4 + 2] = g.centro.z, a[q * 4 + 3] = g.rotY;
+                    b[q * 4] = g.meia.x, b[q * 4 + 1] = g.meia.y, b[q * 4 + 2] = g.meia.z, b[q * 4 + 3] = float(int(g.tipo));
+                    c[q * 3] = g.cor.r, c[q * 3 + 1] = g.cor.g, c[q * 3 + 2] = g.cor.b;
+                    csn[q * 2] = std::cos(g.rotY), csn[q * 2 + 1] = std::sin(g.rotY);
+                    r[q] = len(g.meia);
+                }
+                SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 32);
+                SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 32);
+                SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 32);
+                SetShaderValue(sh, loc[3], &nf, SHADER_UNIFORM_INT);
+                SetShaderValueV(sh, loc[4], csn, SHADER_UNIFORM_VEC2, 32);
+                SetShaderValueV(sh, loc[5], r, SHADER_UNIFORM_FLOAT, 32);
+            }
+            FaceParede fc = faceDe(fs[i], k);
+            const RetAtlas& ra = atlas_[i][k];
+            float o3[3] = {fc.origem.x, fc.origem.y, fc.origem.z}, u3[3] = {fc.eixoU.x, fc.eixoU.y, fc.eixoU.z}, n3[3] = {fc.normal.x, fc.normal.y, fc.normal.z};
+            float tam[2] = {fc.largura, fc.altura}, ret[4] = {float(ra.x), float(ra.y), float(ra.w), float(ra.h)};
+            SetShaderValue(sh, loc[6], o3, SHADER_UNIFORM_VEC3);
+            SetShaderValue(sh, loc[7], u3, SHADER_UNIFORM_VEC3);
+            SetShaderValue(sh, loc[8], n3, SHADER_UNIFORM_VEC3);
+            SetShaderValue(sh, loc[9], tam, SHADER_UNIFORM_VEC2);
+            SetShaderValue(sh, loc[10], ret, SHADER_UNIFORM_VEC4);
+            // raylib desenha com y para baixo; no atlas a linha 0 e a de baixo (coordenada de textura)
+            DrawRectangle(ra.x, TAM_ATLAS - ra.y - ra.h, ra.w, ra.h, WHITE);
+            rlDrawRenderBatchActive();  // cada face com seus uniformes
+        }
+        EndBlendMode();
+        EndShaderMode();
+        EndTextureMode();
+    }
+    for (int f : escolhidas) feita_[f] = 1;
 }
 
 std::vector<Shader> Iluminacao::personagens() const {

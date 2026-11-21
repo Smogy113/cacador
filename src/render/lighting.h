@@ -35,7 +35,11 @@ public:
     void definirHeroi(bool sim);
     void definirFoco(float distHeroi);
     // construcoes perto da camera (formas exatas) e janelas, para a luz tracada nas paredes
-    void definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& janelas, Vec3f foco);  // camera de cinema: o heroi fica em foco  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
+    void definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& janelas, Vec3f foco);
+    // luz das paredes guardada por face: prepara o atlas uma vez (depois de gerar o cenario) e, a cada
+    // quadro, recalcula algumas faces perto da camera (rodizio; faces novas primeiro)
+    void prepararLuzParedes(const std::vector<FormaCena>& fs);
+    void atualizarLuzParedes(Vec3f camera, int porQuadro = 48);  // camera de cinema: o heroi fica em foco  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
     // painel de depuracao (F1): desliga efeitos do nivel atual e ajusta valores na hora
@@ -74,6 +78,20 @@ private:
     void liberarEfeitos();
     void assarMateriais();
     RenderTexture2D texMat_[3]{};  // material das paredes: alturas, fatores de cor, pesos
+    // luz guardada das paredes
+    static constexpr int TAM_ATLAS = 2048;
+    static constexpr float METRO_TEXEL = 0.25f;
+    const std::vector<FormaCena>* formasLuz_ = nullptr;
+    std::vector<std::array<RetAtlas, 4>> atlas_;
+    std::vector<std::vector<int>> pertoFace_;  // formas perto de cada forma (calculado uma vez)
+    std::vector<uint8_t> feita_;               // por face (forma*4+k): ja calculada desde que entrou no raio
+    std::vector<int> fila_;                    // faces no raio, em rodizio
+    size_t cursor_ = 0;
+    RenderTexture2D luz1_{}, luz2_{};
+    Texture2D texFaces_{};
+    Shader luzParede_{};
+    bool luzParedeOk_ = false;
+    void liberarLuzParedes();
     std::vector<Shader> personagens() const;  // pele_ e, se houver, cabeca_
     std::vector<Shader> sombreados() const;   // lit_, pele_ e cabeca_
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blur4_{}, longe_{};

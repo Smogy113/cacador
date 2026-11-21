@@ -64,7 +64,14 @@ VARY vec3 posMundo;
 VARY vec3 normalMundo;
 VARY vec4 cor;
 VARY vec2 extra;
+#ifdef PAREDES
+ATTR vec2 vertexTexCoord2;   // x = indice da forma da parede + 1 (0: nenhuma)
+VARY float formaV;
+#endif
 void main() {
+#ifdef PAREDES
+    formaV = vertexTexCoord2.x;
+#endif
     vec3 vp = vertexPosition;
     if (vertexTexCoord.y > 3.5 && vertexTexCoord.y < 4.5) {  // grama: a ponta balanca com o vento (rajadas passando pelo campo)
         float flex = vertexColor.a;
@@ -80,6 +87,138 @@ void main() {
     gl_Position = mvp * vec4(vp, 1.0);
 }
 )";
+
+// Formula de distancia do vilarejo e os raios contra ela (paredes no FS_LIT e luz guardada por face)
+#define CENA_SDF R"(
+// ---- o vilarejo como formula de distancia: as construcoes perto da camera (formas exatas) ----
+uniform vec4 formaA[32];    // centro.xyz, rotY
+uniform vec4 formaB[32];    // meia.xyz, tipo (0 caixa, 1 prisma, 2 cilindro)
+uniform vec3 formaCor[32];
+uniform vec2 formaCS[32];   // cos e sen da rotacao (calculados no processador)
+uniform float formaR[32];   // raio da esfera que envolve a forma
+uniform int numFormas;
+uniform vec4 janelaP[12];
+uniform vec3 janelaN[12];
+uniform int numJanelas;
+float dForma(int i, vec3 p) {
+    vec3 d = p - formaA[i].xyz;
+    float c = formaCS[i].x, s = formaCS[i].y;
+    vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
+    vec3 h = formaB[i].xyz;
+    vec3 dd = abs(q) - h;
+    float cx = length(max(dd, 0.0)) + min(max(dd.x, max(dd.y, dd.z)), 0.0);
+    if (formaB[i].w < 0.5) return cx;
+    if (formaB[i].w < 1.5) {
+        float gz = 1.0 / h.z, gy = 1.0 / (2.0 * h.y);
+        float agua = (abs(q.z) * gz + (q.y + h.y) * gy - 1.0) / sqrt(gz * gz + gy * gy);
+        return max(max(agua, max(-h.y - q.y, abs(q.x) - h.x)), cx);
+    }
+    float dr = length(q.xz) - h.x, dy = abs(q.y) - h.y;
+    return min(max(dr, dy), 0.0) + length(max(vec2(dr, dy), 0.0));
+}
+// lista de formas que podem influir num efeito (as outras ficam longe demais para mudar o resultado)
+int lista[32];
+int nLista = 0;
+void listarPerto(vec3 p, float alcance) {          // formas a menos de "alcance" do ponto
+    nLista = 0;
+    for (int i = 0; i < 32; i++) {
+        if (i >= numFormas) break;
+        if (length(p - formaA[i].xyz) - formaR[i] < alcance) { lista[nLista] = i; nLista++; }
+    }
+}
+void listarSegmento(vec3 a, vec3 b, float folga) {  // formas a menos de "folga" do segmento a-b
+    nLista = 0;
+    vec3 ab = b - a;
+    float l2 = dot(ab, ab);
+    for (int i = 0; i < 32; i++) {
+        if (i >= numFormas) break;
+        vec3 c = formaA[i].xyz;
+        float t = clamp(dot(c - a, ab) / l2, 0.0, 1.0);
+        if (length(a + ab * t - c) - formaR[i] < folga) { lista[nLista] = i; nLista++; }
+    }
+}
+float mapaLista(vec3 p, out int id) {
+    float d = 1e9;
+    id = -1;
+    for (int k = 0; k < 32; k++) {
+        if (k >= nLista) break;
+        int i = lista[k];
+        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
+        float di = dForma(i, p);
+        if (di < d) { d = di; id = i; }
+    }
+    return d;
+}
+float mapaCena(vec3 p, out int id) {
+    float d = 1e9;
+    id = -1;
+    for (int i = 0; i < 32; i++) {
+        if (i >= numFormas) break;
+        // a forma inteira cabe numa esfera: se ate a esfera ja e mais longe que a melhor, pula
+        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
+        float di = dForma(i, p);
+        if (di < d) { d = di; id = i; }
+    }
+    return d;
+}
+// sombra suave tracada ate a luz: nitida junto ao que bloqueia, abrindo com a distancia
+float sombraCena(vec3 p, vec3 L) {
+    float res = 1.0, t = 0.05;
+    int id;
+    listarSegmento(p, p + L * 32.5, 8.0);  // passo maximo 2,5 m: o raio nunca passa de 32,5 m
+    if (nLista == 0) return 1.0;
+    for (int i = 0; i < 24; i++) {
+        float h = mapaLista(p + L * t, id);
+        res = min(res, 7.0 * h / t);
+        t += clamp(h, 0.05, 2.5);
+        if (res < 0.01 || t > 30.0) break;
+    }
+    return clamp(res, 0.0, 1.0);
+}
+// oclusao: o quanto as construcoes em volta (beiral, alicerce, casa vizinha) fecham o ceu
+float oclusaoCena(vec3 p, vec3 n) {
+    float occ = 0.0, w = 1.0;
+    int id;
+    // so contam formas a menos de 0,9 m das amostras (alem disso d - dist <= 0 para todas)
+    listarPerto(p, 1.8);
+    for (int k = 1; k <= 5; k++) {
+        float d = 0.18 * float(k);
+        occ += (d - min(mapaLista(p + n * d, id), 1e3)) * w;
+        w *= 0.7;
+    }
+    return clamp(1.0 - occ * 1.6, 0.25, 1.0);
+}
+// um rebote: a parede ensolarada em frente devolve luz colorida (5 direcoes fixas, sem ruido)
+vec3 reboteCena(vec3 p, vec3 n, vec3 T) {
+    vec3 soma = vec3(0.0);
+    listarPerto(p, 12.6);  // os raios andam no maximo 12 m
+    if (nLista == 0) return soma;
+    vec3 dirs[5];
+    dirs[0] = n;
+    dirs[1] = normalize(n + T * 0.8);
+    dirs[2] = normalize(n - T * 0.8);
+    dirs[3] = normalize(n + vec3(0.0, 0.7, 0.0));
+    dirs[4] = normalize(n + vec3(0.0, -0.35, 0.0));
+    for (int k = 0; k < 5; k++) {
+        float t = 0.15;
+        int id = -1;
+        for (int i = 0; i < 16; i++) {
+            float h = mapaLista(p + dirs[k] * t, id);
+            if (h < 0.03) break;
+            t += h;
+            if (t > 12.0) { id = -1; break; }
+        }
+        if (id < 0 || t > 12.0) continue;
+        vec3 q = p + dirs[k] * t;
+        vec2 e = vec2(0.03, 0.0);
+        vec3 nh = normalize(vec3(dForma(id, q + e.xyy) - dForma(id, q - e.xyy), dForma(id, q + e.yxy) - dForma(id, q - e.yxy),
+                                 dForma(id, q + e.yyx) - dForma(id, q - e.yyx)));
+        float sol = max(dot(nh, dirSol), 0.0) * max(dot(-dirs[k], nh), 0.0);
+        soma += pow(formaCor[id], vec3(2.2)) * corSol * sol / (1.0 + t * 0.25);
+    }
+    return soma * (1.3 / 5.0);
+}
+)"
 
 const char* FS_LIT = R"(
 #ifdef RAYMARCH
@@ -366,135 +505,40 @@ float hParede(vec2 uv, float mat) {
     vec3 a = textureLod(texAltura, uv * 0.25, lodMat).rgb;
     return -0.03 * (mat < 5.5 ? a.r : (mat < 6.5 ? a.g : a.b));
 }
-// ---- o vilarejo como formula de distancia: as construcoes perto da camera (formas exatas) ----
-uniform vec4 formaA[32];    // centro.xyz, rotY
-uniform vec4 formaB[32];    // meia.xyz, tipo (0 caixa, 1 prisma, 2 cilindro)
-uniform vec3 formaCor[32];
-uniform vec2 formaCS[32];   // cos e sen da rotacao (calculados no processador)
-uniform float formaR[32];   // raio da esfera que envolve a forma
-uniform int numFormas;
-uniform vec4 janelaP[12];
-uniform vec3 janelaN[12];
-uniform int numJanelas;
-float dForma(int i, vec3 p) {
-    vec3 d = p - formaA[i].xyz;
-    float c = formaCS[i].x, s = formaCS[i].y;
-    vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
-    vec3 h = formaB[i].xyz;
-    vec3 dd = abs(q) - h;
-    float cx = length(max(dd, 0.0)) + min(max(dd.x, max(dd.y, dd.z)), 0.0);
-    if (formaB[i].w < 0.5) return cx;
-    if (formaB[i].w < 1.5) {
-        float gz = 1.0 / h.z, gy = 1.0 / (2.0 * h.y);
-        float agua = (abs(q.z) * gz + (q.y + h.y) * gy - 1.0) / sqrt(gz * gz + gy * gy);
-        return max(max(agua, max(-h.y - q.y, abs(q.x) - h.x)), cx);
-    }
-    float dr = length(q.xz) - h.x, dy = abs(q.y) - h.y;
-    return min(max(dr, dy), 0.0) + length(max(vec2(dr, dy), 0.0));
-}
-// lista de formas que podem influir num efeito (as outras ficam longe demais para mudar o resultado)
-int lista[32];
-int nLista = 0;
-void listarPerto(vec3 p, float alcance) {          // formas a menos de "alcance" do ponto
-    nLista = 0;
-    for (int i = 0; i < 32; i++) {
-        if (i >= numFormas) break;
-        if (length(p - formaA[i].xyz) - formaR[i] < alcance) { lista[nLista] = i; nLista++; }
-    }
-}
-void listarSegmento(vec3 a, vec3 b, float folga) {  // formas a menos de "folga" do segmento a-b
-    nLista = 0;
-    vec3 ab = b - a;
-    float l2 = dot(ab, ab);
-    for (int i = 0; i < 32; i++) {
-        if (i >= numFormas) break;
-        vec3 c = formaA[i].xyz;
-        float t = clamp(dot(c - a, ab) / l2, 0.0, 1.0);
-        if (length(a + ab * t - c) - formaR[i] < folga) { lista[nLista] = i; nLista++; }
-    }
-}
-float mapaLista(vec3 p, out int id) {
-    float d = 1e9;
-    id = -1;
-    for (int k = 0; k < 32; k++) {
-        if (k >= nLista) break;
-        int i = lista[k];
-        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
-        float di = dForma(i, p);
-        if (di < d) { d = di; id = i; }
-    }
-    return d;
-}
-float mapaCena(vec3 p, out int id) {
-    float d = 1e9;
-    id = -1;
-    for (int i = 0; i < 32; i++) {
-        if (i >= numFormas) break;
-        // a forma inteira cabe numa esfera: se ate a esfera ja e mais longe que a melhor, pula
-        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
-        float di = dForma(i, p);
-        if (di < d) { d = di; id = i; }
-    }
-    return d;
-}
+)" CENA_SDF R"(
 vec3 nParede = vec3(0.0);   // normal da face (antes do relevo)
 float aoCena = 1.0;
-// sombra suave tracada ate a luz: nitida junto ao que bloqueia, abrindo com a distancia
-float sombraCena(vec3 p, vec3 L) {
-    float res = 1.0, t = 0.05;
-    int id;
-    listarSegmento(p, p + L * 32.5, 8.0);  // passo maximo 2,5 m: o raio nunca passa de 32,5 m
-    if (nLista == 0) return 1.0;
-    for (int i = 0; i < 24; i++) {
-        float h = mapaLista(p + L * t, id);
-        res = min(res, 7.0 * h / t);
-        t += clamp(h, 0.05, 2.5);
-        if (res < 0.01 || t > 30.0) break;
-    }
-    return clamp(res, 0.0, 1.0);
-}
-// oclusao: o quanto as construcoes em volta (beiral, alicerce, casa vizinha) fecham o ceu
-float oclusaoCena(vec3 p, vec3 n) {
-    float occ = 0.0, w = 1.0;
-    int id;
-    // so contam formas a menos de 0,9 m das amostras (alem disso d - dist <= 0 para todas)
-    listarPerto(p, 1.8);
-    for (int k = 1; k <= 5; k++) {
-        float d = 0.18 * float(k);
-        occ += (d - min(mapaLista(p + n * d, id), 1e3)) * w;
-        w *= 0.7;
-    }
-    return clamp(1.0 - occ * 1.6, 0.25, 1.0);
-}
-// um rebote: a parede ensolarada em frente devolve luz colorida (5 direcoes fixas, sem ruido)
-vec3 reboteCena(vec3 p, vec3 n, vec3 T) {
-    vec3 soma = vec3(0.0);
-    listarPerto(p, 12.6);  // os raios andam no maximo 12 m
-    if (nLista == 0) return soma;
-    vec3 dirs[5];
-    dirs[0] = n;
-    dirs[1] = normalize(n + T * 0.8);
-    dirs[2] = normalize(n - T * 0.8);
-    dirs[3] = normalize(n + vec3(0.0, 0.7, 0.0));
-    dirs[4] = normalize(n + vec3(0.0, -0.35, 0.0));
-    for (int k = 0; k < 5; k++) {
-        float t = 0.15;
-        int id = -1;
-        for (int i = 0; i < 16; i++) {
-            float h = mapaLista(p + dirs[k] * t, id);
-            if (h < 0.03) break;
-            t += h;
-            if (t > 12.0) { id = -1; break; }
-        }
-        if (id < 0 || t > 12.0) continue;
-        vec3 q = p + dirs[k] * t;
-        vec2 e = vec2(0.03, 0.0);
-        vec3 nh = normalize(vec3(dForma(id, q + e.xyy) - dForma(id, q - e.xyy), dForma(id, q + e.yxy) - dForma(id, q - e.yxy),
-                                 dForma(id, q + e.yyx) - dForma(id, q - e.yyx)));
-        float sol = max(dot(nh, dirSol), 0.0) * max(dot(-dirs[k], nh), 0.0);
-        soma += pow(formaCor[id], vec3(2.2)) * corSol * sol / (1.0 + t * 0.25);
-    }
-    return soma * (1.3 / 5.0);
+// luz guardada por face (atlas): tabela das formas e as duas imagens de luz
+VARY float formaV;
+uniform sampler2D texFaces;   // por forma: (centro, rot), (meia, parede), 4 retangulos do atlas
+uniform sampler2D texLuz1;    // sombra tracada, oclusao, -, calculada?
+uniform sampler2D texLuz2;    // rebote / 2
+uniform float tamAtlas;
+uniform float metroTexel;
+bool luzGuardada(vec3 p, vec3 n, out vec4 L1, out vec3 L2) {
+    L1 = vec4(0.0);
+    L2 = vec3(0.0);
+    int fid = int(formaV + 0.5) - 1;
+    if (fid < 0) return false;
+    vec4 cr = texelFetch(texFaces, ivec2(0, fid), 0);
+    vec4 mh = texelFetch(texFaces, ivec2(1, fid), 0);
+    float c = cos(cr.w), s = sin(cr.w);
+    vec3 d = p - cr.xyz;
+    vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
+    vec3 nl = vec3(n.x * c - n.z * s, n.y, n.x * s + n.z * c);
+    int k;
+    float u;
+    if (abs(nl.x) > abs(nl.z)) { k = nl.x > 0.0 ? 0 : 1; u = nl.x > 0.0 ? q.z + mh.z : mh.z - q.z; }
+    else { k = nl.z > 0.0 ? 2 : 3; u = nl.z > 0.0 ? q.x + mh.x : mh.x - q.x; }
+    float v = q.y + mh.y;
+    vec4 r = texelFetch(texFaces, ivec2(2 + k, fid), 0);
+    if (r.z < 0.5) return false;
+    vec2 t = clamp(vec2(u, v) / metroTexel, vec2(0.0), r.zw - 2.0);
+    vec2 auv = (r.xy + 1.0 + t) / tamAtlas;
+    L1 = textureLod(texLuz1, auv, 0.0);
+    if (L1.a < 0.5) return false;   // ainda nao calculada: caminho por pixel
+    L2 = textureLod(texLuz2, auv, 0.0).rgb * 2.0;
+    return true;
 }
 // janelas acesas a noite clareiam a parede em volta
 vec3 luzJanelas(vec3 p, vec3 n) {
@@ -610,10 +654,14 @@ void main() {
 #ifdef PAREDES
     bool ehParede = paredes > 0.5 && extra.y > 4.5 && extra.y < 7.5 && abs(n.y) < 0.3;
     float alcance = 1.0 - smoothstep(40.0, 70.0, dist);  // luz tracada: ate 40 m, some ate 70 m
+    vec4 luz1 = vec4(0.0);
+    vec3 luz2 = vec3(0.0);
+    bool guardada = false;
     if (ehParede) {
         nParede = n;
         if (alcance > 0.0) {
-            aoCena = mix(1.0, oclusaoCena(posMundo + n * 0.02, n), alcance);
+            guardada = luzGuardada(posMundo, n, luz1, luz2);
+            aoCena = mix(1.0, guardada ? luz1.g : oclusaoCena(posMundo + n * 0.02, n), alcance);
             ao *= aoCena;
         }
         if (dist < 45.0) relevoParede(n, albedo, ao, v, dist, floor(extra.y + 0.5));
@@ -824,7 +872,7 @@ void main() {
 #endif
 #ifdef PAREDES
     if (ehParede && paredes > 1.5 && alcance > 0.0) {  // Alto: a sombra vem dos raios contra as construcoes
-        float sc = dot(nParede, dirSombra) > 0.0 ? sombraCena(posMundo + nParede * 0.03, dirSombra) : 0.0;
+        float sc = guardada ? luz1.r : (dot(nParede, dirSombra) > 0.0 ? sombraCena(posMundo + nParede * 0.03, dirSombra) : 0.0);
         sombra = mix(sombra, sc, alcance);
     }
     sombra *= sombraRelevo;
@@ -845,7 +893,8 @@ void main() {
     luz += ambCeu * borda * 0.25 * (1.0 - abs(n.y)) * ao;
 #ifdef PAREDES
     if (ehParede && alcance > 0.0) {
-        if (paredes > 1.5 && dot(corSol, corSol) > 0.0) luz += reboteCena(posMundo + nParede * 0.03, nParede, normalize(cross(vec3(0.0, 1.0, 0.0), nParede))) * alcance * aoCena;
+        if (paredes > 1.5 && guardada) luz += luz2 * alcance * aoCena;
+        else if (paredes > 1.5 && dot(corSol, corSol) > 0.0) luz += reboteCena(posMundo + nParede * 0.03, nParede, normalize(cross(vec3(0.0, 1.0, 0.0), nParede))) * alcance * aoCena;
         luz += luzJanelas(posMundo, n) * alcance;
     }
 #endif
@@ -1162,6 +1211,34 @@ void main() {
     float arg = smoothstep(-0.02, -0.026, hP);
     float gasto = smoothstep(0.4, 0.8, vpf(uv, 0.25, vec2(40.0)));
     FRAG = vec4(caiu, tomP * 0.5, arg, gasto);
+}
+)";
+
+
+// ---------- luz das paredes guardada por face: desenhada no atlas, algumas faces por quadro ----------
+const char* FS_LUZ_PAREDE = R"(
+uniform vec3 dirSol;
+uniform vec3 corSol;
+uniform vec3 dirSombra;
+uniform vec3 faceO;
+uniform vec3 faceU;
+uniform vec3 faceN;
+uniform vec2 faceTam;     // largura, altura (m)
+uniform vec4 faceRet;     // retangulo no atlas (texels, com borda)
+uniform float metroTexel;
+uniform float saida;      // 0: sombra e oclusao; 1: rebote
+)" CENA_SDF R"(
+void main() {
+    vec2 t = gl_FragCoord.xy - faceRet.xy - 1.0;            // texel dentro da face (a borda repete a beirada)
+    vec2 m = clamp(t * metroTexel, vec2(0.0), faceTam);
+    vec3 p = faceO + faceU * m.x + vec3(0.0, m.y, 0.0);
+    if (saida < 0.5) {
+        float sc = dot(faceN, dirSombra) > 0.0 ? sombraCena(p + faceN * 0.03, dirSombra) : 0.0;
+        FRAG = vec4(sc, oclusaoCena(p + faceN * 0.02, faceN), 0.0, 1.0);
+    } else {
+        vec3 r = dot(corSol, corSol) > 0.0 ? reboteCena(p + faceN * 0.03, faceN, normalize(cross(vec3(0.0, 1.0, 0.0), faceN))) : vec3(0.0);
+        FRAG = vec4(r * 0.5, 1.0);
+    }
 }
 )";
 

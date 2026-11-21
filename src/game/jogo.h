@@ -80,6 +80,7 @@ private:
     Corpo jogador_{};
     RigCamera rig_;
     ModeloHumano modeloJogador_;
+    bool luzParedesPronta_ = false;  // atlas da luz das paredes (feito no primeiro quadro)
     Populacao populacao_;
     std::vector<ModeloHumano> roupasNpc_;
     std::vector<Cavalo> cavalos_;

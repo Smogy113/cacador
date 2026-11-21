@@ -440,6 +440,11 @@ void Jogo::trocarNivel(Nivel n) {
 
 void Jogo::desenhar() {
     luz_.comecarCena(cam_, relogio_, luzes_, jogador_.pos, tempo_);
+    if (!luzParedesPronta_) {
+        luz_.prepararLuzParedes(cenario_.formas());
+        luzParedesPronta_ = true;
+    }
+    luz_.atualizarLuzParedes({cam_.position.x, cam_.position.y, cam_.position.z});
     if (op_.estudio) {
         // luz principal vinda de cima, a frente e a esquerda do personagem
         Vec3f dirLuz = rotY(normalizar({0.5f, 0.62f, 0.62f}), jogador_.yaw);

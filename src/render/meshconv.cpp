@@ -16,6 +16,7 @@ Mesh paraMesh(const MeshBuilder& b) {
     m.normals = (float*)MemAlloc(sizeof(float) * 3 * vs.size());
     m.texcoords = (float*)MemAlloc(sizeof(float) * 2 * vs.size());
     m.colors = (unsigned char*)MemAlloc(4 * vs.size());
+    m.texcoords2 = (float*)MemAlloc(sizeof(float) * 2 * vs.size());  // x = forma + 1 (luz guardada das paredes)
     for (size_t i = 0; i < vs.size(); i++) {
         const Vert& v = vs[i];
         m.vertices[i * 3 + 0] = v.pos.x; m.vertices[i * 3 + 1] = v.pos.y; m.vertices[i * 3 + 2] = v.pos.z;
@@ -23,6 +24,7 @@ Mesh paraMesh(const MeshBuilder& b) {
         m.texcoords[i * 2 + 0] = v.ao; m.texcoords[i * 2 + 1] = v.tipo;
         m.colors[i * 4 + 0] = cor8(v.cor.r); m.colors[i * 4 + 1] = cor8(v.cor.g); m.colors[i * 4 + 2] = cor8(v.cor.b);
         m.colors[i * 4 + 3] = cor8(v.ao);
+        m.texcoords2[i * 2 + 0] = float(v.forma + 1); m.texcoords2[i * 2 + 1] = 0.f;
     }
     UploadMesh(&m, false);
     return m;
