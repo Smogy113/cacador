@@ -1,5 +1,6 @@
 #include "render/skinned.h"
 #include <algorithm>
+#include "raymath.h"
 #include "rlgl.h"
 
 Matrix paraRaylib(const Mat4& m) {
@@ -49,6 +50,10 @@ void MalhaEsqueleto::desenhar(Material& mat, const std::vector<Mat4>& ossos, Mat
     int n = std::min<int>(17, int(ossos.size()));
     for (int i = 0; i < n; i++) buf[i] = paraRaylib(ossos[i]);
     for (int i = n; i < 17; i++) buf[i] = paraRaylib(Mat4::id());
+#if defined(PLATFORM_WEB)
+    // rlSetUniformMatrices transpoe no PC mas nao no WebGL (que nao aceita transpose=true)
+    for (int i = 0; i < 17; i++) buf[i] = MatrixTranspose(buf[i]);
+#endif
     rlEnableShader(mat.shader.id);
     rlSetUniformMatrices(GetShaderLocation(mat.shader, "ossos"), buf, 17);
     DrawMesh(mesh_, mat, modelo);

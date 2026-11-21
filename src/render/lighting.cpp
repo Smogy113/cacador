@@ -94,6 +94,7 @@ void Iluminacao::carregar(Nivel nivel) {
 #if defined(PLATFORM_WEB)
     ef_.sombras = false;  // a versao de teste no navegador fica sem os efeitos pesados
     ef_.bloom = ef_.raiosDeLuz = false;
+    ef_.ssao = false;
 #endif
     if (carregado_) {
         liberarEfeitos();
