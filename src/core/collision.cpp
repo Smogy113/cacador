@@ -85,3 +85,23 @@ float MundoColisao::alturaPiso(float x, float z, float y) const {
         if (x >= p.min.x && x <= p.max.x && z >= p.min.z && z <= p.max.z && p.max.y <= y + 0.7f) melhor = std::max(melhor, p.max.y);
     return melhor;
 }
+
+std::vector<AABB> MundoColisao::caixasPerto(Vec3f p, float r) const {
+    std::vector<AABB> res;
+    std::vector<int> vistos;
+    int i0 = int(std::floor((p.x - r) / CEL)), i1 = int(std::floor((p.x + r) / CEL));
+    int j0 = int(std::floor((p.z - r) / CEL)), j1 = int(std::floor((p.z + r) / CEL));
+    for (int j = j0; j <= j1; j++)
+        for (int i = i0; i <= i1; i++) {
+            auto it = grade_.find(chave(i, j));
+            if (it == grade_.end()) continue;
+            for (int id : it->second) {
+                const AABB& b = caixas_[id];
+                if (b.max.x < p.x - r || b.min.x > p.x + r || b.max.z < p.z - r || b.min.z > p.z + r) continue;
+                if (std::find(vistos.begin(), vistos.end(), id) != vistos.end()) continue;
+                vistos.push_back(id);
+                res.push_back(b);
+            }
+        }
+    return res;
+}

@@ -17,6 +17,8 @@ public:
     // Segmento a->b nao atravessa nenhuma caixa?
     bool raioLivre(Vec3f a, Vec3f b) const;
     size_t tamanho() const { return caixas_.size(); }
+    // Caixas que encostam no quadrado de lado 2r em volta de p (plano xz).
+    std::vector<AABB> caixasPerto(Vec3f p, float r) const;
     // Pisos andaveis (tabuleiro de ponte): o topo da caixa vira chao.
     void adicionarPiso(AABB p);
     // Topo do piso mais alto em (x,z) que esteja no maximo 0.7 m acima de yAtual; senao -1e9.
