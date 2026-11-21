@@ -211,9 +211,21 @@ void main() {
     if (m > 9.5) {
         vec3 nr = normalize(nRep);
         vec3 pr = posRep;
-        if (m > 23.5) {          // cartao de pelo: ~7 fios por fita, finos na ponta, raiz escura
+        if (m > 24.25) {         // cabelo comprido: mecha cheia (sem buracos entre os fios -> sem serrilhado);
+            float u = cor.a, vv = tanRep.w;  // os fios sao listras de cor; so a borda e a ponta recortam
+            float borda = abs(u - 0.5) * 2.0;               // 0 no meio da mecha, 1 na lateral
+            float ponta = smoothstep(0.55, 1.0, vv);         // a ponta afina em "dentes" largos
+            float dente = 0.5 + 0.5 * sin(u * 31.4 + vv * 3.0);
+            if (borda > 1.0 - 0.75 * ponta * dente) discard;
+            float listra = 0.5 + 0.5 * sin(u * 62.8 + sin(vv * 9.0 + u * 7.0) * 1.5);
+            float listra2 = 0.5 + 0.5 * sin(u * 23.0 - vv * 4.0);
+            albedo *= mix(0.62, 0.98, vv) * (0.82 + 0.12 * listra + 0.08 * listra2);
+            ao *= mix(0.6, 1.0, vv) * (1.0 - 0.25 * borda * borda);
+            kk = 1.0;
+            Tcab = normalize(tanMundo);
+        } else if (m > 23.5) {   // cartao de pelo: ~7 fios por fita, finos na ponta, raiz escura
             float u = cor.a, vv = tanRep.w;
-            float N = m > 24.25 ? 15.0 : 9.0;  // cabelo comprido: fios mais finos
+            float N = 9.0;
             float fio = floor(u * N);
             float dentro = fract(u * N);
             vec3 sem = floor(posRep * 350.0);
