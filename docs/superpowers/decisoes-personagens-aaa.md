@@ -29,3 +29,8 @@
 - Ruling: rugas por pixel nas coordenadas do rosto (3 linhas na testa, pés de galinha, bolsas sob os olhos), poros maiores no nariz, folículos azulados sob a barba; abertura do olho reduzida para ~10 mm; barba desce pelo pescoço e vai ficando rala na bochecha.
 - Ruling: caçador completo agora ~26,8 mil triângulos; cavalo ~7,7 mil (crina e cauda em cartões longos). Proteção contra passar de 65 mil vértices (índices de 16 bits).
 - Bug corrigido: ponteiros para vértices invalidados quando a lista crescia (cartoesDePelo copia os 3 vértices do triângulo).
+
+## Rosto de homem-modelo e barba curta (pedido do usuário)
+- Ruling: barba curta (~3 mm) e cabelo raspado desenhados só na pele, por pixel (sombra da barba feita + traços finos de ~0,4 mm em duas grades giradas apontando no sentido do crescimento); cartões ficam só nas sobrancelhas e na crina/cauda do cavalo — cartões curtos viravam pontinhos soltos ("sujeira").
+- Ruling: formato masculino: curvatura lateral menor embaixo (maxilar quadrado), crânio mais largo na mandíbula, ângulo da mandíbula, queixo largo com covinha, maçãs altas com bochecha cavada abaixo, arco da sobrancelha forte, órbitas mais fundas, nariz reto e mais fino na ponta, lábios mais finos, testa levemente inclinada, topo do crânio mais redondo, pescoço mais grosso. Teste: largura da mandíbula ≥ 88% da largura nas maçãs (medida na frente do rosto) — ficou ~94%.
+- Testes de barba reescritos: a barba é marcada na pele (pelos e direção de crescimento), não em cartões.

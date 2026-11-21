@@ -241,34 +241,36 @@ TEST_CASE("rosto real: boca com 45-60 mm de largura") {
     CHECK(2 * xmax > 0.045f);
     CHECK(2 * xmax < 0.060f);
 }
-TEST_CASE("barba de verdade: cartões de pelo só com barba") {
+TEST_CASE("barba curta: marcada na pele do queixo e da mandíbula só com barba") {
     Visual com, sem;
     com.barba = true;
     sem.barba = false;
     auto contar = [](const MalhaPele& m) {
         int n = 0;
-        for (auto& v : m.v) if (v.material == MAT_CARTAO && v.pos.y < 1.66f && v.pos.z > 0.0f) n++;
+        for (auto& v : m.v) if (v.material == MAT_PELE && v.pelos > 0.5f && v.pos.y < 1.645f && v.pos.z > 0.03f) n++;
         return n;
     };
     int a = contar(corpoHumanoHD({}, com)), b = contar(corpoHumanoHD({}, sem));
-    CHECK(a > 1500);
+    CHECK(a > 150);
     CHECK(b < a / 6);
 }
-TEST_CASE("cartões: barba cresce para baixo, sobrancelha para os lados") {
+TEST_CASE("pelos crescem certo: barba para baixo, sobrancelha para os lados") {
     Visual v;
     v.barba = true;
     auto m = corpoHumanoHD({}, v);
     int barba = 0, barbaBaixo = 0, sob = 0, sobLado = 0;
     for (auto& x : m.v) {
-        if (x.material != MAT_CARTAO) continue;
-        CHECK(len(x.tang) == doctest::Approx(1).epsilon(0.02));
-        CHECK(x.tv >= 0.f);
-        CHECK(x.tv <= 1.f);
-        CHECK((x.pelos == 0.f || x.pelos == 1.f));
-        if (x.pos.y < 1.63f && x.pos.z > 0.05f) { barba++; if (x.tang.y < -0.3f) barbaBaixo++; }
-        if (x.pos.y > 1.71f && x.pos.y < 1.725f && x.pos.z > 0.07f && std::abs(x.pos.x) > 0.025f) { sob++; if (std::abs(x.tang.x) > std::abs(x.tang.y)) sobLado++; }
+        if (x.material == MAT_PELE && x.pelos > 0.5f && x.pos.y < 1.63f && x.pos.y > 1.595f && x.pos.z > 0.05f) {
+            barba++;
+            if (x.dirPelo.y < -0.3f) barbaBaixo++;
+        }
+        if (x.material == MAT_CARTAO && x.pos.y > 1.71f && x.pos.y < 1.725f && x.pos.z > 0.07f && std::abs(x.pos.x) > 0.025f) {
+            sob++;
+            if (std::abs(x.tang.x) > std::abs(x.tang.y)) sobLado++;
+            CHECK(len(x.tang) == doctest::Approx(1).epsilon(0.02));
+        }
     }
-    REQUIRE(barba > 100);
+    REQUIRE(barba > 30);
     REQUIRE(sob > 20);
     CHECK(barbaBaixo > barba * 0.8f);
     CHECK(sobLado > sob * 0.7f);
@@ -302,4 +304,24 @@ TEST_CASE("cada triângulo tem um só material (sem misturar no meio)") {
         }
         CHECK_MESSAGE(ruins == 0, (qual ? "cavalo" : "humano") << " com " << ruins);
     }
+}
+
+TEST_CASE("rosto masculino: maxilar quadrado (largura no ângulo da mandíbula >= 88% das maçãs)") {
+    auto m = corpoHumanoHD({}, semChapeu());
+    float mand = 0, macas = 0;
+    for (auto& v : m.v) {
+        if (v.osso[0] != CABECA || v.material != MAT_PELE || v.pos.z < -0.02f) continue;
+        if (v.pos.z < 0.03f) continue;  // so a parte da frente do rosto
+        if (v.pos.y > 1.598f && v.pos.y < 1.61f) mand = std::max(mand, std::abs(v.pos.x));
+        if (v.pos.y > 1.678f && v.pos.y < 1.69f) macas = std::max(macas, std::abs(v.pos.x));
+    }
+    REQUIRE(macas > 0);
+    CHECK(mand / macas >= 0.88f);
+}
+TEST_CASE("barba curta: pelos da barba com no máximo 4,5 mm") {
+    Visual v;
+    v.barba = true;
+    auto m = corpoHumanoHD({}, v);
+    for (auto& x : m.v)
+        if (x.material == MAT_CARTAO && x.pos.y < 1.645f && x.pos.z > 0.03f) CHECK(x.compPelo <= 0.0045f);
 }

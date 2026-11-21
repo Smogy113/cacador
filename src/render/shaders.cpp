@@ -242,8 +242,29 @@ void main() {
             nr = relevo(nr, pr, vec3(1100.0), 0.04);
             albedo *= 0.94 + 0.1 * vnoise(pr * 35.0) + 0.05 * (vnoise(pr * 140.0) - 0.5);
             if (h3(floor(pr * 520.0)) > 0.993) albedo *= vec3(0.78, 0.7, 0.65);              // sardas
-            float folic = step(0.42, h3(floor(pr * 2400.0))) * cor.a;
-            albedo = mix(albedo, albedo * vec3(0.55, 0.55, 0.6), folic * 0.6);              // foliculos da barba (raiz azulada)
+            // barba curta: tracos finos (~1 mm) apontando para baixo, desenhados por pixel na pele
+            float pel = cor.a;
+            if (pel > 0.01) {
+                vec3 anp = abs(nr);
+                vec2 uv0 = anp.x > anp.y && anp.x > anp.z ? pr.zy : (anp.z > anp.y ? pr.xy : pr.xz);
+                float tinta = 0.0;
+                for (int gi = 0; gi < 2; gi++) {
+                    float esc = gi == 0 ? 2200.0 : 3000.0;
+                    float rot = gi == 0 ? 0.35 : 1.95;
+                    mat2 R = mat2(cos(rot), sin(rot), -sin(rot), cos(rot));
+                    vec2 uv = R * uv0 * esc;
+                    vec2 cel = floor(uv);
+                    vec2 f = fract(uv) - 0.5;
+                    float rr = h3(vec3(cel, float(gi) * 5.0));
+                    vec2 dirS = normalize(R * vec2(0.35 * (h3(vec3(cel, 9.0)) - 0.5), -1.0));
+                    float t = clamp(dot(f, dirS), -0.45, 0.45);
+                    float d = length(f - dirS * t);
+                    tinta = max(tinta, step(rr, pel * 0.95) * smoothstep(0.16, 0.06, d));
+                }
+                albedo = mix(albedo, albedo * vec3(0.5, 0.49, 0.53), pel * 0.75);    // sombra da barba feita
+                albedo = mix(albedo, albedo * 0.3, tinta * 0.75 * pel);              // os pelinhos
+                nr = relevo(nr, pr, vec3(1800.0), 0.08 * pel);
+            }
             if (tanRep.z > 0.5) {
                 // rugas finas por pixel (coordenadas do rosto, em metros)
                 float fx = tanRep.x, fy = tanRep.y, ax = abs(fx);

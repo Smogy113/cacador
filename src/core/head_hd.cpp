@@ -32,23 +32,23 @@ float tabela(const Pt (&t)[N], float y) {
 }
 
 // ---- perfil do meio do rosto (z, metros) com e sem o nariz ----
-const Pt PERFIL[] = {{1.555f, .030f}, {1.565f, .036f}, {1.575f, .053f}, {1.585f, .082f}, {1.597f, .097f}, {1.610f, .092f},
-                     {1.620f, .099f}, {1.627f, .102f}, {1.632f, .097f}, {1.637f, .103f}, {1.645f, .101f}, {1.654f, .099f},
-                     {1.660f, .113f}, {1.667f, .121f}, {1.676f, .115f}, {1.688f, .107f}, {1.700f, .099f}, {1.709f, .093f},
-                     {1.720f, .099f}, {1.735f, .096f}, {1.755f, .084f}, {1.775f, .060f}, {1.795f, .025f}};
-const Pt BASE[] = {{1.555f, .030f}, {1.565f, .036f}, {1.575f, .053f}, {1.585f, .082f}, {1.597f, .097f}, {1.610f, .092f},
-                   {1.620f, .099f}, {1.627f, .102f}, {1.632f, .097f}, {1.637f, .103f}, {1.645f, .101f}, {1.654f, .099f},
+const Pt PERFIL[] = {{1.555f, .030f}, {1.565f, .036f}, {1.575f, .053f}, {1.585f, .082f}, {1.597f, .101f}, {1.610f, .094f},
+                     {1.620f, .099f}, {1.627f, .1005f}, {1.632f, .097f}, {1.637f, .1012f}, {1.645f, .1005f}, {1.654f, .099f},
+                     {1.660f, .112f}, {1.667f, .121f}, {1.676f, .1145f}, {1.688f, .108f}, {1.700f, .099f}, {1.709f, .093f},
+                     {1.720f, .099f}, {1.735f, .095f}, {1.755f, .082f}, {1.775f, .060f}, {1.795f, .025f}};
+const Pt BASE[] = {{1.555f, .030f}, {1.565f, .036f}, {1.575f, .053f}, {1.585f, .082f}, {1.597f, .101f}, {1.610f, .094f},
+                   {1.620f, .099f}, {1.627f, .1005f}, {1.632f, .097f}, {1.637f, .1012f}, {1.645f, .1005f}, {1.654f, .099f},
                    {1.660f, .100f}, {1.667f, .100f}, {1.676f, .099f}, {1.688f, .097f}, {1.700f, .095f}, {1.709f, .094f},
-                   {1.720f, .099f}, {1.735f, .096f}, {1.755f, .084f}, {1.775f, .060f}, {1.795f, .025f}};
+                   {1.720f, .099f}, {1.735f, .095f}, {1.755f, .082f}, {1.775f, .060f}, {1.795f, .025f}};
 // quanto o rosto curva para tras dos lados (z -= a * x^2)
-const Pt CURVA[] = {{1.555f, 25}, {1.585f, 22}, {1.612f, 18}, {1.632f, 14}, {1.66f, 9}, {1.69f, 7}, {1.72f, 6.5f}, {1.76f, 7}, {1.795f, 9}};
+const Pt CURVA[] = {{1.555f, 18}, {1.585f, 13}, {1.612f, 9}, {1.632f, 8.5f}, {1.66f, 8}, {1.69f, 7}, {1.72f, 6.5f}, {1.76f, 7}, {1.795f, 9}};
 // largura do nariz
-const Pt NARIZ_L[] = {{1.650f, .012f}, {1.656f, .015f}, {1.662f, .017f}, {1.668f, .0145f}, {1.678f, .011f}, {1.690f, .0085f}, {1.709f, .0065f}};
+const Pt NARIZ_L[] = {{1.650f, .012f}, {1.656f, .0145f}, {1.662f, .016f}, {1.668f, .013f}, {1.678f, .011f}, {1.690f, .0085f}, {1.709f, .0065f}};
 // cranio: raios lateral e frontal e centro em z
-const Pt CR_X[] = {{1.53f, .07f}, {1.555f, .066f}, {1.575f, .064f}, {1.59f, .062f}, {1.61f, .064f}, {1.63f, .066f}, {1.66f, .070f}, {1.69f, .074f},
-                   {1.72f, .076f}, {1.745f, .075f}, {1.77f, .066f}, {1.79f, .045f}, {1.80f, .02f}};
+const Pt CR_X[] = {{1.53f, .076f}, {1.555f, .072f}, {1.575f, .069f}, {1.59f, .068f}, {1.61f, .070f}, {1.63f, .071f}, {1.66f, .072f}, {1.69f, .074f},
+                   {1.72f, .076f}, {1.745f, .075f}, {1.77f, .068f}, {1.79f, .054f}, {1.80f, .03f}};
 const Pt CR_Z[] = {{1.53f, .066f}, {1.555f, .066f}, {1.575f, .068f}, {1.59f, .075f}, {1.61f, .082f}, {1.63f, .088f}, {1.66f, .094f}, {1.69f, .098f},
-                   {1.72f, .100f}, {1.745f, .098f}, {1.77f, .086f}, {1.79f, .060f}, {1.80f, .03f}};
+                   {1.72f, .100f}, {1.745f, .098f}, {1.77f, .088f}, {1.79f, .068f}, {1.80f, .04f}};
 const Pt CR_C[] = {{1.53f, .006f}, {1.555f, .005f}, {1.575f, .0f}, {1.59f, -.005f}, {1.61f, -.01f}, {1.63f, -.012f}, {1.72f, -.012f}, {1.745f, -.014f}, {1.80f, -.016f}};
 
 constexpr float OLHO_X = 0.0315f, OLHO_Y = 1.701f, OLHO_R = 0.0122f;
@@ -68,9 +68,10 @@ float rostoSemCorte(float x, float y) {
     float nariz = (tabela(PERFIL, y) - tabela(BASE, y)) * g(x, 0, tabela(NARIZ_L, y));
     float z = base + nariz;
     z += 0.0045f * g(ax, 0.0165f, 0.0045f) * g(y, 1.659f, 0.0045f);                   // asas do nariz
-    z -= 0.0055f * g(ax, OLHO_X, 0.02f) * g(y, OLHO_Y, 0.014f);                         // orbita (funda)
-    z += 0.0045f * g(y, 1.719f, 0.006f) * g(ax, 0.03f, 0.022f);                         // arco da sobrancelha
-    z += 0.0075f * g(y, 1.683f, 0.012f) * g(ax, 0.056f, 0.014f);                        // macas do rosto
+    z -= 0.0075f * g(ax, OLHO_X, 0.02f) * g(y, OLHO_Y, 0.014f);                         // orbita funda (olhos encovados)
+    z += 0.007f * g(y, 1.72f, 0.0065f) * g(ax, 0.028f, 0.024f);                         // arco da sobrancelha forte
+    z += 0.0095f * g(y, 1.686f, 0.011f) * g(ax, 0.058f, 0.014f);                        // macas do rosto altas
+    z -= 0.0040f * g(y, 1.655f, 0.012f) * g(ax, 0.05f, 0.012f);                         // bochecha cavada abaixo
     z -= 0.0022f * g(y, 1.688f, 0.005f) * g(ax, 0.03f, 0.012f);                         // olheira
     float dn = distSeg2D(ax, y, 0.020f, 1.660f, 0.034f, 1.632f);                        // sulco nariz-boca
     z -= 0.0028f * std::exp(-(dn / 0.0035f) * (dn / 0.0035f));
@@ -78,7 +79,9 @@ float rostoSemCorte(float x, float y) {
     z += 0.0007f * g(ax, 0.0055f, 0.0018f) * g(y, 1.646f, 0.005f);
     z -= 0.0045f * g(ax, 0.0275f, 0.004f) * g(y, 1.632f, 0.004f);                       // cantos da boca
     z -= 0.0035f * std::max(0.f, ax - 0.026f) * 60.f * g(y, 1.6315f, 0.007f);          // labios terminam
-    z += 0.003f * g(y, 1.598f, 0.008f) * g(ax, 0, 0.018f);                              // ponta do queixo
+    z += 0.0045f * g(y, 1.598f, 0.009f) * g(ax, 0, 0.026f);                             // queixo largo
+    z -= 0.0009f * g(x, 0, 0.0028f) * g(y, 1.599f, 0.007f);                             // covinha do queixo
+    z += 0.0035f * g(y, 1.603f, 0.012f) * g(ax, 0.052f, 0.012f);                        // angulo da mandibula
     return z;
 }
 
@@ -194,7 +197,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
             c = lerp(c, Rgb{c.r * 1.02f, c.g * 0.88f, c.b * 0.86f}, 0.4f * g(y, 1.678f, 0.014f) * g(ax, 0.052f, 0.016f) * (f > 0));  // bochechas
             float corte = corteOlho(x, y) * b;
             v.ao = 1.f - std::min(0.15f, corte * 10.f) - 0.12f * g(y, 1.655f, 0.003f) * g(ax, 0.009f, 0.006f);
-            float lab = (ax / 0.0265f) * (ax / 0.0265f) + ((y - 1.6315f) / 0.0072f) * ((y - 1.6315f) / 0.0072f);
+            float lab = (ax / 0.0262f) * (ax / 0.0262f) + ((y - 1.6315f) / 0.0058f) * ((y - 1.6315f) / 0.0058f);
             if (lab < 1.f && f > 0.3f) {
                 v.material = MAT_LABIO;
                 c = lerp(c, labio, smoothstep(1.f, 0.6f, lab));
@@ -210,17 +213,18 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
                 v.pelos = pel;
                 float sx = x >= 0 ? 1.f : -1.f;
                 if (pb >= std::max(ps, pc)) {  // barba: cresce para baixo; bigode para baixo e para fora; embaixo do queixo para tras
-                    v.compPelo = (y > 1.642f && ax < 0.032f) ? 0.0095f : 0.0085f;
+                    v.compPelo = (y > 1.642f && ax < 0.032f) ? 0.0034f : 0.003f;
                     v.dirPelo = (y > 1.642f && ax < 0.032f) ? normalizar({sx * 0.7f, -1.f, 0.15f})
                               : (y < 1.592f ? normalizar({0, -0.35f, -1.f}) : normalizar({sx * 0.08f, -1.f, 0.2f}));
                 } else if (ps >= pc) {  // sobrancelha: para os lados (o comeco, perto do nariz, para cima)
                     v.compPelo = 0.0065f;
                     v.dirPelo = ax < 0.019f ? normalizar({sx * 0.3f, 1.f, 0.15f}) : normalizar({sx * 1.f, 0.22f, 0.1f});
                 } else {  // cabelo: para tras e para baixo
-                    v.compPelo = 0.0075f;
+                    v.compPelo = 0.0035f;  // cabelo bem curto: desenhado na pele (shader)
                     v.dirPelo = normalizar({sx * 0.15f, -0.5f, -1.f});
                 }
-                c = lerp(c, vis.cabelo * 0.8f, 0.7f * smoothstep(0.3f, 0.85f, pel));  // raiz escura sob pelo denso
+                float base = pc >= std::max(pb, ps) ? 0.8f : 0.38f;  // cabelo raspado: base escura; barba: sombra
+                c = lerp(c, vis.cabelo * 0.85f, base * smoothstep(0.25f, 0.85f, pel));
             }
             v.cor = c;
             m.v.push_back(v);
@@ -371,11 +375,12 @@ void cartoesDePelo(MalhaPele& m, Rgb corPelo) {
             pel += q->pelos / 3.f;
         }
         if (!ok || pel < 0.05f) continue;
+        if ((tv0.compPelo + tv1.compPelo + tv2.compPelo) / 3.f < 0.004f) continue;  // pelo curto (barba feita, cabelo raspado): so no shader
         float area = 0.5f * len(cross(tv[1]->pos - tv[0]->pos, tv[2]->pos - tv[0]->pos));
         float L0 = (tv[0]->compPelo + tv[1]->compPelo + tv[2]->compPelo) / 3.f;
-        float w0 = std::clamp(L0 * 0.6f, 0.0025f, 0.006f);
+        float w0 = std::clamp(L0 * 0.6f, 0.0042f, 0.006f);
         bool cabelo = tv[0]->dirPelo.z < -0.6f;           // cabelo (cresce para tras): cobertura menor
-        float esperado = area * pel * (cabelo ? 1.3f : 2.6f) / (w0 * L0);
+        float esperado = area * pel * (cabelo ? 0.55f : (L0 < 0.0045f ? 0.8f : 2.6f)) / (w0 * L0);
         int n = int(esperado);
         if (r01() < esperado - n) n++;
         for (int k = 0; k < n; k++) {
@@ -396,7 +401,7 @@ void cartoesDePelo(MalhaPele& m, Rgb corPelo) {
             Vec3f lado0 = normalizar(cross(n3, d));
             Vec3f dd = normalizar(d * std::cos(giro) + lado0 * std::sin(giro));
             Vec3f lado = normalizar(cross(n3, dd));
-            float w = std::clamp(L * 0.6f, 0.0025f, 0.006f);
+            float w = std::clamp(L * 0.6f, 0.0042f, 0.006f);
             float incl = 0.12f + 0.2f * r01();  // quanto o fio levanta da pele (quase deitado)
             Vec3f eixo = normalizar(dd * std::cos(incl) + n3 * std::sin(incl));
             Vec3f base = raiz.pos + n3 * 0.0002f;
