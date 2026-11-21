@@ -142,6 +142,8 @@ void Iluminacao::carregar(Nivel nivel) {
     raios_ = carregarShaderPos(FS_RAIOS);
     junta_ = carregarShaderPos(FS_JUNTA);
     ssao_ = carregarShaderPos(FS_SSAO);
+    blur4_ = carregarShaderPos(FS_BLUR4);
+    longe_ = carregarShaderPos(FS_LONGE);
     lit_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(lit_, "texSombra");
     pele_ = carregarShaderDef(VS_PELE, FS_LIT, "#define PERSONAGEM\n");
     pele_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(pele_, "matModel");
@@ -223,7 +225,7 @@ void Iluminacao::carregar(Nivel nivel) {
 void Iluminacao::descarregar() {
     if (!carregado_) return;
     liberarEfeitos();
-    for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_}) UnloadShader(sh);
+    for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_, blur4_, longe_}) UnloadShader(sh);
     if (cabecaOk_) {
         for (int i = 0; i < 12; i++) matCabeca_.maps[i].texture = Texture2D{};  // as texturas sao de outros donos
         UnloadShader(cabeca_);
@@ -468,7 +470,15 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     bool foco = cinema && !dbg.semFoco;
     if (foco) {
         BeginTextureMode(focoA_);
+        ClearBackground(BLANK);
+        BeginShaderMode(longe_);
+        SetShaderValue(longe_, GetShaderLocation(longe_, "distFoco"), &distFoco_, SHADER_UNIFORM_FLOAT);
+        SetShaderValueTexture(longe_, GetShaderLocation(longe_, "texProf"), cena_.depth);
+        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // grava o alfa como esta (sem misturar)
+        BeginBlendMode(BLEND_CUSTOM);
         desenharTela(cena_, mw, mh);
+        EndBlendMode();
+        EndShaderMode();
         EndTextureMode();
         for (int k = 0; k < 4; k++) {
             float esp = k < 2 ? 1.f : 2.2f;
@@ -476,9 +486,12 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
             RenderTexture2D& de = k % 2 == 0 ? focoA_ : focoB_;
             RenderTexture2D& para = k % 2 == 0 ? focoB_ : focoA_;
             BeginTextureMode(para);
-            BeginShaderMode(blur_);
-            SetShaderValue(blur_, GetShaderLocation(blur_, "direcao"), d, SHADER_UNIFORM_VEC2);
+            BeginShaderMode(blur4_);
+            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+            BeginBlendMode(BLEND_CUSTOM);
+            SetShaderValue(blur4_, GetShaderLocation(blur4_, "direcao"), d, SHADER_UNIFORM_VEC2);
             DrawTexturePro(de.texture, {0, 0, float(mw), float(mh)}, {0, 0, float(mw), float(mh)}, {0, 0}, 0, WHITE);
+            EndBlendMode();
             EndShaderMode();
             EndTextureMode();
         }

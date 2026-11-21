@@ -47,6 +47,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--montado") o.jogo.comecarMontado = true;
         else if (a == "--sem-raio") o.jogo.semCabecaRaio = true;
         else if (a == "--sem-luz-personagem") o.jogo.semLuzPersonagem = true;
+        else if (a == "--sem-foco") o.jogo.semFoco = true;
         else if (a == "--yaw") o.jogo.yaw = (float)std::atof(prox());
         else if (a == "--qualidade") {
             std::string q = prox();

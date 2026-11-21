@@ -834,6 +834,33 @@ void main() {
     FRAG = vec4(c * smoothstep(limiar, limiar + 0.08, l), 1.0);
 }
 )";
+// copia do fundo para a profundidade de campo: so o que esta longe entra (alfa = peso), para o
+// heroi e o que esta perto nao "vazarem" sobre o fundo desfocado (halo)
+const char* FS_LONGE = R"(
+uniform sampler2D texture0;
+uniform sampler2D texProf;
+uniform float distFoco;
+void main() {
+    vec3 c = TEX(texture0, fragTexCoord).rgb;
+    float z = TEX(texProf, fragTexCoord).r * 2.0 - 1.0;
+    float dist = (2.0 * 0.1 * 1000.0) / (1000.0 + 0.1 - z * (1000.0 - 0.1));
+    float w = smoothstep(distFoco + 12.0, distFoco + 25.0, dist);
+    FRAG = vec4(c * w, w);
+}
+)";
+// desfoque que conserva o alfa (pesos do fundo)
+const char* FS_BLUR4 = R"(
+uniform sampler2D texture0;
+uniform vec2 direcao;
+void main() {
+    vec4 c = TEX(texture0, fragTexCoord) * 0.227;
+    c += TEX(texture0, fragTexCoord + direcao * 1.38) * 0.316;
+    c += TEX(texture0, fragTexCoord - direcao * 1.38) * 0.316;
+    c += TEX(texture0, fragTexCoord + direcao * 3.23) * 0.070;
+    c += TEX(texture0, fragTexCoord - direcao * 3.23) * 0.070;
+    FRAG = c;
+}
+)";
 const char* FS_BLUR = R"(
 uniform sampler2D texture0;
 uniform vec2 direcao;  // (1/largura, 0) ou (0, 1/altura)
@@ -909,7 +936,8 @@ void main() {
         float z = TEX(texProf, fragTexCoord).r * 2.0 - 1.0;
         float dist = (2.0 * 0.1 * 1000.0) / (1000.0 + 0.1 - z * (1000.0 - 0.1));
         float coc = smoothstep(distFoco + 25.0, distFoco + 150.0, dist) * forcaFoco;
-        c = mix(c, TEX(texDesfoque, fragTexCoord).rgb, coc);
+        vec4 bf = TEX(texDesfoque, fragTexCoord);  // fundo desfocado, pre-multiplicado pelo peso (alfa)
+        if (bf.a > 0.02) c = mix(c, bf.rgb / bf.a, coc * smoothstep(0.02, 0.35, bf.a));
     }
     if (usarAO > 0.5) c *= TEX(texAO, fragTexCoord).r;
     c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;

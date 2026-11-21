@@ -41,6 +41,7 @@ struct OpcoesJogo {
     bool argila = false;   // material cinza (comparar com esculturas)
     bool semCabecaRaio = false;  // cabeca do heroi de triangulos (comparar com o raymarching)
     bool semLuzPersonagem = false;
+    bool semFoco = false;
     int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
     bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
     bool mirar = false;    // segura a mira (screenshots)

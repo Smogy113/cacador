@@ -69,7 +69,7 @@ private:
     void liberarEfeitos();
     std::vector<Shader> personagens() const;  // pele_ e, se houver, cabeca_
     std::vector<Shader> sombreados() const;   // lit_, pele_ e cabeca_
-    Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{};
+    Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blur4_{}, longe_{};
     Shader pele_{}, profPele_{}, cabeca_{};
     bool cabecaOk_ = false;
     Material mat_{}, matProf_{}, matPele_{}, matProfPele_{}, matCabeca_{};
