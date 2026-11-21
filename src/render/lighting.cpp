@@ -116,6 +116,21 @@ void Iluminacao::carregar(Nivel nivel) {
     mat_.shader = lit_;
     esfera_ = LoadModelFromMesh(GenMeshSphere(400.f, 24, 32));
     esfera_.materials[0].shader = ceu_;
+    {   // textura de ruido: G(x,y) = R(x-37, y-17) -> ruido 3D com uma leitura (camadas em z deslocadas)
+        Image img = GenImageColor(256, 256, BLACK);
+        Color* px = (Color*)img.data;
+        std::vector<unsigned char> r(256 * 256);
+        uint32_t st = 12345u;
+        for (auto& v : r) { st = st * 1664525u + 1013904223u; v = (unsigned char)(st >> 24); }
+        for (int y = 0; y < 256; y++)
+            for (int x = 0; x < 256; x++)
+                px[y * 256 + x] = Color{r[y * 256 + x], r[((y - 17) & 255) * 256 + ((x - 37) & 255)], 0, 255};
+        ruidoNuvem_ = LoadTextureFromImage(img);
+        UnloadImage(img);
+        SetTextureFilter(ruidoNuvem_, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(ruidoNuvem_, TEXTURE_WRAP_REPEAT);
+        esfera_.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = ruidoNuvem_;
+    }
     prof_ = carregarShader(VS_PROF, FS_PROF);
     matProf_ = LoadMaterialDefault();
     matProf_.shader = prof_;
@@ -185,7 +200,9 @@ void Iluminacao::descarregar() {
     if (!carregado_) return;
     liberarEfeitos();
     for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_}) UnloadShader(sh);
+    esfera_.materials[0].maps[MATERIAL_MAP_ALBEDO].texture = Texture2D{};
     UnloadModel(esfera_);
+    UnloadTexture(ruidoNuvem_);
     UnloadShader(lit_);
     UnloadShader(ceu_);
     carregado_ = false;
@@ -252,7 +269,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     setF(ceu_, "noite", noite_);
     setV3(ceu_, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
     setF(ceu_, "tempoVento", tempo);
-    setF(ceu_, "passosNuvem", nivel_ == Nivel::Alto ? 28.f : (nivel_ == Nivel::Medio ? 14.f : 0.f));
+    setF(ceu_, "passosNuvem", nivel_ == Nivel::Alto ? 22.f : (nivel_ == Nivel::Medio ? 12.f : 0.f));
 }
 
 void Iluminacao::modoHorizonte(float d) { setF(lit_, "descartarPerto", d); }

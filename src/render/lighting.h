@@ -56,6 +56,7 @@ private:
     Shader pele_{}, profPele_{};
     Material mat_{}, matProf_{}, matPele_{}, matProfPele_{};
     Model esfera_{};
+    Texture2D ruidoNuvem_{};  // ruido 3D barato (1 leitura) para as nuvens
     RenderTexture2D sombraPertoRT_{};
     Matrix luzVPPerto_{};
     bool sombraPertoOk_ = false;

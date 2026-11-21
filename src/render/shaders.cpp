@@ -508,11 +508,13 @@ float hash(vec3 p) {
     p *= 17.0;
     return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
-float vruido(vec3 p) {
-    vec3 i = floor(p), f = fract(p);
+uniform sampler2D texture0;  // ruido (G = R deslocado): ruido 3D com uma leitura de textura
+float vruido(vec3 x) {
+    vec3 p = floor(x), f = fract(x);
     f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
-               mix(mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+    vec2 uv = (p.xy + vec2(37.0, 17.0) * p.z) + f.xy;
+    vec2 rg = TEX(texture0, (uv + 0.5) / 256.0).yx;
+    return mix(rg.x, rg.y, f.z);
 }
 // nuvens cumulus: base reta, topo arredondado, bordas recortadas por ruido fino
 const float NUV_BASE = 1200.0, NUV_TOPO = 2300.0;
@@ -564,13 +566,13 @@ void main() {
         } else {
             float passo = (t1 - t0) / passosNuvem;
             float jit = hash(d * 937.0 + tempoVento);
-            for (int i = 0; i < 32; i++) {
+            for (int i = 0; i < 24; i++) {
                 if (float(i) >= passosNuvem || T < 0.04) break;
                 vec3 p = cam + d * (t0 + (float(i) + jit) * passo);
                 float dn = densNuvem(p, 1);
                 if (dn > 0.002) {
                     // luz: nuvem entre o ponto e o sol (Beer) + "powder" (bordas internas escuras)
-                    float od = formaNuvem(p + dirSol * 120.0) * 1.0 + formaNuvem(p + dirSol * 380.0) * 1.4;
+                    float od = formaNuvem(p + dirSol * 260.0) * 2.2;
                     float luz = exp(-od * 2.2) * (1.0 - exp(-dn * 4.0)) * 1.6;
                     float alt = clamp((p.y - NUV_BASE) / (NUV_TOPO - NUV_BASE), 0.0, 1.0);
                     vec3 col = luzSol * luz * fase + ambCeuN * (0.35 + 0.65 * alt);
