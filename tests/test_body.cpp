@@ -378,3 +378,17 @@ TEST_CASE("rosto equilibrado (não exagerado): queixo atrás do lábio e terço 
     CHECK(terco <= 1.25f);
     CHECK(terco >= 0.95f);
 }
+TEST_CASE("revolver: na mao direita, leve e HD") {
+    Visual sem, com;
+    com.revolver = true;
+    auto a = corpoHumano({}, sem), b = corpoHumano({}, com);
+    CHECK(b.triangulos() > a.triangulos());
+    CHECK(b.triangulos() - a.triangulos() < 600);
+    CHECK(b.triangulos() <= 1600);
+    int naMao = 0;
+    for (size_t i = a.v.size(); i < b.v.size(); i++) naMao += b.v[i].osso[0] == MAO_D && b.v[i].osso[1] == MAO_D;
+    CHECK(naMao > 20);
+    auto h0 = corpoHumanoHD({}, sem), h1 = corpoHumanoHD({}, com);
+    CHECK(h1.triangulos() > h0.triangulos());
+    CHECK(h1.triangulos() - h0.triangulos() < 600);
+}

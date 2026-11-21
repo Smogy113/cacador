@@ -32,6 +32,26 @@ Esqueleto esqueletoHumano(const Proporcoes& p) {
     return e;
 }
 
+// Revolver na mao direita (pose de repouso: braco caido, cano para baixo seguindo a mao).
+void loft::revolverNaMao(Construtor& k, const Esqueleto& esq, float s) {
+    const Osso& om = esq.ossos[MAO_D];
+    Vec3f A = normalizar(om.fim - om.inicio);          // ao longo da mao (cano)
+    Vec3f F{0, 0, 1};                                  // frente da mao (fica para cima ao mirar)
+    Vec3f H = om.inicio + (om.fim - om.inicio) * 0.55f;
+    auto anel = [&](Vec3f c, float r) { return Anel{c, r * s, r * s, uint8_t(MAO_D), uint8_t(MAO_D), 1}; };
+    auto cor = [](Rgb c) { return [c](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return c; }; };
+    float mat = k.material;
+    Rgb aco{0.16f, 0.16f, 0.17f}, madeira{0.3f, 0.18f, 0.1f};
+    Vec3f base = H + F * (0.028f * s);
+    k.material = MAT_METAL;
+    k.tubo({anel(base - A * (0.01f * s), 0.008f), anel(base + A * (0.16f * s), 0.007f)}, 8, F, true, true, cor(aco));  // cano
+    k.tubo({anel(base, 0.017f), anel(base + A * (0.04f * s), 0.017f)}, 8, F, true, true, cor(aco * 1.2f));           // tambor
+    k.material = MAT_COURO;
+    k.tubo({anel(base - A * (0.015f * s), 0.011f), anel(H - F * (0.012f * s) - A * (0.04f * s), 0.012f)}, 6, A, true, true,
+           cor(madeira));  // cabo
+    k.material = mat;
+}
+
 MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
     MalhaPele m;
     Construtor k{m};
@@ -205,6 +225,8 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
                [&](int i, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return i == 0 ? Rgb{0.12f, 0.08f, 0.05f} : vis.chapeu * 1.06f; },
                0.f, 0.008f * s);
     }
+
+    if (vis.revolver) revolverNaMao(k, esq, s);
 
     // ---------------- normais suaves ----------------
     std::vector<Vec3f> acc(m.v.size());

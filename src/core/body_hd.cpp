@@ -412,6 +412,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
         }
     }
 
+    if (vis.revolver) revolverNaMao(k, esq, s);
     normaisSuaves(m);
     separarMateriais(m);
     cartoesDePelo(m, vis.cabelo);

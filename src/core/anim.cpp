@@ -144,3 +144,109 @@ Pose poseCavalo(const Esqueleto& e, float f, int and_, float t) {
     p.raiz.y -= alturaDosCascos(e, p);
     return p;
 }
+
+// ---------------- tiroteio e captura ----------------
+namespace {
+// apoia pelo ponto mais baixo de qualquer junta (corpo deitado/ajoelhado), com folga para a espessura do corpo
+void apoiarJuntas(const Esqueleto& e, Pose& p, float folga) {
+    std::vector<Mat4> m;
+    calcularMatrizes(e, p, m);
+    float menor = 1e9f;
+    for (size_t o = 0; o < e.ossos.size(); o++)
+        menor = std::min({menor, m[o].ponto(e.ossos[o].inicio).y, m[o].ponto(e.ossos[o].fim).y});
+    float pes = alturaDosPes(e, p);
+    p.raiz.y -= std::min(pes, menor - folga);
+}
+float suave(float t) {
+    t = std::clamp(t, 0.f, 1.f);
+    return t * t * (3 - 2 * t);
+}
+}  // namespace
+
+Pose poseMirar(const Esqueleto& e, float ang, float recuo) {
+    Pose p = poseParado(e, 0.f);
+    p.rot[BRACO_D] = {-1.5708f - ang, 0.3f, 0.f};
+    p.rot[ANTEBRACO_D] = {-0.05f - 0.55f * recuo, 0, 0};
+    p.rot[MAO_D] = {-0.1f * recuo, 0, 0};
+    p.rot[COLUNA].y = 0.12f;
+    p.rot[PEITO].y = 0.1f;
+    p.rot[CABECA].x = -ang * 0.6f;
+    p.rot[CABECA].y = -0.15f;
+    p.rot[BRACO_E] = {-0.25f, 0, -0.05f};
+    p.rot[ANTEBRACO_E] = {-0.5f, 0, 0};
+    apoiarNoChao(e, p);
+    return p;
+}
+
+Pose poseRecarregar(const Esqueleto& e, float t) {
+    Pose p = poseParado(e, t);
+    float w = std::sin(t * 6.2831f * 2.f) * 0.08f;
+    p.rot[BRACO_D] = {-0.6f, 0.2f, 0};
+    p.rot[ANTEBRACO_D] = {-1.35f + w, 0, 0};
+    p.rot[BRACO_E] = {-0.55f, -0.25f, 0};
+    p.rot[ANTEBRACO_E] = {-1.45f - w, 0, 0};
+    p.rot[CABECA].x = 0.3f;
+    apoiarNoChao(e, p);
+    return p;
+}
+
+void aplicarTranco(Pose& p, float t) {
+    t = std::clamp(t, 0.f, 1.f);
+    p.rot[COLUNA].x -= 0.3f * t;
+    p.rot[PEITO].x -= 0.15f * t;
+    p.rot[CABECA].x -= 0.2f * t;
+}
+
+Pose poseCair(const Esqueleto& e, float t) {
+    float s = suave(t), meio = std::sin(std::clamp(t, 0.f, 1.f) * 3.1416f);
+    Pose p = poseRepouso(e);
+    p.rot[QUADRIL].x = -1.5708f * s;                       // tomba de costas
+    for (int c : {COXA_E, COXA_D}) p.rot[c].x = -0.5f * meio;   // joelhos dobram na queda
+    for (int c : {CANELA_E, CANELA_D}) p.rot[c].x = 0.8f * meio;
+    p.rot[BRACO_E] = {-0.4f * s, 0, -1.f * s};             // bracos abertos
+    p.rot[BRACO_D] = {-0.4f * s, 0, 1.f * s};
+    p.rot[CABECA].x = 0.25f * s;
+    apoiarJuntas(e, p, 0.09f * s);
+    return p;
+}
+
+Pose poseRendido(const Esqueleto& e, float tempo) {
+    Pose p = poseRepouso(e);
+    float r = std::sin(tempo * 1.7f) * 0.03f;
+    for (int c : {CANELA_E, CANELA_D}) p.rot[c].x = 1.5708f;  // canelas deitadas para tras
+    for (int pe : {PE_E, PE_D}) p.rot[pe].x = 0.6f;
+    p.rot[BRACO_E] = {-2.85f + r, 0, -0.25f};
+    p.rot[BRACO_D] = {-2.85f + r, 0, 0.25f};
+    p.rot[ANTEBRACO_E] = {-0.35f, 0, 0};
+    p.rot[ANTEBRACO_D] = {-0.35f, 0, 0};
+    p.rot[CABECA].x = 0.15f;
+    p.rot[PEITO].x = r;
+    apoiarJuntas(e, p, 0.04f);
+    return p;
+}
+
+Pose poseAmarrado(const Esqueleto& e, float tempo) {
+    Pose p = poseRepouso(e);
+    float r = std::sin(tempo * 1.5f) * 0.03f;
+    for (int c : {COXA_E, COXA_D}) p.rot[c].x = -2.0f;     // coxas para a frente e para cima (sentado no chao)
+    for (int c : {CANELA_E, CANELA_D}) p.rot[c].x = 2.1f;  // joelhos para cima, pes no chao
+    p.rot[COLUNA].x = 0.15f + r;
+    p.rot[BRACO_E] = {0.55f, 0, 0.25f};                     // bracos para tras, maos juntas nas costas
+    p.rot[BRACO_D] = {0.55f, 0, -0.25f};
+    p.rot[ANTEBRACO_E] = {-0.9f, 0.4f, 0};
+    p.rot[ANTEBRACO_D] = {-0.9f, -0.4f, 0};
+    p.rot[CABECA].x = 0.35f;
+    apoiarJuntas(e, p, 0.07f);
+    return p;
+}
+
+Pose poseGarupa(const Esqueleto& e) {
+    Pose p = poseRepouso(e);
+    p.rot[QUADRIL].x = 0.75f;                              // pernas para tras e para baixo
+    p.rot[COLUNA].x = 1.4f;                                // tronco dobrado, pendurado do outro lado
+    p.rot[PEITO].x = 0.4f;
+    for (int c : {COXA_E, COXA_D}) p.rot[c].x = 0.6f;
+    for (int b : {BRACO_E, BRACO_D}) p.rot[b].x = -0.3f;
+    p.rot[CABECA].x = 0.3f;
+    return p;
+}
