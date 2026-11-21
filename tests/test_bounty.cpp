@@ -34,3 +34,47 @@ TEST_CASE("mapa sem lugares ainda gera cartazes") {
     CHECK_FALSE(c[0].ultimoVisto.empty());
 }
 TEST_CASE("nomeLegivel troca _ por espaço") { CHECK(nomeLegivel("Mina_Funda") == "Mina Funda"); }
+
+static bool lugarDeEsconderijo(TipoLugar t) {
+    return t == TipoLugar::Castelo || t == TipoLugar::Acampamento || t == TipoLugar::Mina || t == TipoLugar::Floresta ||
+           t == TipoLugar::Cemiterio || t == TipoLugar::Ponte;
+}
+TEST_CASE("cartaz: temperamento ~40/35/25") {
+    Mapa m = mapaReal();
+    int n[3] = {0, 0, 0}, total = 0;
+    for (uint32_t s = 0; s < 400; s++)
+        for (auto& c : gerarCartazes(1000 + s, 6, m)) {
+            n[int(c.temperamento)]++;
+            total++;
+        }
+    CHECK(n[int(Temperamento::Covarde)] / float(total) == doctest::Approx(0.40).epsilon(0.125));
+    CHECK(n[int(Temperamento::Teimoso)] / float(total) == doctest::Approx(0.35).epsilon(0.143));
+    CHECK(n[int(Temperamento::Fujao)] / float(total) == doctest::Approx(0.25).epsilon(0.2));
+}
+TEST_CASE("cartaz: esconderijo fora de cidade, vilarejo e fazenda") {
+    Mapa m = mapaReal();
+    for (uint32_t s = 0; s < 50; s++)
+        for (auto& c : gerarCartazes(s, 6, m)) {
+            const Lugar* l = nullptr;
+            for (auto& x : m.lugares)
+                if (nomeLegivel(x.nome) == c.ultimoVisto) l = &x;
+            REQUIRE(l);
+            CHECK(lugarDeEsconderijo(l->tipo));
+        }
+}
+TEST_CASE("cartaz: pista combina com temperamento") {
+    for (auto& c : gerarCartazes(9, 20, mapaReal())) {
+        if (c.temperamento == Temperamento::Covarde) CHECK(c.pista == "Costuma se entregar");
+        if (c.temperamento == Temperamento::Teimoso) CHECK(c.pista == "Perigoso: nao se entrega");
+        if (c.temperamento == Temperamento::Fujao) CHECK(c.pista == "Costuma fugir");
+    }
+}
+TEST_CASE("novoCartaz: nome inedito") {
+    Mapa m = mapaReal();
+    auto cs = gerarCartazes(5, 6, m);
+    for (uint32_t s = 0; s < 30; s++) {
+        Cartaz n = novoCartaz(s, m, cs);
+        for (auto& c : cs) CHECK(c.nome != n.nome);
+        CHECK(n.recompensaVivo > n.recompensaMorto);
+    }
+}
