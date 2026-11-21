@@ -92,22 +92,44 @@ uniform sampler2D texSombra;
 uniform float texelSombra;
 uniform vec3 dirSombra;
 
+uniform float texelMetros;  // tamanho de um texel do mapa de sombras, em metros
+uniform vec3 corChao;       // cor media do chao (luz rebatida)
+
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// Sombra suave (PCSS simplificado): procura quem bloqueia a luz e borra mais
+// quanto mais longe o bloqueador esta do chao. Perto do pe: nitida; na ponta: borrada.
 float sombraEm(vec3 p, vec3 n) {
     if (usarSombra < 0.5) return 1.0;
     float nl = clamp(dot(n, dirSombra), 0.0, 1.0);
-    if (nl <= 0.0) return 0.0;  // de costas para a luz: ja esta no escuro
-    vec4 pl = matLuz * vec4(p + n * (0.06 + 0.25 * (1.0 - nl)), 1.0);
+    if (nl <= 0.0) return 0.0;
+    vec4 pl = matLuz * vec4(p + n * (0.05 + 0.2 * (1.0 - nl)), 1.0);
     vec3 q = pl.xyz / pl.w * 0.5 + 0.5;
     if (q.x <= 0.0 || q.x >= 1.0 || q.y <= 0.0 || q.y >= 1.0 || q.z >= 1.0) return 1.0;
-    float bias = 0.0006 + 0.0025 * (1.0 - nl);
+    float bias = 0.00012 + 0.0005 * (1.0 - nl);
+    float giro = hash12(p.xz * 7.13) * 6.2831;
+    float soma = 0.0, cont = 0.0;
+    for (int i = 0; i < 8; i++) {
+        float a = float(i) * 2.39996 + giro;
+        float r = sqrt((float(i) + 0.5) / 8.0) * 5.0;
+        float d = TEX(texSombra, q.xy + vec2(cos(a), sin(a)) * r * texelSombra).r;
+        if (d < q.z - bias) { soma += d; cont += 1.0; }
+    }
+    if (cont < 0.5) return 1.0;
+    float distBloq = (q.z - soma / cont) * 1000.0;
+    float raio = clamp(distBloq * 0.045 / texelMetros, 0.8, 7.0);
     float s = 0.0;
-    for (int x = -1; x <= 1; x++)
-        for (int y = -1; y <= 1; y++) {
-            float d = TEX(texSombra, q.xy + vec2(float(x), float(y)) * texelSombra).r;
-            s += (q.z - bias > d) ? 0.0 : 1.0;
-        }
-    s /= 9.0;
-    // some suavemente na borda da area com sombra
+    for (int i = 0; i < 12; i++) {
+        float a = float(i) * 2.39996 + giro;
+        float r = sqrt((float(i) + 0.5) / 12.0) * raio;
+        float d = TEX(texSombra, q.xy + vec2(cos(a), sin(a)) * r * texelSombra).r;
+        s += (q.z - bias > d) ? 0.0 : 1.0;
+    }
+    s /= 12.0;
     vec2 b = smoothstep(vec2(0.0), vec2(0.08), q.xy) * smoothstep(vec2(1.0), vec2(0.92), q.xy);
     return mix(1.0, s, b.x * b.y);
 } // > 0: horizonte, some onde o terreno detalhado ja desenha
@@ -128,6 +150,12 @@ void main() {
     float sombra = sombraEm(posMundo, n);
     luz += corSol * max(dot(n, dirSol), 0.0) * sombra;
     luz += corLua * max(dot(n, dirLua), 0.0) * sombra;
+    // luz rebatida: o chao iluminado pelo sol devolve luz colorida para cima
+    float solNoChao = max(dirSol.y, 0.0);
+    luz += corSol * corChao * solNoChao * (0.5 - 0.5 * n.y) * 0.9 * ao;
+    // contorno: o ceu "abraca" as bordas (luz indireta)
+    float borda = pow(1.0 - max(dot(n, v), 0.0), 3.0);
+    luz += ambCeu * borda * 0.6 * ao;
     // tochas, fogueiras, lanterna
     for (int i = 0; i < 8; i++) {
         if (i >= numLuzes) break;

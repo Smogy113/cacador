@@ -102,6 +102,9 @@ void Iluminacao::carregar(Nivel nivel) {
             float texel = 1.f / ef_.resolucaoSombra;
             setF(lit_, "texelSombra", texel);
             setF(pele_, "texelSombra", texel);
+            float tm = 2 * AREA_SOMBRA / ef_.resolucaoSombra;
+            setF(lit_, "texelMetros", tm);
+            setF(pele_, "texelMetros", tm);
         }
     }
     if (ef_.bloom || ef_.raiosDeLuz) {
@@ -153,6 +156,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
         float luaAcima = smoothstep(-0.05f, 0.15f, lua_.y);
         setRgb(sh, "corLua", Rgb{0.10f, 0.13f, 0.22f} * (luaAcima * noite_));
         setF(sh, "noite", noite_);
+        setRgb(sh, "corChao", Rgb{0.10f, 0.15f, 0.05f});
 
         // as 8 luzes mais proximas do foco
         std::vector<const LuzPontual*> ord;
