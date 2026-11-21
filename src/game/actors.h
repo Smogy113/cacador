@@ -15,9 +15,10 @@ public:
     // fase: ciclo da passada (radianos); amplitude: 0 parado .. 1 correndo
     void desenhar(Material& mat, Vec3f pes, float yaw, float fase, float amplitude) const;
     void desenharSentado(Material& mat, Vec3f quadril, float yaw) const;  // montado no cavalo
+    void desenharSimples(Material& mat, Vec3f pes, float yaw) const;       // longe: 1 chamada so
 
 private:
-    Mesh corpo_{}, perna_{}, braco_{};
+    Mesh corpo_{}, perna_{}, braco_{}, inteiro_{};
     bool ok_ = false;
 };
 

@@ -8,6 +8,7 @@
 #include "core/daytime.h"
 #include "core/horse.h"
 #include "core/motion.h"
+#include "core/npc.h"
 #include "game/actors.h"
 #include "core/places.h"
 #include "core/quality.h"
@@ -52,6 +53,8 @@ private:
     Corpo jogador_{};
     RigCamera rig_;
     ModeloPessoa modeloJogador_;
+    Populacao populacao_;
+    std::vector<ModeloPessoa> roupasNpc_;
     std::vector<Cavalo> cavalos_;
     std::vector<ModeloCavalo> modelosCavalo_;
     int montadoEm_ = -1;

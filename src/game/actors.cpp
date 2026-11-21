@@ -25,6 +25,7 @@ void ModeloPessoa::carregar(const Roupa& r) {
         c.caixa({0, 1.9f, -0.01f}, {0.27f, 0.07f, 0.27f}, 0, r.chapeu);  // cabelo/gorro
     }
     corpo_ = paraMesh(c);
+    MeshBuilder tudo = c;
     // perna (pivo no quadril, y=0.92)
     MeshBuilder p;
     p.caixa({0, -0.42f, 0}, {0.17f, 0.82f, 0.2f}, 0, r.calca);
@@ -35,7 +36,18 @@ void ModeloPessoa::carregar(const Roupa& r) {
     b.caixa({0, -0.28f, 0}, {0.13f, 0.56f, 0.15f}, 0, r.casaco * 0.95f);
     b.caixa({0, -0.62f, 0}, {0.11f, 0.12f, 0.12f}, 0, r.pele);
     braco_ = paraMesh(b);
+    // versao inteira, parada, para quem esta longe
+    for (int lado = -1; lado <= 1; lado += 2) {
+        tudo.caixa({0.11f * lado, 0.92f - 0.42f, 0}, {0.17f, 0.82f, 0.2f}, 0, r.calca);
+        tudo.caixa({0.11f * lado, 0.92f - 0.83f, 0.04f}, {0.19f, 0.14f, 0.28f}, 0, Rgb{0.18f, 0.12f, 0.08f});
+        tudo.caixa({0.3f * lado, 1.5f - 0.28f, 0}, {0.13f, 0.56f, 0.15f}, 0, r.casaco * 0.95f);
+    }
+    inteiro_ = paraMesh(tudo);
     ok_ = true;
+}
+
+void ModeloPessoa::desenharSimples(Material& mat, Vec3f p, float yaw) const {
+    DrawMesh(inteiro_, mat, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
 }
 
 void ModeloPessoa::descarregar() {
@@ -43,6 +55,7 @@ void ModeloPessoa::descarregar() {
     UnloadMesh(corpo_);
     UnloadMesh(perna_);
     UnloadMesh(braco_);
+    UnloadMesh(inteiro_);
     ok_ = false;
 }
 

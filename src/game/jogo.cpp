@@ -25,6 +25,25 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.pele = {0.78f, 0.58f, 0.45f};
     r.lenco = {0.55f, 0.12f, 0.1f};
     modeloJogador_.carregar(r);
+    // moradores: roupas variadas
+    {
+        const Rgb cas[] = {{0.45f, 0.35f, 0.22f}, {0.30f, 0.36f, 0.45f}, {0.55f, 0.22f, 0.18f}, {0.35f, 0.42f, 0.28f}, {0.62f, 0.56f, 0.44f}, {0.25f, 0.22f, 0.25f}};
+        const Rgb pel[] = {{0.85f, 0.66f, 0.52f}, {0.62f, 0.44f, 0.32f}, {0.45f, 0.31f, 0.22f}, {0.78f, 0.58f, 0.45f}};
+        for (int k = 0; k < 6; k++) {
+            Roupa rp;
+            rp.casaco = cas[k];
+            rp.calca = cas[(k + 3) % 6] * 0.6f;
+            rp.camisa = {0.82f, 0.78f, 0.68f};
+            rp.chapeu = k % 2 ? Rgb{0.35f, 0.25f, 0.15f} : Rgb{0.28f, 0.2f, 0.12f};
+            rp.pele = pel[k % 4];
+            rp.lenco = cas[(k + 1) % 6];
+            rp.chapeuAba = k % 3 != 0;
+            rp.casacoLongo = k % 2 == 0;
+            roupasNpc_.emplace_back();
+            roupasNpc_.back().carregar(rp);
+        }
+        populacao_ = Populacao(cenario_.rotasNPC, 1337, 60);
+    }
     // cavalos nos estabulos
     const Rgb pelos[] = {{0.40f, 0.25f, 0.16f}, {0.16f, 0.13f, 0.12f}, {0.78f, 0.74f, 0.68f}, {0.6f, 0.42f, 0.24f}};
     const Rgb crinas[] = {{0.15f, 0.1f, 0.07f}, {0.08f, 0.07f, 0.07f}, {0.55f, 0.5f, 0.45f}, {0.85f, 0.8f, 0.65f}};
@@ -49,6 +68,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     atualizarCamera(0, Entrada{});
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, 0, 100000);
     cenario_.atualizar(jogador_.pos, 0, 100000);
+    for (int i = 0; i < 300; i++) populacao_.atualizar(0.1f, relogio_, *terreno_, col_, {1e4f, 0, 1e4f});
     if (!op.semEntrada) DisableCursor();
 }
 
@@ -94,6 +114,7 @@ void Jogo::desenharInterface() {
 }
 
 Jogo::~Jogo() {
+    for (auto& m : roupasNpc_) m.descarregar();
     for (auto& m : modelosCavalo_) m.descarregar();
     cenario_.descarregar();
     modeloJogador_.descarregar();
@@ -144,6 +165,7 @@ void Jogo::atualizar(float dt) {
             cavaloPerto_ = -1;
         }
     }
+    populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
         if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);
     atualizarCamera(dt, e);
@@ -176,6 +198,18 @@ void Jogo::desenhar() {
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
     cenario_.desenhar(cam_, dv, luz_.material());
+    for (auto& n : populacao_.npcs()) {
+        if (!n.ativo) continue;
+        float dx = n.corpo.pos.x - cam_.position.x, dz = n.corpo.pos.z - cam_.position.z;
+        float d2 = dx * dx + dz * dz;
+        if (d2 > 160.f * 160.f) continue;
+        const ModeloPessoa& m = roupasNpc_[n.semente % roupasNpc_.size()];
+        if (d2 < 35.f * 35.f) {
+            m.desenhar(luz_.material(), n.corpo.pos, n.corpo.yaw, n.passada, n.corpo.vel > 0.1f ? 0.45f : 0.f);
+            sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
+        } else
+            m.desenharSimples(luz_.material(), n.corpo.pos, n.corpo.yaw);
+    }
     for (size_t i = 0; i < cavalos_.size(); i++) {
         const Cavalo& c = cavalos_[i];
         Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
