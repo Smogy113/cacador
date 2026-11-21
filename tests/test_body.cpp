@@ -119,3 +119,56 @@ TEST_CASE("cavalo: cascos no chão e olha para +z") {
     CHECK(zCabeca > 1.2f);
     CHECK(assentoCavalo().y > 1.6f);
 }
+
+// ---------------- alta definicao ----------------
+TEST_CASE("HD: entre 6 e 14 mil triângulos e índices válidos") {
+    for (bool eq : {false, true}) {
+        Visual v;
+        v.equipamento = eq;
+        auto m = corpoHumanoHD({}, v);
+        CHECK(m.triangulos() >= 6000);
+        CHECK(m.triangulos() <= 14000);
+        CHECK(m.v.size() < 65535);
+        for (auto i : m.idx) CHECK(i < m.v.size());
+        for (auto& x : m.v) {
+            CHECK(x.osso[0] < N_OSSOS_HUMANO);
+            CHECK(x.osso[1] < N_OSSOS_HUMANO);
+            CHECK(x.peso >= 0.f);
+            CHECK(x.peso <= 1.f);
+        }
+    }
+}
+TEST_CASE("HD: altura, pés no chão e normais para fora") {
+    Proporcoes p;
+    auto m = corpoHumanoHD(p, semChapeu());
+    float topo = -1e9f, base = 1e9f;
+    for (auto& v : m.v) { topo = std::max(topo, v.pos.y); base = std::min(base, v.pos.y); }
+    CHECK(topo == doctest::Approx(p.altura).epsilon(0.03));
+    CHECK(base == doctest::Approx(0).epsilon(0.01));
+    auto e = esqueletoHumano(p);
+    std::vector<bool> usado(m.v.size(), false);
+    for (auto i : m.idx) usado[i] = true;
+    int bons = 0, total = 0;
+    for (size_t i = 0; i < m.v.size(); i++) {
+        if (!usado[i]) continue;
+        const Osso& o = e.ossos[m.v[i].osso[0]];
+        Vec3f q;
+        distSegmento(m.v[i].pos, o.inicio, o.fim, q);
+        total++;
+        if (dot(m.v[i].normal, m.v[i].pos - q) > 0) bons++;
+    }
+    CHECK(bons >= int(total * 0.93f));
+}
+TEST_CASE("HD: tem nariz e dedos") {
+    auto hd = corpoHumanoHD({}, semChapeu()), ld = corpoHumano({}, semChapeu());
+    float narizZ = -1, testaZ = -1;
+    int maoHD = 0, maoLD = 0;
+    for (auto& v : hd.v) {
+        if (v.osso[0] == CABECA && v.pos.y > 1.67f && v.pos.y < 1.70f && std::abs(v.pos.x) < 0.02f) narizZ = std::max(narizZ, v.pos.z);
+        if (v.osso[0] == CABECA && v.pos.y > 1.745f && v.pos.y < 1.76f && std::abs(v.pos.x) < 0.02f) testaZ = std::max(testaZ, v.pos.z);
+        if (v.osso[0] == MAO_E) maoHD++;
+    }
+    for (auto& v : ld.v) if (v.osso[0] == MAO_E) maoLD++;
+    CHECK(narizZ > testaZ + 0.015f);
+    CHECK(maoHD > maoLD * 4);
+}

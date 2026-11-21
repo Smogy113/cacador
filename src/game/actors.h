@@ -10,13 +10,14 @@ class ModeloHumano {
 public:
     void carregar(const Proporcoes& p, const Visual& v);
     void descarregar();
-    void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose) const;
+    // hd = modelo de alta definicao (perto da camera)
+    void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose, bool hd = false) const;
     const Esqueleto& esqueleto() const { return esq_; }
-    int triangulos() const { return malha_.triangulos(); }
+    int triangulos(bool hd = false) const { return hd ? hd_.triangulos() : malha_.triangulos(); }
 
 private:
     Esqueleto esq_;
-    MalhaEsqueleto malha_;
+    MalhaEsqueleto malha_, hd_;
     mutable std::vector<Mat4> ossos_;
 };
 

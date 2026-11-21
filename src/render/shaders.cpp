@@ -155,7 +155,7 @@ void main() {
     luz += corSol * corChao * solNoChao * (0.5 - 0.5 * n.y) * 0.9 * ao;
     // contorno: o ceu "abraca" as bordas (luz indireta)
     float borda = pow(1.0 - max(dot(n, v), 0.0), 3.0);
-    luz += ambCeu * borda * 0.6 * ao;
+    luz += ambCeu * borda * 0.25 * (1.0 - abs(n.y)) * ao;
     // tochas, fogueiras, lanterna
     for (int i = 0; i < 8; i++) {
         if (i >= numLuzes) break;

@@ -29,6 +29,7 @@ struct OpcoesJogo {
     float girarCamera = 0;  // graus (so para screenshots)
     bool abrirQuadro = false;
     float distCamera = 0;  // 0 = padrao (so para screenshots)
+    float retrato = 0;     // > 0: camera de frente para o rosto do jogador, a essa distancia (screenshots)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };
@@ -79,5 +80,6 @@ private:
     size_t tris_ = 0;
     int chamadas_ = 0;
     size_t trisAtores_ = 0;
+    bool passePrincipal_ = true;
     int chamadasAtores_ = 0;
 };

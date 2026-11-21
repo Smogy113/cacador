@@ -18,6 +18,7 @@ struct Visual {
     Rgb pele{0.78f, 0.58f, 0.45f}, camisa{0.8f, 0.76f, 0.66f}, casaco{0.36f, 0.26f, 0.18f}, calca{0.25f, 0.22f, 0.2f},
         botas{0.18f, 0.12f, 0.08f}, chapeu{0.22f, 0.16f, 0.11f}, lenco{0.55f, 0.12f, 0.1f}, cabelo{0.2f, 0.14f, 0.1f};
     bool sobretudo = true, chapeuAba = true, barba = false;
+    bool equipamento = false;  // bandoleira, besta nas costas e laco (so no modelo HD)
 };
 
 // Vertice com ate 2 ossos: osso[0] com "peso", osso[1] com 1 - peso.
@@ -37,6 +38,8 @@ struct MalhaPele {
 
 Esqueleto esqueletoHumano(const Proporcoes& p);
 MalhaPele corpoHumano(const Proporcoes& p, const Visual& vis);
+// Versao de alta definicao (perto da camera): ~6-14 mil triangulos, rosto esculpido, dedos, roupa com volume.
+MalhaPele corpoHumanoHD(const Proporcoes& p, const Visual& vis);
 
 // ---------------- cavalo ----------------
 enum OssoCavalo {

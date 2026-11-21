@@ -28,6 +28,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.lenco = {0.55f, 0.12f, 0.1f};
     r.cabelo = {0.18f, 0.13f, 0.09f};
     r.barba = true;
+    r.equipamento = true;
     modeloJogador_.carregar(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
     // moradores: roupas variadas
     {
@@ -109,6 +110,12 @@ void Jogo::atualizarCamera(float dt, const Entrada& e) {
     Vec3f alvo = montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.pos + Vec3f{0, 0.9f, 0} : jogador_.pos;
     rig_.atualizar(alvo, e.mouseDx, e.mouseDy, *terreno_, col_, dt);
     Vec3f p = rig_.posicao(), o = rig_.olhar();
+    if (op_.retrato > 0) {
+        float alt = modeloJogador_.esqueleto().ossos[CABECA].inicio.y + 0.06f;
+        Vec3f f = frenteDe(jogador_.yaw + op_.girarCamera * DEG2RAD);
+        o = jogador_.pos + Vec3f{0, alt - 0.1f * op_.retrato, 0};
+        p = o + f * op_.retrato + Vec3f{0, 0.05f, 0};
+    }
     cam_.position = {p.x, p.y, p.z};
     cam_.target = {o.x, o.y, o.z};
 }
@@ -244,8 +251,9 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         if (d2 > distMax * distMax) continue;
         const ModeloHumano& m = roupasNpc_[n.semente % roupasNpc_.size()];
         Pose pose = n.corpo.vel > 0.1f ? poseAndar(m.esqueleto(), n.passada, n.corpo.vel) : poseParado(m.esqueleto(), tempo_ + float(n.semente % 97));
-        m.desenhar(matPele, n.corpo.pos, n.corpo.yaw, pose);
-        trisAtores_ += m.triangulos();
+        bool hd = passePrincipal_ && d2 < 12.f * 12.f;
+        m.desenhar(matPele, n.corpo.pos, n.corpo.yaw, pose, hd);
+        trisAtores_ += m.triangulos(hd);
         chamadasAtores_++;
         if (sombraBolha && d2 < 35.f * 35.f) sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
     }
@@ -260,7 +268,7 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         if (int(i) == montadoEm_) {
             Vec3f q = modelosCavalo_[i].assento(c.corpo.pos, c.corpo.yaw, pc);
             float quadril = modeloJogador_.esqueleto().ossos[QUADRIL].inicio.y;
-            modeloJogador_.desenhar(matPele, q - Vec3f{0, quadril, 0}, c.corpo.yaw, poseMontado(modeloJogador_.esqueleto(), c.passada, int(c.andadura)));
+            modeloJogador_.desenhar(matPele, q - Vec3f{0, quadril, 0}, c.corpo.yaw, poseMontado(modeloJogador_.esqueleto(), c.passada, int(c.andadura)), passePrincipal_);
         }
     }
     if (montadoEm_ < 0) {
@@ -268,8 +276,8 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         (void)amp;
         const Esqueleto& ej = modeloJogador_.esqueleto();
         Pose pj = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseParado(ej, tempo_);
-        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, pj);
-        trisAtores_ += modeloJogador_.triangulos();
+        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, pj, passePrincipal_);
+        trisAtores_ += modeloJogador_.triangulos(passePrincipal_);
         chamadasAtores_++;
         if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     }
@@ -304,11 +312,13 @@ void Jogo::desenhar() {
     luz_.comecarCena(cam_, relogio_, luzes_, jogador_.pos, tempo_);
     if (luz_.usaSombras()) {
         float a = Iluminacao::AREA_SOMBRA * 1.2f;
+        passePrincipal_ = false;  // sombras usam o modelo leve
         luz_.comecarSombra(jogador_.pos);
         terrenoR_->desenharArea(jogador_.pos, a, luz_.materialSombra());
         cenario_.desenharArea(jogador_.pos, a, luz_.materialSombra());
         desenharAtores(luz_.materialSombra(), luz_.materialSombraPele(), false, a);
         luz_.terminarSombra();
+        passePrincipal_ = true;
     }
     if (luz_.usaPos()) luz_.comecarPos();
     ClearBackground(BLACK);

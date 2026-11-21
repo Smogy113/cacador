@@ -8,13 +8,17 @@
 void ModeloHumano::carregar(const Proporcoes& p, const Visual& v) {
     esq_ = esqueletoHumano(p);
     malha_.carregar(corpoHumano(p, v));
+    hd_.carregar(corpoHumanoHD(p, v));
 }
 
-void ModeloHumano::descarregar() { malha_.descarregar(); }
+void ModeloHumano::descarregar() {
+    malha_.descarregar();
+    hd_.descarregar();
+}
 
-void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose) const {
+void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose, bool hd) const {
     calcularMatrizes(esq_, pose, ossos_);
-    malha_.desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
+    (hd ? hd_ : malha_).desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
 }
 
 void ModeloCavaloAnat::carregar(const VisualCavalo& v) {
