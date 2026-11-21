@@ -27,6 +27,7 @@ public:
     Material& material() { return mat_; }
     const Efeitos& efeitos() const { return ef_; }
     Nivel nivel() const { return nivel_; }
+    void definirRaioGrama(float r);  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
     bool usaSombras() const { return ef_.sombras && sombraOk_; }

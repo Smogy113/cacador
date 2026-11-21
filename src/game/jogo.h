@@ -17,6 +17,7 @@
 #include "core/combat.h"
 #include "core/quality.h"
 #include "core/terrain.h"
+#include "render/grama.h"
 #include "render/lighting.h"
 #include "render/props.h"
 #include "render/terrain_mesh.h"
@@ -123,6 +124,8 @@ private:
     uint32_t rngTiro_ = 12345;
     bool tiroOuvido_ = false;
     Sons sons_;
+    Grama grama_;
+    void configurarGrama();
     int passoAntes_ = 0, cascoAntes_ = 0;
     EstadoBandido estadoChefeAntes_ = EstadoBandido::Vigiando;
     void iniciarCombate();

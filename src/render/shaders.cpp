@@ -59,17 +59,25 @@ ATTR vec3 vertexNormal;
 ATTR vec4 vertexColor;
 uniform mat4 mvp;
 uniform mat4 matModel;
+uniform float tempoVento;
 VARY vec3 posMundo;
 VARY vec3 normalMundo;
 VARY vec4 cor;
 VARY vec2 extra;
 void main() {
-    vec4 p = matModel * vec4(vertexPosition, 1.0);
+    vec3 vp = vertexPosition;
+    if (vertexTexCoord.y > 3.5 && vertexTexCoord.y < 4.5) {  // grama: a ponta balanca com o vento (rajadas passando pelo campo)
+        float flex = vertexColor.a;
+        float onda = sin(tempoVento * 1.6 + vp.x * 0.23 + vp.z * 0.17) * 0.6 + sin(tempoVento * 3.1 + vp.x * 1.3) * 0.25;
+        vp.x += onda * 0.16 * flex;
+        vp.z += cos(tempoVento * 1.2 + vp.z * 0.31) * 0.07 * flex;
+    }
+    vec4 p = matModel * vec4(vp, 1.0);
     posMundo = p.xyz;
     normalMundo = normalize(mat3(matModel) * vertexNormal);
     cor = vertexColor;
     extra = vertexTexCoord;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
+    gl_Position = mvp * vec4(vp, 1.0);
 }
 )";
 
@@ -88,6 +96,7 @@ uniform vec3 luzCor[8];
 uniform int numLuzes;
 uniform float noite;
 uniform float descartarPerto;
+uniform float raioGrama;
 uniform float usarSombra;
 uniform mat4 matLuz;
 uniform sampler2D texSombra;
@@ -191,6 +200,11 @@ void main() {
     float brilho = 0.0, aspereza = 1.0, sss = 0.0, veludo = 0.0, metalico = 0.0;
     float kk = 0.0;               // cabelo (Kajiya-Kay)
     vec3 Tcab = vec3(0.0, 1.0, 0.0);
+    if (extra.y > 3.5 && extra.y < 4.5) {  // grama: some aos poucos na borda do campo desenhado
+        float dg = length(posMundo.xz - posCamera.xz);
+        float hg = fract(sin(dot(floor(posMundo.xz * 9.0), vec2(12.9898, 78.233))) * 43758.5453);
+        if (dg > raioGrama - 9.0 * hg) discard;
+    }
 #ifdef PERSONAGEM
     float m = extra.y;
     if (argila > 0.5 && m > 23.5) discard;  // argila: sem fios

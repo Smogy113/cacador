@@ -1,6 +1,7 @@
 #include "game/jogo.h"
 #include <cmath>
 #include "game/ui.h"
+#include "rlgl.h"
 #include "core/anim.h"
 #include "core/bussola.h"
 
@@ -10,6 +11,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     terrenoR_ = std::make_unique<TerrenoRender>(*terreno_);
     cenario_.construir(mapa_, *terreno_, col_, 1337);
     luz_.carregar(op.nivel);
+    grama_.iniciar(*terreno_, col_);
+    configurarGrama();
 
     // comeca na entrada de Pedrabranca, olhando para a ponte
     float x = op.temPos ? op.x : -40.f, z = op.temPos ? op.z : 10.f, yaw = (op.temPos ? op.yaw : 160.f) * DEG2RAD;
@@ -96,6 +99,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     atualizarCamera(0, Entrada{});
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, 0, 100000);
     cenario_.atualizar(jogador_.pos, 0, 100000);
+    grama_.atualizar(jogador_.pos, 100000);
     for (int i = 0; i < 300; i++) populacao_.atualizar(0.1f, relogio_, *terreno_, col_, {1e4f, 0, 1e4f});
     if (op.tiroteio) prepararTiroteio();
     if (!op.semEntrada) DisableCursor();
@@ -183,6 +187,7 @@ void Jogo::desenharInterface() {
 
 Jogo::~Jogo() {
     descarregarCombate();
+    grama_.descarregar();
     sons_.descarregar();
     for (auto& m : roupasNpc_) m.descarregar();
     for (auto& m : modelosCavalo_) m.descarregar();
@@ -289,6 +294,7 @@ void Jogo::atualizar(float dt) {
     atualizarCamera(dt, e);
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_);
     cenario_.atualizar(jogador_.pos, tempo_);
+    grama_.atualizar(jogador_.pos, 3);
 
     luzes_.clear();
     float noite = relogio_.intensidadeTochas();
@@ -379,11 +385,13 @@ void Jogo::teleportar(float x, float z, float yawGraus, float hora) {
     atualizarCamera(0, Entrada{});
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_, 100000);
     cenario_.atualizar(jogador_.pos, tempo_, 100000);
+    grama_.atualizar(jogador_.pos, 100000);
 }
 
 void Jogo::trocarNivel(Nivel n) {
     luz_.carregar(n);
     op_.nivel = n;
+    configurarGrama();
     if (!op_.arquivoConfig.empty()) salvarConfig(op_.arquivoConfig, n);
 }
 
@@ -431,12 +439,23 @@ void Jogo::desenhar() {
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
     cenario_.desenhar(cam_, dv, luz_.material());
+    luz_.definirRaioGrama(grama_.raio());
+    rlDisableBackfaceCulling();  // folhas vistas dos dois lados
+    grama_.desenhar(cam_, luz_.material());
+    rlEnableBackfaceCulling();
     trisAtores_ = 0;
     chamadasAtores_ = 0;
     desenharAtores(luz_.material(), luz_.materialPele(), !luz_.usaSombras(), dv);
     desenharEfeitos();
     EndMode3D();
     if (luz_.usaPos()) luz_.terminarPos(cam_);
-    tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_;
-    chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_;
+    tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_ + grama_.triangulos();
+    chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_ + grama_.chamadas();
+}
+
+// Grama densa por nivel: Baixo sem (so os tufos), Medio 22 m, Alto 34 m e mais folhas por m2.
+void Jogo::configurarGrama() {
+    if (op_.nivel == Nivel::Baixo) grama_.configurar(0, 0);
+    else if (op_.nivel == Nivel::Medio) grama_.configurar(22.f, 12.f);
+    else grama_.configurar(34.f, 20.f);
 }

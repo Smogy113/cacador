@@ -41,3 +41,6 @@ private:
     int chamadas_ = 0;
     float tempo_ = 0;
 };
+
+// Cor do chao num ponto (sRGB), a mesma do terreno desenhado (a grama copia).
+Rgb corDoChao(const Terreno& t, float x, float z, float ny);

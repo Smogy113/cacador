@@ -48,7 +48,7 @@ Rgb mix(Rgb a, Rgb b, float t) { return lerp(a, b, clamp01(t)); }
 }  // namespace
 
 // Cor do chao num ponto (cores em sRGB, o shader converte).
-static Rgb corDoChao(const Terreno& t, float x, float z, float ny) {
+Rgb corDoChao(const Terreno& t, float x, float z, float ny) {
     uint32_t s = t.semente();
     float h = t.altura(x, z);
     float r1 = fbm2D(x * 0.02f, z * 0.02f, s + 11, 2) * 0.5f + 0.5f;

@@ -213,6 +213,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     for (Shader sh : {lit_, pele_}) {
         uniformesComuns(sh, paleta_, sol_, noite_);
         setV3(sh, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
+        setF(sh, "tempoVento", tempo);
         setRgb(sh, "ambCeu", paleta_.ambienteCeu);
         setRgb(sh, "ambChao", paleta_.ambienteChao);
         float luaAcima = smoothstep(-0.05f, 0.15f, lua_.y);
@@ -436,3 +437,4 @@ void Iluminacao::terminarSombraPerto() {
     float um = 1;
     SetShaderValue(pele_, GetShaderLocation(pele_, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
 }
+void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
