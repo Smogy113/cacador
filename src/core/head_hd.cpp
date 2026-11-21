@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include "core/body.h"
+#include "core/head_cor.h"
 #include "core/loft.h"
 #include "core/noise.h"
 #include "core/sdf_head.h"
@@ -138,6 +139,68 @@ Vec3f bordaPalpebra(float sx, float u, bool cima, float cz) {
 
 }  // namespace
 
+}  // namespace loft
+
+CorPele corDaPele(Vec3f p, Vec3f n, const Visual& vis) {
+    using namespace loft;
+    CorPele r;
+    float x = p.x, y = p.y, z = p.z, ax = std::abs(x);
+    float f = (z + 0.014f) / std::max(1e-4f, std::sqrt(x * x + (z + 0.014f) * (z + 0.014f)));  // 1 = frente
+    Rgb labio{vis.pele.r * 0.84f, vis.pele.g * 0.69f, vis.pele.b * 0.67f};
+    Rgb c = vis.pele;
+    c = lerp(c, Rgb{c.r * 1.03f, c.g * 0.86f, c.b * 0.84f}, 0.6f * g(y, 1.666f, 0.008f) * g(x, 0, 0.012f) * (f > 0));   // ponta do nariz
+    c = lerp(c, Rgb{c.r * 1.02f, c.g * 0.88f, c.b * 0.86f}, 0.4f * g(y, 1.678f, 0.014f) * g(ax, 0.052f, 0.016f) * (f > 0));  // bochechas
+    c = lerp(c, Rgb{c.r * 1.02f, c.g * 0.86f, c.b * 0.84f}, 0.35f * g(ax, 0.083f, 0.008f) * g(y, 1.688f, 0.03f));            // orelhas
+    if (y > 1.648f && y < 1.66f && ax < 0.014f && z > 0.092f) {  // fundo das narinas: escuro (a malha e rasa)
+        float dn = sdf::narina(p);
+        float k = smoothstep(0.0007f, -0.0004f, dn) * smoothstep(0.1f, -0.4f, n.y);
+        c = lerp(c, Rgb{c.r * 0.16f, c.g * 0.1f, c.b * 0.09f}, k);
+        r.aoMax = 1.f - 0.75f * k;
+    }
+    if (std::abs(y - 1.632f) < 0.014f && ax < 0.032f && z + 13.f * x * x > 0.087f) {
+        // vermelhao: no meio, a borda exata da escultura; nos cantos (onde o labio some sob a pele),
+        // uma faixa que afina ate a comissura
+        float mL = smoothstep(0.0009f, -0.0006f, sdf::labios(p));
+        float mC = 0.f;  // cantos: o labio continua ate a comissura, com a cor sumindo aos poucos
+        float eL = (ax / 0.0245f) * (ax / 0.0245f);
+        if (eL < 1.f) {
+            float sL = 1.f - eL;
+            float topo = 1.6322f + 0.0066f * sL, fundo = 1.6322f - 0.0074f * sL;
+            mC = smoothstep(topo + 0.0006f, topo - 0.0006f, y) * smoothstep(fundo - 0.0006f, fundo + 0.0006f, y) *
+                 smoothstep(0.012f, 0.02f, ax);
+        }
+        if (std::max(mL, mC) > 0.2f) {
+            r.labio = true;
+            c = lerp(c, labio, std::max(mL, mC * lerp(0.45f, 0.1f, smoothstep(0.017f, 0.0245f, ax))));
+        }
+    }
+    float pb = vis.barba ? barba(ax, y, f) : 0.f;
+    float ps = sobrancelha(ax, y, f) * smoothstep(0.06f, 0.08f, z);
+    float pc = cabelo(y, f) * (1.f - smoothstep(0.075f, 0.082f, ax) * g(y, 1.69f, 0.03f));  // nao nas orelhas
+    if (vis.chapeuAba && y > 1.768f) pc = 0.f;
+    float pel = std::max(pb, std::max(ps, pc));
+    if (pel > 0.02f) {
+        r.pelos = pel;
+        float sx = x >= 0 ? 1.f : -1.f;
+        if (pb >= std::max(ps, pc)) {
+            r.compPelo = (y > 1.642f && ax < 0.032f) ? 0.0034f : 0.003f;
+            r.dirPelo = (y > 1.642f && ax < 0.032f) ? normalizar({sx * 0.7f, -1.f, 0.15f})
+                      : (y < 1.592f ? normalizar({0, -0.35f, -1.f}) : normalizar({sx * 0.08f, -1.f, 0.2f}));
+        } else if (ps >= pc) {
+            r.compPelo = 0.0035f;  // sobrancelha desenhada na pele (shader), tracos para os lados
+            r.dirPelo = ax < 0.019f ? normalizar({sx * 0.3f, 1.f, 0.15f}) : normalizar({sx * 1.f, 0.22f, 0.1f});
+        } else {
+            r.compPelo = 0.0035f;
+            r.dirPelo = normalizar({sx * 0.15f, -0.5f, -1.f});
+        }
+        float baseCor = pc >= std::max(pb, ps) ? 0.8f : (ps >= pb ? 0.55f : 0.38f);
+        c = lerp(c, vis.cabelo * 0.85f, baseCor * smoothstep(0.25f, 0.85f, pel));
+    }
+    r.cor = c;
+    return r;
+}
+
+namespace loft {
 void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
     MalhaPele& m = k.m;
     // malha da escultura (volume anatomico), gerada uma vez e reaproveitada por todos (so muda a escala)
@@ -156,68 +219,22 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
             v.peso = 1;
         }
     };
-    Rgb labio{vis.pele.r * 0.84f, vis.pele.g * 0.69f, vis.pele.b * 0.67f};
     size_t base = m.v.size();
     for (const auto& e : esc.v) {
-        float x = e.pos.x, y = e.pos.y, z = e.pos.z, ax = std::abs(x);
-        float f = (z + 0.014f) / std::max(1e-4f, std::sqrt(x * x + (z + 0.014f) * (z + 0.014f)));  // 1 = frente
         VertPele v;
         v.pos = W(e.pos);
         v.normal = Wn(e.normal);
         v.ao = e.ao;
         v.material = MAT_PELE;
-        v.tang = {x, y, 1.f};  // coordenadas do rosto (rugas e pelos por pixel)
-        ossos(y, v);
-        Rgb c = vis.pele;
-        c = lerp(c, Rgb{c.r * 1.03f, c.g * 0.86f, c.b * 0.84f}, 0.6f * g(y, 1.666f, 0.008f) * g(x, 0, 0.012f) * (f > 0));   // ponta do nariz
-        c = lerp(c, Rgb{c.r * 1.02f, c.g * 0.88f, c.b * 0.86f}, 0.4f * g(y, 1.678f, 0.014f) * g(ax, 0.052f, 0.016f) * (f > 0));  // bochechas
-        c = lerp(c, Rgb{c.r * 1.02f, c.g * 0.86f, c.b * 0.84f}, 0.35f * g(ax, 0.083f, 0.008f) * g(y, 1.688f, 0.03f));            // orelhas
-        if (y > 1.648f && y < 1.66f && ax < 0.014f && z > 0.092f) {  // fundo das narinas: escuro (a malha e rasa)
-            float dn = sdf::narina(e.pos);
-            float k = smoothstep(0.0007f, -0.0004f, dn) * smoothstep(0.1f, -0.4f, e.normal.y);
-            c = lerp(c, Rgb{c.r * 0.16f, c.g * 0.1f, c.b * 0.09f}, k);
-            v.ao = std::min(v.ao, 1.f - 0.75f * k);
-        }
-        if (std::abs(y - 1.632f) < 0.014f && ax < 0.032f && z + 13.f * x * x > 0.087f) {
-            // vermelhao: no meio, a borda exata da escultura; nos cantos (onde o labio some sob a pele),
-            // uma faixa que afina ate a comissura
-            float mL = smoothstep(0.0009f, -0.0006f, sdf::labios(e.pos));
-            float mC = 0.f;  // cantos: o labio continua ate a comissura, com a cor sumindo aos poucos
-            float eL = (ax / 0.0245f) * (ax / 0.0245f);
-            if (eL < 1.f) {
-                float sL = 1.f - eL;
-                float topo = 1.6322f + 0.0066f * sL, fundo = 1.6322f - 0.0074f * sL;
-                mC = smoothstep(topo + 0.0006f, topo - 0.0006f, y) * smoothstep(fundo - 0.0006f, fundo + 0.0006f, y) *
-                     smoothstep(0.012f, 0.02f, ax);
-            }
-            if (std::max(mL, mC) > 0.2f) {
-                v.material = MAT_LABIO;
-                c = lerp(c, labio, std::max(mL, mC * lerp(0.45f, 0.1f, smoothstep(0.017f, 0.0245f, ax))));
-            }
-        }
-        float pb = vis.barba ? barba(ax, y, f) : 0.f;
-        float ps = sobrancelha(ax, y, f) * smoothstep(0.06f, 0.08f, z);
-        float pc = cabelo(y, f) * (1.f - smoothstep(0.075f, 0.082f, ax) * g(y, 1.69f, 0.03f));  // nao nas orelhas
-        if (vis.chapeuAba && y > 1.768f) pc = 0.f;
-        float pel = std::max(pb, std::max(ps, pc));
-        if (pel > 0.02f) {
-            v.pelos = pel;
-            float sx = x >= 0 ? 1.f : -1.f;
-            if (pb >= std::max(ps, pc)) {
-                v.compPelo = (y > 1.642f && ax < 0.032f) ? 0.0034f : 0.003f;
-                v.dirPelo = (y > 1.642f && ax < 0.032f) ? normalizar({sx * 0.7f, -1.f, 0.15f})
-                          : (y < 1.592f ? normalizar({0, -0.35f, -1.f}) : normalizar({sx * 0.08f, -1.f, 0.2f}));
-            } else if (ps >= pc) {
-                v.compPelo = 0.0035f;  // sobrancelha desenhada na pele (shader), tracos para os lados
-                v.dirPelo = ax < 0.019f ? normalizar({sx * 0.3f, 1.f, 0.15f}) : normalizar({sx * 1.f, 0.22f, 0.1f});
-            } else {
-                v.compPelo = 0.0035f;
-                v.dirPelo = normalizar({sx * 0.15f, -0.5f, -1.f});
-            }
-            float baseCor = pc >= std::max(pb, ps) ? 0.8f : (ps >= pb ? 0.55f : 0.38f);
-            c = lerp(c, vis.cabelo * 0.85f, baseCor * smoothstep(0.25f, 0.85f, pel));
-        }
-        v.cor = c;
+        v.tang = {e.pos.x, e.pos.y, 1.f};  // coordenadas do rosto (rugas e pelos por pixel)
+        ossos(e.pos.y, v);
+        CorPele cp = corDaPele(e.pos, e.normal, vis);
+        v.cor = cp.cor;
+        v.ao = std::min(v.ao, cp.aoMax);
+        if (cp.labio) v.material = MAT_LABIO;
+        v.pelos = cp.pelos;
+        v.compPelo = cp.compPelo;
+        v.dirPelo = cp.dirPelo;
         m.v.push_back(v);
     }
     for (size_t t = 0; t < esc.idx.size(); t += 3)
