@@ -330,7 +330,7 @@ float sombraPropria(vec3 q, vec3 L) {
     float res = 1.0, t = 0.002;
     for (int i = 0; i < 16; i++) {
         float h = distVol(q + L * t);
-        res = min(res, 9.0 * h / t);
+        res = min(res, 4.5 * h / t);  // penumbra larga: a pele espalha a luz por dentro
         t += clamp(h, 0.0015, 0.02);
         if (res < 0.02 || t > 0.12) break;
     }
@@ -515,8 +515,8 @@ void main() {
             albedo = mix(albedo, vec3(0.01), smoothstep(0.175, 0.15, rr) * frente);                       // pupila
             albedo *= mix(1.0, 0.45, smoothstep(0.15, 0.55, nr.y));                                       // sombra da palpebra
             if (heroi > 0.5) {
-                albedo *= mix(1.0, 0.55, smoothstep(0.05, 0.3, nr.y));                                     // palpebra de cima mais funda
-                float umida = smoothstep(-0.25, -0.3, nr.y) * smoothstep(-0.38, -0.33, nr.y) * frente;      // linha umida embaixo
+                albedo *= mix(1.0, 0.8, smoothstep(0.2, 0.42, nr.y));                                     // palpebra de cima mais funda
+                float umida = smoothstep(-0.27, -0.31, nr.y) * smoothstep(-0.37, -0.33, nr.y) * frente * (1.0 - naIris);  // linha umida embaixo (so na esclera)
                 albedo = mix(albedo, vec3(0.85, 0.78, 0.76), umida * 0.55);
                 olhoHeroi = frente;
             }
@@ -569,7 +569,7 @@ void main() {
 #endif
 #ifdef RAYMARCH
     vec3 Lq = paraEscultura(dirSol);
-    if (economico < 0.5 && sombra > 0.01) sombra = min(sombra, sombraPropria(qHit, Lq));
+    if (economico < 0.5 && sombra > 0.01) sombra = min(sombra, mix(0.22, 1.0, sombraPropria(qHit, Lq)));  // a luz rebatida na pele nao deixa a sombra preta
 #endif
     float ndl = dot(n, dirSol);
     float difSol = mix(max(ndl, 0.0), clamp((ndl + 0.45) / 1.45, 0.0, 1.0), sss);
