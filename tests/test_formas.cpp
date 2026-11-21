@@ -66,3 +66,85 @@ TEST_CASE("formas perto: ordem e limite") {
     CHECK(formasPerto(fs, {-2.9f, 0, 0}, 100.f, 4) == a);                // anda 10 cm: mesma lista
     CHECK(formasPerto(fs, {-3, 0, 0}, 8.f, 32).size() == 2);             // raio corta
 }
+
+// ---------------- faces de parede e atlas de luz ----------------
+TEST_CASE("faces: cantos batem com a caixa") {
+    FormaCena f{TipoForma::Caixa, {3, 2, -1}, {2, 1.5f, 1}, 0.7f, {}};
+    f.parede = true;
+    for (int k = 0; k < 4; k++) {
+        FaceParede fc = faceDe(f, k);
+        Vec3f cs[4] = {fc.origem, fc.origem + fc.eixoU * fc.largura, fc.origem + Vec3f{0, fc.altura, 0},
+                       fc.origem + fc.eixoU * fc.largura + Vec3f{0, fc.altura, 0}};
+        for (auto& c : cs) CHECK(std::abs(distanciaForma(f, c)) < 1e-4f);
+        CHECK(dot(fc.normal, (fc.origem + fc.eixoU * (fc.largura * 0.5f)) - f.centro) > 0.f);  // para fora
+        CHECK(std::abs(dot(fc.normal, fc.eixoU)) < 1e-5f);
+        CHECK(fc.altura == doctest::Approx(3.f));
+    }
+    CHECK(faceDe(f, 0).largura == doctest::Approx(2.f));  // faces +-x tem a largura em z
+    CHECK(faceDe(f, 2).largura == doctest::Approx(4.f));
+}
+TEST_CASE("atlas: sem sobreposicao e com borda") {
+    std::vector<FormaCena> fs;
+    for (int i = 0; i < 20; i++) {
+        FormaCena f{TipoForma::Caixa, {float(i) * 10.f, 1, 0}, {3.f + i % 3, 1.3f, 2.f}, 0.3f * i, {}};
+        f.parede = i % 4 != 3;
+        fs.push_back(f);
+    }
+    fs.push_back({TipoForma::Prisma, {0, 5, 0}, {3, 1, 2}, 0, {}});
+    auto at = alocarAtlas(fs, 0.25f, 512);
+    REQUIRE(at.size() == fs.size());
+    std::vector<RetAtlas> rs;
+    for (size_t i = 0; i < fs.size(); i++)
+        for (int k = 0; k < 4; k++) {
+            const RetAtlas& r = at[i][k];
+            if (!fs[i].parede) { CHECK(r.w == 0); continue; }
+            REQUIRE(r.w > 0);
+            FaceParede fc = faceDe(fs[i], k);
+            CHECK(r.w == int(std::ceil(fc.largura / 0.25f)) + 2);
+            CHECK(r.h == int(std::ceil(fc.altura / 0.25f)) + 2);
+            CHECK(r.x >= 0);
+            CHECK(r.y >= 0);
+            CHECK(r.x + r.w <= 512);
+            CHECK(r.y + r.h <= 512);
+            rs.push_back(r);
+        }
+    for (size_t a = 0; a < rs.size(); a++)
+        for (size_t b = a + 1; b < rs.size(); b++) {
+            bool separados = rs[a].x + rs[a].w <= rs[b].x || rs[b].x + rs[b].w <= rs[a].x || rs[a].y + rs[a].h <= rs[b].y ||
+                             rs[b].y + rs[b].h <= rs[a].y;
+            CHECK(separados);
+        }
+}
+TEST_CASE("atlas: cheio nao inventa lugar") {
+    std::vector<FormaCena> fs;
+    for (int i = 0; i < 40; i++) {
+        FormaCena f{TipoForma::Caixa, {0, 0, 0}, {4, 1.5f, 3}, 0, {}};
+        f.parede = true;
+        fs.push_back(f);
+    }
+    auto at = alocarAtlas(fs, 0.25f, 128);
+    int sem = 0;
+    for (auto& f4 : at)
+        for (auto& r : f4) {
+            if (r.w == 0) { sem++; continue; }
+            CHECK(r.x + r.w <= 128);
+            CHECK(r.y + r.h <= 128);
+        }
+    CHECK(sem > 0);
+}
+TEST_CASE("meshbuilder: vertices de parede levam o indice da forma") {
+    std::vector<FormaCena> fs;
+    MeshBuilder m;
+    m.caixa({0, 0, 0}, {1, 1, 1}, 0, {});  // antes de registrar: sem forma
+    size_t n0 = m.verts().size();
+    m.registrar(&fs);
+    m.tipo(TIPO_REBOCO);
+    m.caixa({5, 1, 0}, {4, 3, 2}, 0.2f, {0.8f, 0.7f, 0.6f});
+    size_t n1 = m.verts().size();
+    m.tipo(TIPO_NORMAL);
+    m.prisma({5, 4, 0}, {4, 1, 2}, 0.2f, {});
+    REQUIRE(fs.size() == 2);
+    CHECK(fs[0].parede);
+    CHECK_FALSE(fs[1].parede);
+    for (size_t i = 0; i < m.verts().size(); i++) CHECK(m.verts()[i].forma == (i < n0 ? -1 : (i < n1 ? 0 : 1)));
+}

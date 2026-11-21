@@ -16,6 +16,7 @@ struct Vert {
     Rgb cor;
     float ao = 1.f;
     float tipo = TIPO_NORMAL;
+    int forma = -1;  // indice da forma registrada que gerou o vertice (-1: nenhuma)
 };
 
 // Monta geometria low-poly (faces chapadas, cores por vertice) e calcula oclusao de ambiente.
@@ -50,6 +51,8 @@ private:
     int donoAtual_ = -1;
     float tipoAtual_ = TIPO_NORMAL;
     std::vector<FormaCena>* formas_ = nullptr;
+    int formaAtual_ = -1;
+    void registrarForma(TipoForma t, Vec3f c, Vec3f h, float rot, Rgb cor);
     std::vector<int> dono_;  // oclusor que gerou cada vertice (nao se auto-oclui)
     std::vector<Caixa> oclusores_;
 };

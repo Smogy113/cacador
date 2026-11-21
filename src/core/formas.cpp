@@ -53,3 +53,37 @@ std::vector<int> formasPerto(const std::vector<FormaCena>& fs, Vec3f foco, float
     for (int i = 0; i < int(v.size()) && i < max; i++) r.push_back(v[i].second);
     return r;
 }
+
+FaceParede faceDe(const FormaCena& f, int k) {
+    const Vec3f h = f.meia;
+    Vec3f o, u, n;
+    float larg;
+    switch (k) {
+        case 0: o = {h.x, -h.y, -h.z}, u = {0, 0, 1}, n = {1, 0, 0}, larg = 2 * h.z; break;
+        case 1: o = {-h.x, -h.y, h.z}, u = {0, 0, -1}, n = {-1, 0, 0}, larg = 2 * h.z; break;
+        case 2: o = {-h.x, -h.y, h.z}, u = {1, 0, 0}, n = {0, 0, 1}, larg = 2 * h.x; break;
+        default: o = {h.x, -h.y, -h.z}, u = {-1, 0, 0}, n = {0, 0, -1}, larg = 2 * h.x; break;
+    }
+    float c = std::cos(f.rotY), s = std::sin(f.rotY);
+    auto gira = [&](Vec3f p) { return Vec3f{p.x * c + p.z * s, p.y, -p.x * s + p.z * c}; };
+    return {f.centro + gira(o), gira(u), gira(n), larg, 2 * h.y};
+}
+
+std::vector<std::array<RetAtlas, 4>> alocarAtlas(const std::vector<FormaCena>& fs, float m, int tam) {
+    std::vector<std::array<RetAtlas, 4>> r(fs.size());
+    int x = 0, y = 0, prateleira = 0;  // prateleiras: enche uma linha, sobe pela altura da maior
+    for (size_t i = 0; i < fs.size(); i++) {
+        if (!fs[i].parede || fs[i].tipo != TipoForma::Caixa) continue;
+        for (int k = 0; k < 4; k++) {
+            FaceParede f = faceDe(fs[i], k);
+            int w = int(std::ceil(f.largura / m)) + 2, h = int(std::ceil(f.altura / m)) + 2;
+            if (w > tam || h > tam) continue;
+            if (x + w > tam) { x = 0; y += prateleira; prateleira = 0; }
+            if (y + h > tam) continue;  // atlas cheio: esta face fica sem lugar
+            r[i][k] = {x, y, w, h};
+            x += w;
+            prateleira = std::max(prateleira, h);
+        }
+    }
+    return r;
+}
