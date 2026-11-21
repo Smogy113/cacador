@@ -29,9 +29,9 @@ void mover(Bandido& b, Vec3f dir, float vel, float dt, const Terreno& t, const M
     b.corpo.pos = p;
     b.corpo.vel = vel;
 }
-bool ve(const Bandido& b, Vec3f jog, const MundoColisao& col) {
+bool ve(const Bandido& b, Vec3f jog, const Terreno& t, const MundoColisao& col) {
     if (distXZ(b.corpo.pos, jog) > VISAO_BANDIDO) return false;
-    return col.raioLivre(b.corpo.pos + Vec3f{0, 1.6f, 0}, jog + Vec3f{0, 1.6f, 0});
+    return linhaLivre(b.corpo.pos + Vec3f{0, 1.6f, 0}, jog + Vec3f{0, 1.6f, 0}, t, col);
 }
 bool fora(EstadoBandido e) { return e == EstadoBandido::Morto || e == EstadoBandido::Sumiu; }
 }  // namespace
@@ -165,7 +165,7 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
             break;
         case EstadoBandido::Vigiando:
             b.corpo.vel = 0;
-            if (ve(b, jog, col) || (tiroOuvido && d <= AUDICAO_BANDIDO) || (alguemLutando && d <= AUDICAO_BANDIDO)) {
+            if (ve(b, jog, t, col) || (tiroOuvido && d <= AUDICAO_BANDIDO) || (alguemLutando && d <= AUDICAO_BANDIDO)) {
                 b.estado = EstadoBandido::Alerta;
                 b.reacao = REACAO_BANDIDO;
             }
@@ -191,7 +191,7 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
         case EstadoBandido::Combate: {
             // cobertura: atras da caixa mais proxima, do lado oposto ao jogador (revista a cada 2 s)
             b.tempoCobertura -= dt;
-            bool linhaAgora = col.raioLivre(b.corpo.pos + Vec3f{0, 1.5f, 0}, jog + Vec3f{0, 1.3f, 0});
+            bool linhaAgora = linhaLivre(b.corpo.pos + Vec3f{0, 1.5f, 0}, jog + Vec3f{0, 1.3f, 0}, t, col);
             b.semLinha = linhaAgora ? 0.f : b.semLinha + dt;
             if (b.semLinha > 2.f && b.temCobertura) {  // cobertura sem tiro: sai e contorna
                 b.temCobertura = false;
@@ -239,7 +239,7 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
             encarar(b, jog);
             // tiros em rajadas de 1 a 3, no maximo MAX_ATIRANDO ao mesmo tempo
             b.proxTiro -= dt;
-            bool linha = col.raioLivre(b.corpo.pos + Vec3f{0, 1.5f, 0}, jog + Vec3f{0, 1.3f, 0});
+            bool linha = linhaAgora;  // nem caixas nem morro no caminho
             if (!linha) b.rajada = 0;
             if (b.rajada == 0 && b.proxTiro <= 0 && linha && atirando() < MAX_ATIRANDO && d < 60.f)
                 b.rajada = 1 + int(aleatorio01(rng) * 3) % 3;

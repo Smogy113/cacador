@@ -129,10 +129,8 @@ bool Jogo::entregarNoXerife() {
 }
 
 void Jogo::aoMontar() {
-    if (cacada_.carga() == Carga::Seguindo || cacada_.podeLevar(jogador_.pos)) {
-        cacada_.soltarCarga();
-        if (cacada_.levar(Carga::Garupa)) avisar("Na garupa. Leve ao xerife (siga a bussola).");
-    }
+    if (montadoEm_ >= 0 && cacada_.levarAoMontar(cavalos_[montadoEm_].corpo.pos))
+        avisar("Na garupa. Leve ao xerife (siga a bussola).");
 }
 
 void Jogo::aoDesmontar() {
@@ -157,11 +155,8 @@ bool Jogo::interagirCacada(Entrada& e) {
         return true;
     }
     const Bandido* c = cacada_.bando().chefe();
-    if (c && cacada_.podeLevar(p)) {
-        if (c->estado == EstadoBandido::Amarrado && cacada_.levar(Carga::Seguindo))
-            avisar(cacada_.cartaz().nome + " vai te seguir. Monte num cavalo para levar na garupa.");
-        else
-            avisar("Monte num cavalo perto do corpo para levar na garupa.");
+    if (c && cacada_.podeLevar(p) && c->estado == EstadoBandido::Amarrado && cavaloPerto_ < 0) {
+        if (cacada_.levar(Carga::Seguindo)) avisar(cacada_.cartaz().nome + " vai te seguir. Monte num cavalo para levar na garupa.");
         e.interagir = false;
         return true;
     }

@@ -106,6 +106,17 @@ Acerto lancarTiro(Vec3f origem, Vec3f dir, float alcance, const std::vector<Alvo
     return r;
 }
 
+bool linhaLivre(Vec3f a, Vec3f b, const Terreno& t, const MundoColisao& col) {
+    if (!col.raioLivre(a, b)) return false;
+    float d = len(b - a);
+    int n = std::max(2, int(d / 1.f));
+    for (int i = 1; i < n; i++) {  // amostra o relevo a cada ~1 m
+        Vec3f p = a + (b - a) * (float(i) / n);
+        if (p.y < t.altura(p.x, p.z)) return false;
+    }
+    return true;
+}
+
 float espalhamento(bool mirando, float vel) {
     float base = mirando ? 0.004f : 0.035f;
     return base + 0.006f * std::min(vel, 6.f);

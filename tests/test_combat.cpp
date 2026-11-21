@@ -83,3 +83,24 @@ TEST_CASE("espalhamento: mirar parado e mais preciso") {
     CHECK(espalhamento(true, 0) < espalhamento(false, 0));
     CHECK(espalhamento(true, 0) < espalhamento(true, 5));
 }
+TEST_CASE("final: linhaLivre e bloqueada pelo relevo") {
+    static std::unique_ptr<Terreno> real;
+    if (!real) real = std::make_unique<Terreno>(carregarMapa(DATA_DIR "/lugares.txt"), 1337);
+    const Terreno& t = *real;
+    MundoColisao col;
+    // procura dois pontos a 20 m com um morro no meio
+    bool achou = false;
+    for (float x = -600; x < 560 && !achou; x += 7)
+        for (float z = -600; z < 600 && !achou; z += 7) {
+            Vec3f a{x, t.altura(x, z) + 1.5f, z}, b{x + 40, t.altura(x + 40, z) + 1.4f, z};
+            float m = t.altura(x + 20, z);
+            if (m > std::max(a.y, b.y) + 0.5f) {
+                achou = true;
+                CHECK(col.raioLivre(a, b));
+                CHECK_FALSE(linhaLivre(a, b, t, col));
+            }
+        }
+    REQUIRE(achou);
+    Vec3f a{0, plano().altura(0, 0) + 1.5f, 0}, b{0, plano().altura(0, 15) + 1.5f, 15};
+    CHECK(linhaLivre(a, b, plano(), col));
+}

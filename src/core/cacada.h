@@ -27,7 +27,9 @@ public:
     bool podeAmarrar(Vec3f jogador) const;
     void amarrar();
     bool podeLevar(Vec3f jogador) const;
-    bool levar(Carga c);  // o corpo so vai na garupa; retorna false se nao deu
+    bool levar(Carga c);
+    // Ao montar com o cavalo em 'posCavalo': o preso que segue ou o alvo (vivo amarrado ou morto) a <= 8 m vai na garupa.
+    bool levarAoMontar(Vec3f posCavalo);  // o corpo so vai na garupa; retorna false se nao deu
     Carga carga() const { return carga_; }
     void soltarCarga();
     int entregar(Vec3f jogador, Vec3f xerife);  // valor pago (0 se nao pode)

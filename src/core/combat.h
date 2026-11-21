@@ -48,5 +48,7 @@ struct Acerto {
 // devolve o alvo mais proximo atingido antes disso (indice -1 se nenhum).
 Acerto lancarTiro(Vec3f origem, Vec3f dir, float alcance, const std::vector<Alvo>& alvos, const Terreno& t,
                   const MundoColisao& col);
+// Linha de tiro livre entre a e b: nem caixas nem relevo no caminho.
+bool linhaLivre(Vec3f a, Vec3f b, const Terreno& t, const MundoColisao& col);
 // Desvio maximo da mira em radianos: menor mirando, maior andando/correndo.
 float espalhamento(bool mirando, float velAtirador);

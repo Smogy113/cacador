@@ -156,7 +156,8 @@ void Jogo::desenharInterface() {
         desenharMensagem(mensagem_, mensagemT_);
         if (cacada_.podeAmarrar(jogador_.pos)) desenharDica(amarrarT_ > 0 ? "Amarrando..." : "Segure E  -  Amarrar");
         else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E  -  Entregar ao xerife");
-        else if (montadoEm_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E  -  Puxar pela corda");
+        else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E  -  Puxar pela corda");
+        else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos)) desenharDica("Traga um cavalo: monte perto do corpo para levar");
         else if (quadroPerto_ >= 0) desenharDica("E  -  Ver recompensas");
         else if (cavaloPerto_ >= 0) desenharDica("E  -  Montar");
         return;
@@ -244,6 +245,9 @@ void Jogo::atualizar(float dt) {
             jogador_.vel = 0;
         }
     } else {
+        cavaloPerto_ = -1;  // calculado antes da cacada: perto de cavalo, o E monta
+        for (size_t i = 0; i < cavalos_.size(); i++)
+            if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
         interagirCacada(e);
         if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
         moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);

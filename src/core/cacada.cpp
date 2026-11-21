@@ -14,7 +14,7 @@ Vec3f escolherEsconderijo(const Lugar& l, uint32_t semente, const Terreno& t, co
         return t.dentroDoJogavel(p.x, p.z) && t.mascaraRio(p.x, p.z) < 0.2f && t.normal(p.x, p.z).y > 0.85f &&
                distXZ(col.resolver(p, 1.5f), p) < 0.01f;
     };
-    for (float r = 0; r <= l.raio; r += 3.f) {
+    for (float r = 0; r <= l.raio + 120.f; r += 3.f) {  // se o lugar estiver todo ocupado, procura em volta
         int n = r < 1 ? 1 : int(6.2831f * r / 3.f);
         for (int k = 0; k < n; k++) {
             float a = giro + k * 6.2831f / n;
@@ -30,6 +30,7 @@ Vec3f escolherEsconderijo(const Lugar& l, uint32_t semente, const Terreno& t, co
 
 void Cacada::aceitar(const Cartaz& c, int quadro, int indice, const Mapa& mapa, const Terreno& t,
                      const MundoColisao& col) {
+    if (ativa() && quadro == quadro_ && indice == indice_) return;  // ja e a recompensa ativa
     cartaz_ = c;
     quadro_ = quadro;
     indice_ = indice;
@@ -37,7 +38,8 @@ void Cacada::aceitar(const Cartaz& c, int quadro, int indice, const Mapa& mapa, 
     const Lugar* lugar = nullptr;
     for (auto& l : mapa.lugares)
         if (nomeLegivel(l.nome) == c.ultimoVisto) lugar = &l;
-    esconderijo_ = lugar ? escolherEsconderijo(*lugar, semente_, t, col) : Vec3f{0, t.altura(0, 0), 0};
+    Lugar qualquer{TipoLugar::Floresta, "", 0, 0, 0, 30};
+    esconderijo_ = escolherEsconderijo(lugar ? *lugar : qualquer, semente_, t, col);
     bando_ = Bando();
     lutou_ = false;
     carga_ = Carga::Nenhuma;
@@ -113,6 +115,15 @@ bool Cacada::levar(Carga k) {
     fase_ = FaseCacada::Levando;
     return true;
 }
+bool Cacada::levarAoMontar(Vec3f posCavalo) {
+    const Bandido* c = bando_.chefe();
+    if (!ativa() || !c || (c->estado != EstadoBandido::Amarrado && c->estado != EstadoBandido::Morto)) return false;
+    if (carga_ != Carga::Seguindo && (carga_ != Carga::Nenhuma || distXZ(c->corpo.pos, posCavalo) > DIST_LEVAR)) return false;
+    carga_ = Carga::Garupa;
+    fase_ = FaseCacada::Levando;
+    return true;
+}
+
 void Cacada::soltarCarga() {
     if (carga_ == Carga::Nenhuma) return;
     carga_ = Carga::Nenhuma;

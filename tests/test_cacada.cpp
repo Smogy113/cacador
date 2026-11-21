@@ -171,3 +171,37 @@ TEST_CASE("cacada: objetivo aponta esconderijo, depois chefe, depois xerife mais
     c.levar(Carga::Garupa);
     CHECK(distXZ(c.objetivo({-50, 0, 50}, xs), xs[1]) < 0.01f);
 }
+TEST_CASE("final: corpo vai na garupa ao montar perto (cavalo a ate 8 m)") {
+    Cacada c;
+    c.aceitar(cartazEm("Mina Funda", Temperamento::Teimoso, 90), 0, 0, mapa(), ter(), MundoColisao{});
+    Vec3f e = c.esconderijo();
+    passo(c, chao(e.x + 15, e.z));
+    auto& b = c.bando().bandidos();
+    c.bando().levarTiro(int(c.bando().chefe() - &b[0]), Parte::Cabeca);
+    passo(c, chao(e.x + 15, e.z));
+    Vec3f pc = c.bando().chefe()->corpo.pos;
+    CHECK_FALSE(c.levarAoMontar(pc + Vec3f{12, 0, 0}));
+    CHECK(c.levarAoMontar(pc + Vec3f{6, 0, 0}));
+    CHECK(c.carga() == Carga::Garupa);
+}
+TEST_CASE("final: aceitar de novo o mesmo cartaz nao recomeca a cacada") {
+    Cacada c;
+    c.aceitar(cartazEm("Mina Funda", Temperamento::Covarde, 90), 0, 2, mapa(), ter(), MundoColisao{});
+    Vec3f e = c.esconderijo();
+    passo(c, chao(e.x + 15, e.z));
+    renderChefe(c);
+    c.amarrar();
+    c.aceitar(cartazEm("Mina Funda", Temperamento::Covarde, 90), 0, 2, mapa(), ter(), MundoColisao{});
+    CHECK(c.fase() == FaseCacada::Coletar);
+    CHECK(c.bando().chefe()->estado == EstadoBandido::Amarrado);
+}
+TEST_CASE("final: esconderijo valido mesmo com o lugar todo ocupado") {
+    for (auto& l : mapa().lugares) {
+        MundoColisao col;
+        col.adicionar({{l.x - l.raio - 2, -50, l.z - l.raio - 2}, {l.x + l.raio + 2, 300, l.z + l.raio + 2}});
+        Vec3f p = escolherEsconderijo(l, 7, ter(), col);
+        CHECK(distXZ(col.resolver(p, 1.5f), p) < 0.01f);
+        CHECK(ter().mascaraRio(p.x, p.z) < 0.2f);
+        CHECK(ter().dentroDoJogavel(p.x, p.z));
+    }
+}
