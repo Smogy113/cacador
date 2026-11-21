@@ -74,7 +74,7 @@ bool barra(const char* t, float& v, float mn, float mx, const char* fmt) {
 
 void Jogo::desenharDepuracao() {
     int W = GetScreenWidth(), H = GetScreenHeight();
-    const float pw = 960, ph = std::min(float(H) - 40.f, 690.f), x0 = (W - pw) / 2, y0 = (H - ph) / 2;
+    const float pw = 960, ph = std::min(float(H) - 40.f, 930.f), x0 = (W - pw) / 2, y0 = (H - ph) / 2;
     DrawRectangleRounded({x0, y0, pw, ph}, 0.02f, 6, FUNDO);
     DrawRectangleRoundedLinesEx({x0, y0, pw, ph}, 0.02f, 6, 1.f, comAlfa(OURO, 0.6f));
     texto(Fonte::Titulo, "Depuração", x0 + 24, y0 + 12, 34, MARFIM);
@@ -111,6 +111,17 @@ void Jogo::desenharDepuracao() {
     barra("Velocidade do tempo", dbg_.velTempo, 0.f, 60.f, "x%.1f");
     caixa("Congelar a hora", op_.congelarHora);
     caixa("Pausar o mundo", dbg_.pausado);
+    titulo("Tempo por parte (ms)");
+#if defined(PLATFORM_WEB)
+    info("Placa de vídeo", "sem medida na web");
+#else
+    for (int p = 0; p < N_PARTES; p++) {
+        std::snprintf(b, sizeof b, "%.2f", perfil_.ms(ParteQuadro(p)));
+        info(PerfilGPU::nome(ParteQuadro(p)), b);
+    }
+#endif
+    std::snprintf(b, sizeof b, "%.2f + %.2f", dbg_.msAtualizar, dbg_.msDesenharCPU);
+    info("Processador (lógica + desenho)", b);
 
     // ---------------- coluna 2: graficos ----------------
     px = x0 + 24 + 310, py = y0 + 56;

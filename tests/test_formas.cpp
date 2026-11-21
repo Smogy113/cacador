@@ -148,3 +148,20 @@ TEST_CASE("meshbuilder: vertices de parede levam o indice da forma") {
     CHECK_FALSE(fs[1].parede);
     for (size_t i = 0; i < m.verts().size(); i++) CHECK(m.verts()[i].forma == (i < n0 ? -1 : (i < n1 ? 0 : 1)));
 }
+TEST_CASE("meshbuilder: pecas presas levam o indice da forma fixa") {
+    std::vector<FormaCena> fs;
+    MeshBuilder m;
+    m.registrar(&fs);
+    m.tipo(TIPO_REBOCO);
+    m.caixa({0, 1, 0}, {4, 3, 2}, 0, {});
+    m.registrar(nullptr);
+    m.formaFixa(0);
+    size_t n0 = m.verts().size();
+    m.caixa({0, 1, 1.05f}, {0.2f, 3, 0.1f}, 0, {});  // viga
+    size_t n1 = m.verts().size();
+    m.formaFixa(-1);
+    m.caixa({5, 0, 0}, {1, 1, 1}, 0, {});
+    REQUIRE(fs.size() == 1);
+    for (size_t i = n0; i < n1; i++) CHECK(m.verts()[i].forma == 0);
+    for (size_t i = n1; i < m.verts().size(); i++) CHECK(m.verts()[i].forma == -1);
+}

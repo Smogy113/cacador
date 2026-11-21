@@ -22,6 +22,7 @@
 #include "render/grama.h"
 #include "render/mapa_tela.h"
 #include "render/lighting.h"
+#include "render/perfil.h"
 #include "render/props.h"
 #include "render/terrain_mesh.h"
 
@@ -149,7 +150,9 @@ private:
         bool aberto = false, pausado = false, invencivel = false, municaoInf = false;
         float velTempo = 1.f, velJogador = 1.f, fov = 60.f, raioGrama = -1.f, densGrama = -1.f;
         float msQuadro = 0;
+        float msAtualizar = 0, msDesenharCPU = 0;  // processador: logica e preparo do desenho
     } dbg_;
+    PerfilGPU perfil_;
     void desenharDepuracao();
     Vec3f direitaJogador() const { return {-std::cos(jogador_.yaw), 0, std::sin(jogador_.yaw)}; }
     Vec3f cabeloX_{}, cabeloV_{}, cabecaAntes_{}, velCabecaAntes_{};  // fisica do cabelo (mola)

@@ -138,6 +138,7 @@ struct Gerador {
         m.tipo(tipoParede(parede));
         caixa(m, f, {0, base + alt / 2, 0}, {w - 0.15f, alt, d - 0.15f}, parede);
         registrar(m, false);
+        if (formas) m.formaFixa(int(formas->size()) - 1);  // vigas usam a luz guardada da parede
         m.tipo(TIPO_MADEIRA);
         // vigas de madeira (enxaimel)
         for (float sx : {-0.5f, 0.5f})
@@ -159,6 +160,7 @@ struct Gerador {
             caixa(m, f, {-w / 4, base + 2.6f * 1.5f, d / 2 - 0.03f}, {0.12f, 2.9f, 0.08f}, MADEIRA_ESC);
         }
         m.tipo(TIPO_NORMAL);
+        m.formaFixa(-1);
         // telhado
         bool cumeeiraX = w >= d;
         float rw = (cumeeiraX ? w : d) + 0.9f, rd = (cumeeiraX ? d : w) + 1.0f, rh = std::min(rd * 0.45f, 3.4f);

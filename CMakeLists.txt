@@ -28,6 +28,8 @@ target_include_directories(core PUBLIC src)
 file(GLOB JOGO_SRC CONFIGURE_DEPENDS src/render/*.cpp src/game/*.cpp)
 add_executable(cacador src/main.cpp ${JOGO_SRC})
 target_link_libraries(cacador PRIVATE core raylib)
+# cronometro da placa (consultas de tempo do OpenGL pelo carregador que a raylib ja traz)
+target_include_directories(cacador PRIVATE ${raylib_SOURCE_DIR}/src)
 target_compile_definitions(cacador PRIVATE DATA_DIR="data")
 
 if(WIN32)

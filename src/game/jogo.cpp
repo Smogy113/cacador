@@ -212,6 +212,12 @@ Jogo::~Jogo() {
 }
 
 void Jogo::atualizar(float dt) {
+    double tA = GetTime();
+    struct Medir {  // tempo de processador da logica (painel F1)
+        double t;
+        float& saida;
+        ~Medir() { saida = saida * 0.9f + float(GetTime() - t) * 1000.f * 0.1f; }
+    } medir{tA, dbg_.msAtualizar};
     dt = limitarDt(dt);
     tempoTotal_ += dt;
     if (quadroAberto_ >= 0) {
@@ -439,12 +445,17 @@ void Jogo::trocarNivel(Nivel n) {
 }
 
 void Jogo::desenhar() {
+    double t0 = GetTime();
+    perfil_.ligar(dbg_.aberto);  // so mede com o painel F1 aberto
+    perfil_.comecarQuadro();
     luz_.comecarCena(cam_, relogio_, luzes_, jogador_.pos, tempo_);
     if (!luzParedesPronta_) {
         luz_.prepararLuzParedes(cenario_.formas());
         luzParedesPronta_ = true;
     }
+    perfil_.comecar(P_LUZ_PAREDES);
     luz_.atualizarLuzParedes({cam_.position.x, cam_.position.y, cam_.position.z});
+    perfil_.terminar();
     if (op_.estudio) {
         // luz principal vinda de cima, a frente e a esquerda do personagem
         Vec3f dirLuz = rotY(normalizar({0.5f, 0.62f, 0.62f}), jogador_.yaw);
@@ -461,6 +472,7 @@ void Jogo::desenhar() {
         EndMode3D();
         return;
     }
+    perfil_.comecar(P_SOMBRAS);
     if (luz_.usaSombras()) {
         float a = Iluminacao::AREA_SOMBRA * 1.2f;
         passePrincipal_ = false;  // sombras usam o modelo leve
@@ -477,6 +489,7 @@ void Jogo::desenhar() {
             luz_.terminarSombraPerto();
         }
     }
+    perfil_.terminar();
     {   // paredes com luz tracada: as construcoes e janelas mais proximas da camera
         Vec3f c{cam_.position.x, cam_.position.y, cam_.position.z};
         luz_.definirFormas(cenario_.formas(), formasPerto(cenario_.formas(), c, 70.f, 32), cenario_.janelas(), c);
@@ -485,26 +498,41 @@ void Jogo::desenhar() {
     ClearBackground(BLACK);
     BeginMode3D(cam_);
     float dv = luz_.efeitos().distanciaVisao;
+    perfil_.comecar(P_TERRENO);
     luz_.modoHorizonte(dv - 40.f);
     terrenoR_->desenharHorizonte(luz_.material());
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
+    perfil_.terminar();
+    perfil_.comecar(P_CONSTRUCOES);
     cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes());
+    perfil_.terminar();
+    perfil_.comecar(P_GRAMA);
     luz_.definirRaioGrama(grama_.raio());
     rlDisableBackfaceCulling();  // folhas vistas dos dois lados
     grama_.desenhar(cam_, luz_.material());
     rlEnableBackfaceCulling();
+    perfil_.terminar();
     trisAtores_ = 0;
     chamadasAtores_ = 0;
+    perfil_.comecar(P_ATORES);
     desenharAtores(luz_.material(), luz_.materialPele(), !luz_.usaSombras(), dv);
+    perfil_.terminar();
+    perfil_.comecar(P_CEU);
     luz_.desenharCeu(cam_);  // depois da cena: o ceu (e as nuvens) so e calculado onde aparece
+    perfil_.terminar();
+    perfil_.comecar(P_EFEITOS);
     desenharEfeitos();
+    perfil_.terminar();
     EndMode3D();
     {
         Vec3f heroi = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.3f : 1.5f, 0};
         luz_.definirFoco(len(heroi - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z}));
     }
+    perfil_.comecar(P_POS);
     if (luz_.usaPos()) luz_.terminarPos(cam_);
+    perfil_.terminar();
+    dbg_.msDesenharCPU = dbg_.msDesenharCPU * 0.9f + float(GetTime() - t0) * 1000.f * 0.1f;
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_ + grama_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_ + grama_.chamadas();
 }
