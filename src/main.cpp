@@ -40,6 +40,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--recompensa") o.jogo.recompensa = std::atoi(prox());
         else if (a == "--tiroteio") o.jogo.tiroteio = true;
         else if (a == "--mirar") o.jogo.mirar = true;
+        else if (a == "--abrir-mapa") o.jogo.abrirMapa = true;
         else if (a == "--pitch") o.jogo.pitch = (float)std::atof(prox());
         else if (a == "--mapa") o.jogo.arquivoMapa = prox();
         else if (a == "--montado") o.jogo.comecarMontado = true;

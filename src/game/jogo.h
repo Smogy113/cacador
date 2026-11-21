@@ -17,7 +17,9 @@
 #include "core/combat.h"
 #include "core/quality.h"
 #include "core/terrain.h"
+#include "core/rota.h"
 #include "render/grama.h"
+#include "render/mapa_tela.h"
 #include "render/lighting.h"
 #include "render/props.h"
 #include "render/terrain_mesh.h"
@@ -39,6 +41,7 @@ struct OpcoesJogo {
     int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
     bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
     bool mirar = false;    // segura a mira (screenshots)
+    bool abrirMapa = false;  // comeca com o mapa grande aberto (screenshots)
     float pitch = -999;    // inclinacao da camera em graus (screenshots; < 0 = olhando para cima)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
@@ -126,6 +129,14 @@ private:
     bool tiroOuvido_ = false;
     Sons sons_;
     Grama grama_;
+    // mapa na tela e rota ate o objetivo
+    std::unique_ptr<Navegador> nav_;
+    MapaTela mapaTela_;
+    bool mapaAberto_ = false;
+    std::vector<Vec3f> rota_;
+    Vec3f objetivoRota_{};
+    float tempoRota_ = 0;
+    void atualizarRota(float dt);
     Vec3f cabeloX_{}, cabeloV_{}, cabecaAntes_{}, velCabecaAntes_{};  // fisica do cabelo (mola)
     float yawCabeloAntes_ = 0;
     bool cabeloIniciado_ = false;

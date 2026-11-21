@@ -13,6 +13,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     cenario_.construir(mapa_, *terreno_, col_, 1337);
     luz_.carregar(op.nivel);
     grama_.iniciar(*terreno_, col_);
+    nav_ = std::make_unique<Navegador>(*terreno_, &mapa_);
+    mapaTela_.carregar(*terreno_, mapa_);
     configurarGrama();
 
     // comeca na entrada de Pedrabranca, olhando para a ponte
@@ -104,6 +106,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     grama_.atualizar(jogador_.pos, 100000);
     for (int i = 0; i < 300; i++) populacao_.atualizar(0.1f, relogio_, *terreno_, col_, {1e4f, 0, 1e4f});
     if (op.tiroteio) prepararTiroteio();
+    mapaAberto_ = op.abrirMapa;
+    atualizarRota(0.f);
     if (!op.semEntrada) DisableCursor();
 }
 
@@ -161,6 +165,12 @@ void Jogo::desenharInterface() {
         }
         desenharHud(vida_.fracao(), arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_);
         desenharMensagem(mensagem_, mensagemT_);
+        if (!mapaAberto_)
+            mapaTela_.desenharMini(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rig_.yaw, rota_,
+                                   cacada_.ativa(), objetivoRota_);
+        else
+            mapaTela_.desenharCheio(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rota_, cacada_.ativa(),
+                                    objetivoRota_);
         if (cacada_.podeAmarrar(jogador_.pos)) desenharDica(amarrarT_ > 0 ? "Amarrando..." : "Segure E  -  Amarrar");
         else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E  -  Entregar ao xerife");
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E  -  Puxar pela corda");
@@ -189,6 +199,7 @@ void Jogo::desenharInterface() {
 
 Jogo::~Jogo() {
     descarregarCombate();
+    mapaTela_.descarregar();
     grama_.descarregar();
     sons_.descarregar();
     for (auto& m : roupasNpc_) m.descarregar();
@@ -210,6 +221,14 @@ void Jogo::atualizar(float dt) {
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) aceitarCartaz(quadroAberto_, cartazSel_);
         if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) quadroAberto_ = -1;
         if (!op_.congelarHora) relogio_.avancar(dt);
+        return;
+    }
+    // mapa grande (M): o jogo continua, o jogador fica parado
+    if (!op_.semEntrada && IsKeyPressed(KEY_M) && !pausado_) mapaAberto_ = !mapaAberto_;
+    if (mapaAberto_) {
+        if (IsKeyPressed(KEY_ESCAPE)) mapaAberto_ = false;
+        if (!op_.congelarHora) relogio_.avancar(dt);
+        atualizarRota(dt);
         return;
     }
     // pausa: Esc, ou a janela perdeu o foco
@@ -290,6 +309,7 @@ void Jogo::atualizar(float dt) {
     }
     atualizarCombate(dt, e);
     atualizarCabelo(dt);
+    atualizarRota(dt);
     sons_.ambiente(dt, relogio_.intensidadeTochas());
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
@@ -498,4 +518,29 @@ void Jogo::atualizarCabelo(float dt) {
     cabeloX_.y = std::clamp(cabeloX_.y, -0.03f, 0.04f);
     float l = len(cabeloX_);
     if (l > 0.11f) cabeloX_ = cabeloX_ * (0.11f / l);
+}
+
+// Rota ate o objetivo da recompensa (esconderijo -> procurado -> xerife), recalculada quando o
+// objetivo se move, quando o jogador sai do caminho ou a cada 2 s.
+void Jogo::atualizarRota(float dt) {
+    if (!cacada_.ativa() || !nav_) {
+        rota_.clear();
+        return;
+    }
+    Vec3f obj = cacada_.objetivo(jogador_.pos, xerifes_);
+    tempoRota_ -= dt;
+    float longe = 1e9f;  // distancia do jogador ao caminho atual
+    for (size_t i = 1; i < rota_.size(); i++) {
+        Vec3f a = rota_[i - 1], b = rota_[i], ab = b - a, ap = jogador_.pos - a;
+        float t = std::clamp((ap.x * ab.x + ap.z * ab.z) / std::max(1e-3f, ab.x * ab.x + ab.z * ab.z), 0.f, 1.f);
+        longe = std::min(longe, std::hypot(ap.x - ab.x * t, ap.z - ab.z * t));
+    }
+    bool mudou = std::hypot(obj.x - objetivoRota_.x, obj.z - objetivoRota_.z) > 12.f;
+    if (rota_.empty() || mudou || longe > 20.f || tempoRota_ <= 0) {
+        rota_ = nav_->rota(jogador_.pos, obj);
+        objetivoRota_ = obj;
+        tempoRota_ = 2.f;
+    } else if (!rota_.empty()) {
+        rota_.front() = jogador_.pos;  // a linha sai sempre de onde o jogador esta
+    }
 }
