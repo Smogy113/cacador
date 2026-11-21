@@ -34,6 +34,8 @@ struct Gerador {
     std::map<int, MeshBuilder> constr;  // por pedaco
     int n;
     std::vector<AABB> ocupado;          // pegadas ja usadas (evita sobrepor)
+    std::vector<FormaCena>* formas = nullptr;   // construcoes como formas exatas (luz tracada)
+    std::vector<JanelaLuz>* janelas = nullptr;
 
     float r01() { return aleatorio01(rng); }
     float r(float a, float b) { return a + (b - a) * r01(); }
@@ -84,6 +86,14 @@ struct Gerador {
     }
     void ocupar(const Frame& f, float w, float d) { ocupado.push_back(pegada(f, w, d)); }
 
+    // registra no "formas" so as pecas grandes que bloqueiam luz (parede, alicerce, telhado, chamine, muros)
+    void registrar(MeshBuilder& m, bool sim) { m.registrar(sim ? formas : nullptr); }
+    static float tipoParede(Rgb c) {
+        if (std::abs(c.r - c.b) < 0.12f) return TIPO_PEDRA;  // cinza
+        if (c.r + c.g + c.b > 1.8f) return TIPO_REBOCO;      // claro
+        return TIPO_MADEIRA;
+    }
+
     // ---------- pecas ----------
     void tocha(Vec3f base, float altura = 2.2f) {
         MeshBuilder& m = b(base);
@@ -107,6 +117,10 @@ struct Gerador {
         chama(p + Vec3f{0, 0.2f, 0}, 0.8f);
     }
     void janela(MeshBuilder& m, const Frame& f, float x, float y, float z, float rotExtra = 0) {
+        if (janelas) {
+            Vec3f nl = rotExtra != 0 ? Vec3f{x >= 0 ? 1.f : -1.f, 0, 0} : Vec3f{0, 0, z >= 0 ? 1.f : -1.f};
+            janelas->push_back({f.P(x, y, z), rotY(nl, f.rot)});
+        }
         caixa(m, f, {x, y, z}, {0.8f, 0.85f, 0.08f}, MADEIRA_ESC, rotExtra);
         m.tipo(TIPO_JANELA);
         Vec3f off = rotY({0, 0, 0.03f}, rotExtra);
@@ -118,8 +132,13 @@ struct Gerador {
     void casa(const Frame& f, float w, float d, int andares, Rgb parede, Rgb telhado, bool placa = false, Rgb corPlaca = {0.6f, 0.2f, 0.15f}) {
         MeshBuilder& m = b(f.o);
         float base = 1.0f, alt = 2.6f * andares;
+        registrar(m, true);
+        m.tipo(TIPO_PEDRA);
         caixa(m, f, {0, base / 2 - 1.0f, 0}, {w, base + 2.0f, d}, PEDRA);  // alicerce (enterrado)
+        m.tipo(tipoParede(parede));
         caixa(m, f, {0, base + alt / 2, 0}, {w - 0.15f, alt, d - 0.15f}, parede);
+        registrar(m, false);
+        m.tipo(TIPO_MADEIRA);
         // vigas de madeira (enxaimel)
         for (float sx : {-0.5f, 0.5f})
             for (float sz : {-0.5f, 0.5f}) caixa(m, f, {sx * (w - 0.1f), base + alt / 2, sz * (d - 0.1f)}, {0.22f, alt, 0.22f}, MADEIRA_ESC);
@@ -139,12 +158,15 @@ struct Gerador {
         if (andares > 1) {
             caixa(m, f, {-w / 4, base + 2.6f * 1.5f, d / 2 - 0.03f}, {0.12f, 2.9f, 0.08f}, MADEIRA_ESC);
         }
+        m.tipo(TIPO_NORMAL);
         // telhado
         bool cumeeiraX = w >= d;
         float rw = (cumeeiraX ? w : d) + 0.9f, rd = (cumeeiraX ? d : w) + 1.0f, rh = std::min(rd * 0.45f, 3.4f);
+        registrar(m, true);
         m.prisma(f.P(0, base + alt + rh / 2, 0), {rw, rh, rd}, f.rot + (cumeeiraX ? 0 : PI / 2), telhado);
         // chamine
         caixa(m, f, {w * 0.3f, base + alt + rh * 0.6f, -d * 0.15f}, {0.7f, rh + 0.6f, 0.7f}, PEDRA_ESC);
+        registrar(m, false);
         // porta
         caixa(m, f, {w * 0.18f, base + 1.05f, d / 2 + 0.02f}, {1.1f, 2.1f, 0.12f}, MADEIRA * 0.8f);
         caixa(m, f, {w * 0.18f, base + 2.2f, d / 2 + 0.04f}, {1.4f, 0.18f, 0.16f}, MADEIRA_ESC);
@@ -191,7 +213,9 @@ struct Gerador {
         Vec3f m = (a + c) * 0.5f;
         float y = std::min(h(a.x, a.z), h(c.x, c.z));
         MeshBuilder& mb = b(m);
+        registrar(mb, true);
         mb.caixa({m.x, y + alt / 2 - 1.f, m.z}, {esp, alt + 2.f, l}, ang, cor);
+        registrar(mb, false);
         if (ameias) {
             int n = int(l / 1.6f);
             for (int k = 0; k < n; k++) {
@@ -210,7 +234,9 @@ struct Gerador {
 
     void torre(Vec3f p, float raio, float alt, Rgb cor, bool telhado, Rgb corTelhado = ARDOSIA) {
         MeshBuilder& m = b(p);
+        registrar(m, true);
         m.cilindro(p + Vec3f{0, -2, 0}, raio, alt + 2, 8, cor);
+        registrar(m, false);
         m.cilindro(p + Vec3f{0, alt, 0}, raio + 0.3f, 0.6f, 8, cor * 0.92f);
         if (telhado) m.cone(p + Vec3f{0, alt + 0.6f, 0}, raio + 0.6f, raio * 2.2f, 8, corTelhado);
         col.adicionar({{p.x - raio, p.y - 2, p.z - raio}, {p.x + raio, p.y + alt, p.z + raio}});
@@ -388,10 +414,16 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
                 MeshBuilder& m = g.b(p);
                 for (float sx : {-0.5f, 0.f, 0.5f})
                     for (float sz : {-0.5f, 0.5f}) g.caixa(m, f, {sx * e.w, 1.6f, sz * e.d}, {0.25f, 3.2f, 0.25f}, MADEIRA_ESC);
+                g.registrar(m, true);
+                m.tipo(TIPO_MADEIRA);
                 g.caixa(m, f, {0, 1.5f, -e.d / 2}, {e.w, 3.0f, 0.2f}, MADEIRA);
                 for (float sx : {-0.5f, 0.5f}) g.caixa(m, f, {sx * e.w, 1.5f, 0}, {0.2f, 3.0f, e.d}, MADEIRA);
+                m.tipo(TIPO_NORMAL);
+                g.registrar(m, false);
                 for (int b2 = 1; b2 < 4; b2++) g.caixa(m, f, {-e.w / 2 + b2 * e.w / 4, 0.7f, -e.d / 4}, {0.12f, 1.4f, e.d / 2}, MADEIRA_ESC);
+                g.registrar(m, true);
                 m.prisma(f.P(0, 3.8f, 0), {e.w + 0.8f, 1.6f, e.d + 1.0f}, f.rot, PALHA);
+                g.registrar(m, false);
                 g.caixa(m, f, {e.w * 0.3f, 0.4f, -e.d * 0.3f}, {1.4f, 0.8f, 1.0f}, PALHA * 0.9f);  // feno
                 g.colisaoRet(f, 0, -e.d / 2, e.w, 0.4f, 3);
                 g.colisaoRet(f, -e.w / 2, 0, 0.4f, e.d, 3);
@@ -841,6 +873,10 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
     n_ = int(std::ceil(2 * Terreno::META / TAM));
     p_.assign(n_ * n_, Pedaco{});
     Gerador g{t, col, luzes, semente, {}, n_, {}};
+    formas_.clear();
+    janelas_.clear();
+    g.formas = &formas_;
+    g.janelas = &janelas_;
     rotasNPC.clear();
     for (auto& l : mapa.lugares) {
         std::vector<Vec3f> rota;

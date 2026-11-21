@@ -57,3 +57,12 @@ TEST_CASE("formas: sem registrar nao muda nada") {
     REQUIRE(a.verts().size() == b.verts().size());
     for (size_t i = 0; i < a.verts().size(); i++) CHECK(len(a.verts()[i].pos - b.verts()[i].pos) == 0.f);
 }
+TEST_CASE("formas perto: ordem e limite") {
+    std::vector<FormaCena> fs;
+    for (int i = 9; i >= 0; i--) fs.push_back({TipoForma::Caixa, {float(i) * 5.f, 0, 0}, {1, 1, 1}, 0, {}});  // fora de ordem
+    auto a = formasPerto(fs, {-3, 0, 0}, 100.f, 4);
+    REQUIRE(a.size() == 4);
+    for (int k = 0; k < 4; k++) CHECK(fs[a[k]].centro.x == doctest::Approx(5.f * k));
+    CHECK(formasPerto(fs, {-2.9f, 0, 0}, 100.f, 4) == a);                // anda 10 cm: mesma lista
+    CHECK(formasPerto(fs, {-3, 0, 0}, 8.f, 32).size() == 2);             // raio corta
+}

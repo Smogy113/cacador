@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "core/collision.h"
+#include "core/formas.h"
 #include "core/places.h"
 #include "core/terrain.h"
 #include "raylib.h"
@@ -39,6 +40,9 @@ public:
     size_t triangulos() const { return tris_; }
     int chamadas() const { return chamadas_; }
     size_t totalArvores() const;
+    // construcoes como formas exatas e janelas (luz tracada nas paredes)
+    const std::vector<FormaCena>& formas() const { return formas_; }
+    const std::vector<JanelaLuz>& janelas() const { return janelas_; }
 
 private:
     struct Pedaco {
@@ -51,6 +55,8 @@ private:
     };
     void construirPerto(Pedaco& p);
     std::vector<Pedaco> p_;
+    std::vector<FormaCena> formas_;
+    std::vector<JanelaLuz> janelas_;
     const Terreno* ter_ = nullptr;
     const MundoColisao* col_ = nullptr;
     int n_ = 0;

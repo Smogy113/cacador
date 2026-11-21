@@ -8,6 +8,8 @@ class Terreno;
 
 // Tipo de material (vai para o shader): normal, agua, chama (sempre brilha), janela (brilha a noite)
 constexpr float TIPO_NORMAL = 0.f, TIPO_AGUA = 1.f, TIPO_CHAMA = 2.f, TIPO_JANELA = 3.f;
+// paredes (relevo e luz tracada no shader); 4 = grama
+constexpr float TIPO_REBOCO = 5.f, TIPO_MADEIRA = 6.f, TIPO_PEDRA = 7.f;
 
 struct Vert {
     Vec3f pos, normal;

@@ -13,6 +13,10 @@ struct FormaCena {
     float rotY;   // como o MeshBuilder: girarY
     Rgb cor;
 };
+// janela (acende a noite): centro e direcao para fora da parede
+struct JanelaLuz {
+    Vec3f pos, normal;
+};
 // Distancia com sinal (< 0 dentro). Caixa e cilindro exatos; prisma: limite inferior (nunca maior que a real).
 float distanciaForma(const FormaCena& f, Vec3f p);
 float distanciaCena(const std::vector<FormaCena>& fs, Vec3f p);
