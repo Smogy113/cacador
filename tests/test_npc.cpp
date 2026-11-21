@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <cmath>
 #include <memory>
 #include "core/npc.h"
 #include "core/terrain.h"
@@ -73,4 +74,24 @@ TEST_CASE("determinístico pela semente") {
         b.atualizar(0.05f, DayClock(12), planoN(), col, {0, 0, 0});
     }
     for (size_t k = 0; k < 20; k++) CHECK(len(a.npcs()[k].corpo.pos - b.npcs()[k].corpo.pos) < 1e-5f);
+}
+TEST_CASE("exclusao: nenhum morador ativo a menos de 80 m; sem exclusao todos voltam") {
+    std::vector<std::vector<Vec3f>> gs;
+    std::vector<Vec3f> perto, longe;
+    for (int k = 0; k < 6; k++) perto.push_back({float(k * 5), 0, 0});
+    for (int k = 0; k < 6; k++) longe.push_back({200.f + k * 5, 0, 0});
+    Populacao p({perto, longe}, 3, 20);
+    MundoColisao col;
+    DayClock dia(12);
+    p.definirExclusao({10, 0, 0}, RAIO_EXCLUSAO);
+    for (int i = 0; i < 30 * 30; i++) {
+        p.atualizar(1 / 30.f, dia, planoN(), col, {300, 0, 300});
+        for (auto& n : p.npcs())
+            if (n.ativo) REQUIRE(std::hypot(n.corpo.pos.x - 10, n.corpo.pos.z) >= RAIO_EXCLUSAO);
+    }
+    CHECK(p.ativos() > 0);
+    CHECK(p.ativos() < 20);
+    p.definirExclusao({}, 0);
+    p.atualizar(1 / 30.f, dia, planoN(), col, {300, 0, 300});
+    CHECK(p.ativos() == 20);
 }

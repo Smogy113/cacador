@@ -81,9 +81,22 @@ void Populacao::passo(Npc& n, float dt, bool deveFicar, const Terreno& t, const 
     }
 }
 
+bool Populacao::excluido(const Npc& n) const {
+    if (raioEx_ <= 0) return false;
+    auto dentro = [&](Vec3f p) { return std::hypot(p.x - centroEx_.x, p.z - centroEx_.z) < raioEx_; };
+    if (dentro(n.corpo.pos)) return true;
+    for (auto& p : n.rota)
+        if (dentro(p)) return true;
+    return false;
+}
+
 void Populacao::atualizar(float dt, const DayClock& c, const Terreno& t, const MundoColisao& col, Vec3f jog) {
     bool rua = hora_de_rua(c);
     for (auto& n : npcs_) {
+        if (excluido(n)) {  // fugiu do bando: fora de cena ate a exclusao acabar
+            n.ativo = false;
+            continue;
+        }
         bool deveFicar = rua || n.noturno;
         float dj = std::hypot(n.corpo.pos.x - jog.x, n.corpo.pos.z - jog.z);
         if (!n.ativo) {
