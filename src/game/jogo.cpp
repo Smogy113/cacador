@@ -1,4 +1,5 @@
 #include "game/jogo.h"
+#include <algorithm>
 #include <cmath>
 #include "game/ui.h"
 #include "rlgl.h"
@@ -35,6 +36,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.equipamento = !op.estudio;
     r.heroi = true;
     r.revolver = !op.estudio;
+    r.cabeloLongo = true;
     if (op.estudio) r.chapeuAba = false;
     modeloJogador_.carregar(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
     // moradores: roupas variadas
@@ -287,6 +289,7 @@ void Jogo::atualizar(float dt) {
         }
     }
     atualizarCombate(dt, e);
+    atualizarCabelo(dt);
     sons_.ambiente(dt, relogio_.intensidadeTochas());
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
@@ -327,10 +330,14 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         const Cavalo& c = cavalos_[montadoEm_];
         Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_ + float(montadoEm_) * 3.7f);
         Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc);
+        luz_.definirCabelo(rotY(cabeloX_, -c.corpo.yaw));
         modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd);
+        luz_.definirCabelo({});
         return;
     }
+    luz_.definirCabelo(rotY(cabeloX_, -jogador_.yaw));
     modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd);
+    luz_.definirCabelo({});
 }
 
 void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax) {
@@ -458,4 +465,37 @@ void Jogo::configurarGrama() {
     if (op_.nivel == Nivel::Baixo) grama_.configurar(0, 0);
     else if (op_.nivel == Nivel::Medio) grama_.configurar(22.f, 12.f);
     else grama_.configurar(34.f, 20.f);
+}
+
+// Fisica do cabelo: uma mola amortecida puxada pela inercia da cabeca (arrancar, frear, pular no
+// galope), pelos giros (o cabelo abre para fora) e por um vento leve. O shader desloca a ponta das mechas.
+void Jogo::atualizarCabelo(float dt) {
+    float yaw = montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw;
+    Vec3f cab = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.5f : 1.7f, 0};
+    if (montadoEm_ >= 0) cab.y += 0.06f * std::sin(cavalos_[montadoEm_].passada * 2.f);  // sobe e desce no trote
+    else cab.y += 0.03f * std::sin(passada_ * 2.f) * std::min(1.f, jogador_.vel);
+    if (!cabeloIniciado_ || dt <= 0) {
+        cabecaAntes_ = cab;
+        velCabecaAntes_ = {};
+        yawCabeloAntes_ = yaw;
+        cabeloIniciado_ = true;
+        return;
+    }
+    Vec3f vel = (cab - cabecaAntes_) * (1.f / dt);
+    if (len(vel) > 30.f) vel = {};  // teleporte
+    Vec3f acel = (vel - velCabecaAntes_) * (1.f / dt);
+    if (len(acel) > 60.f) acel = acel * (60.f / len(acel));
+    float giro = std::atan2(std::sin(yaw - yawCabeloAntes_), std::cos(yaw - yawCabeloAntes_)) / dt;
+    cabecaAntes_ = cab;
+    velCabecaAntes_ = vel;
+    yawCabeloAntes_ = yaw;
+    Vec3f direita{-std::cos(yaw), 0, std::sin(yaw)};
+    Vec3f alvo = acel * -0.01f + vel * -0.006f + direita * (giro * 0.02f) +
+                 Vec3f{std::sin(tempo_ * 1.3f) * 0.008f, 0, std::cos(tempo_ * 0.9f) * 0.006f};
+    Vec3f a = (alvo - cabeloX_) * 80.f - cabeloV_ * 8.f;
+    cabeloV_ = cabeloV_ + a * dt;
+    cabeloX_ = cabeloX_ + cabeloV_ * dt;
+    cabeloX_.y = std::clamp(cabeloX_.y, -0.03f, 0.04f);
+    float l = len(cabeloX_);
+    if (l > 0.11f) cabeloX_ = cabeloX_ * (0.11f / l);
 }

@@ -438,3 +438,4 @@ void Iluminacao::terminarSombraPerto() {
     SetShaderValue(pele_, GetShaderLocation(pele_, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
 }
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
+void Iluminacao::definirCabelo(Vec3f d) { SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloDesl"), &d, SHADER_UNIFORM_VEC3); }

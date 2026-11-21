@@ -213,7 +213,7 @@ void main() {
         vec3 pr = posRep;
         if (m > 23.5) {          // cartao de pelo: ~7 fios por fita, finos na ponta, raiz escura
             float u = cor.a, vv = tanRep.w;
-            float N = 9.0;
+            float N = m > 24.25 ? 15.0 : 9.0;  // cabelo comprido: fios mais finos
             float fio = floor(u * N);
             float dentro = fract(u * N);
             vec3 sem = floor(posRep * 350.0);
@@ -605,6 +605,8 @@ mat4 matrizPele() {
 )"
 
 const char* VS_PELE = CORPO_SKIN R"(
+uniform vec3 cabeloDesl;   // fisica do cabelo: deslocamento da ponta (espaco do modelo)
+uniform float tempoVento;
 VARY vec4 tanRep;
 VARY vec3 tanMundo;
 VARY vec3 posRep;
@@ -619,6 +621,11 @@ VARY vec2 extra;
 void main() {
     mat4 S = matrizPele();
     vec4 pl = S * vec4(vertexPosition, 1.0);
+    if (vertexTexCoord.y > 24.25 && vertexTexCoord.y < 24.75) {  // cabelo comprido: a raiz fica, a ponta balanca
+        float w = pow(vertexTangent.w, 1.6);
+        pl.xyz += cabeloDesl * w;
+        pl.x += sin(tempoVento * 2.3 + vertexPosition.y * 40.0) * 0.004 * w;  // brisa
+    }
     vec4 p = matModel * pl;
     posMundo = p.xyz;
     mat3 mn = mat3(matModel) * mat3(S);

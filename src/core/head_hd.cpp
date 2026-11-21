@@ -289,6 +289,59 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
         faixa(cil, vis.cabelo * 0.45f, true);
         faixa(cilB, vis.cabelo * 0.45f, false);
     }
+
+    // ---- cabelo comprido: mechas que saem de baixo do chapeu e caem ate a nuca e os ombros ----
+    // Cada mecha e uma fita de fios (material de cartao 24,5): a raiz segue o cranio e, abaixo da parte
+    // mais larga, cai reta (gravidade). A ponta balanca no shader com a fisica calculada no jogo.
+    if (vis.cabeloLongo) {
+        const float CY = 1.7155f, CZ = -0.014f, RX = 0.0765f, RY = 0.0865f, RZ = 0.099f;
+        auto raioCranio = [&](float y) { float t = (y - CY) / RY; return t >= 1.f ? 0.f : std::sqrt(std::max(0.f, 1.f - t * t)); };
+        uint32_t rng = 9137u;
+        auto rnd = [&]() { rng = rng * 1664525u + 1013904223u; return float((rng >> 8) & 0xFFFF) / 65535.f; };
+        const int LINHAS = 9;
+        for (int camada = 0; camada < 2; camada++) {
+            int nMechas = camada == 0 ? 30 : 40;
+            for (int k2 = 0; k2 < nMechas; k2++) {
+                // angulo em volta da cabeca (0 = frente): so atras das orelhas e na nuca
+                float th = (100.f + 160.f * (k2 + 0.5f * rnd()) / nMechas) * 3.14159f / 180.f;
+                float yRaiz = 1.742f + 0.008f * rnd();
+                float yFim = (camada == 0 ? 1.585f : 1.545f) - 0.03f * rnd();
+                float larg = (camada == 0 ? 0.022f : 0.026f) * (0.8f + 0.4f * rnd());
+                float fase = rnd() * 6.2831f, onda = 0.004f + 0.004f * rnd();
+                Vec3f radial{std::sin(th), 0, std::cos(th)}, tang{std::cos(th), 0, -std::sin(th)};
+                size_t b0 = m.v.size();
+                if (b0 + LINHAS * 2 >= 64000) break;
+                float rMax = 0;
+                for (int r = 0; r < LINHAS; r++) {
+                    float t = float(r) / (LINHAS - 1);
+                    float y = lerp(yRaiz, yFim, std::pow(t, 0.9f));
+                    rMax = std::max(rMax, raioCranio(y));  // depois da parte mais larga, cai reto
+                    float volume = (camada == 0 ? 0.004f : 0.009f) + 0.012f * t;
+                    Vec3f c{radial.x * (RX * rMax + volume), y, CZ + radial.z * (RZ * rMax + volume)};
+                    c = c + tang * (std::sin(t * 5.f + fase) * onda);
+                    float w = larg * (1.f - 0.55f * t);  // a ponta afina (mecha)
+                    for (int q = 0; q < 2; q++) {
+                        VertPele v;
+                        v.pos = W(c + tang * (q ? w : -w));
+                        v.cor = vis.cabelo * (camada == 0 ? 0.7f : 1.f);
+                        v.material = MAT_CARTAO + 0.5f;  // cabelo com fisica
+                        v.ao = camada == 0 ? 0.6f : 0.85f;
+                        v.pelos = float(q);
+                        v.tv = t;
+                        v.tang = {0, -1, 0};
+                        v.compPelo = 0.2f;
+                        v.normal = Wn(radial);
+                        ossos(1.7f, v);
+                        m.v.push_back(v);
+                    }
+                }
+                for (int r = 0; r + 1 < LINHAS; r++) {
+                    uint16_t a = uint16_t(b0 + r * 2), b2 = uint16_t(a + 1), c = uint16_t(a + 3), d = uint16_t(a + 2);
+                    m.idx.insert(m.idx.end(), {a, b2, c, a, c, d, a, c, b2, a, d, c});  // dos dois lados
+                }
+            }
+        }
+    }
 }
 
 void cartoesDePelo(MalhaPele& m, Rgb corPelo) {

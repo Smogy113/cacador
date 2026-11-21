@@ -125,6 +125,10 @@ private:
     bool tiroOuvido_ = false;
     Sons sons_;
     Grama grama_;
+    Vec3f cabeloX_{}, cabeloV_{}, cabecaAntes_{}, velCabecaAntes_{};  // fisica do cabelo (mola)
+    float yawCabeloAntes_ = 0;
+    bool cabeloIniciado_ = false;
+    void atualizarCabelo(float dt);
     void configurarGrama();
     int passoAntes_ = 0, cascoAntes_ = 0;
     EstadoBandido estadoChefeAntes_ = EstadoBandido::Vigiando;

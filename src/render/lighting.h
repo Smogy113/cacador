@@ -27,7 +27,8 @@ public:
     Material& material() { return mat_; }
     const Efeitos& efeitos() const { return ef_; }
     Nivel nivel() const { return nivel_; }
-    void definirRaioGrama(float r);  // grama densa: some depois desse raio
+    void definirRaioGrama(float r);
+    void definirCabelo(Vec3f deslocamentoModelo);  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
     bool usaSombras() const { return ef_.sombras && sombraOk_; }
