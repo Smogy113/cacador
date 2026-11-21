@@ -11,6 +11,7 @@
 #include "core/npc.h"
 #include "game/actors.h"
 #include "core/places.h"
+#include "core/bounty.h"
 #include "core/quality.h"
 #include "core/terrain.h"
 #include "render/lighting.h"
@@ -26,6 +27,7 @@ struct OpcoesJogo {
     bool semEntrada = false;  // modo screenshot
     bool comecarMontado = false;
     float girarCamera = 0;  // graus (so para screenshots)
+    bool abrirQuadro = false;
     std::string arquivoMapa = "data/lugares.txt";
 };
 
@@ -59,6 +61,9 @@ private:
     std::vector<ModeloCavalo> modelosCavalo_;
     int montadoEm_ = -1;
     int cavaloPerto_ = -1;
+    std::vector<std::vector<Cartaz>> cartazes_;  // um conjunto por quadro
+    int quadroPerto_ = -1, quadroAberto_ = -1, cartazSel_ = 0;
+    float tempoTotal_ = 0;
     SombraBolha sombra_;
     float passada_ = 0;
     bool pausado_ = false, sair_ = false;

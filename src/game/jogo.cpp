@@ -1,5 +1,6 @@
 #include "game/jogo.h"
 #include <cmath>
+#include "game/ui.h"
 
 Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     mapa_ = carregarMapa(op.arquivoMapa);
@@ -43,6 +44,13 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
             roupasNpc_.back().carregar(rp);
         }
         populacao_ = Populacao(cenario_.rotasNPC, 1337, 60);
+    }
+    for (size_t q = 0; q < cenario_.quadros.size(); q++) cartazes_.push_back(gerarCartazes(77 + uint32_t(q) * 13, 6, mapa_));
+    if (op.abrirQuadro && !cenario_.quadros.empty()) {
+        const Quadro& q = cenario_.quadros[0];
+        jogador_.pos = q.pos;
+        jogador_.pos.y = terreno_->altura(q.pos.x, q.pos.z);
+        quadroAberto_ = 0;
     }
     // cavalos nos estabulos
     const Rgb pelos[] = {{0.40f, 0.25f, 0.16f}, {0.16f, 0.13f, 0.12f}, {0.78f, 0.74f, 0.68f}, {0.6f, 0.42f, 0.24f}};
@@ -93,16 +101,15 @@ void Jogo::atualizarCamera(float dt, const Entrada& e) {
     cam_.target = {o.x, o.y, o.z};
 }
 
-static void dica(const char* t) {
-    int w = GetScreenWidth(), h = GetScreenHeight();
-    int tw = MeasureText(t, 22);
-    DrawRectangle(w / 2 - tw / 2 - 14, h - 92, tw + 28, 38, {20, 16, 12, 170});
-    DrawText(t, w / 2 - tw / 2, h - 84, 22, {240, 225, 195, 255});
-}
-
 void Jogo::desenharInterface() {
+    desenharAvisos(mapa_.erros, tempoTotal_);
+    if (quadroAberto_ >= 0) {
+        desenharQuadro(cartazes_[quadroAberto_], cartazSel_, semAcentos(nomeLegivel(cenario_.quadros[quadroAberto_].lugar)));
+        return;
+    }
     if (!pausado_) {
-        if (cavaloPerto_ >= 0) dica("E  -  Montar");
+        if (quadroPerto_ >= 0) desenharDica("E  -  Ver recompensas");
+        else if (cavaloPerto_ >= 0) desenharDica("E  -  Montar");
         return;
     }
     int w = GetScreenWidth(), h = GetScreenHeight();
@@ -125,6 +132,15 @@ Jogo::~Jogo() {
 
 void Jogo::atualizar(float dt) {
     dt = limitarDt(dt);
+    tempoTotal_ += dt;
+    if (quadroAberto_ >= 0) {
+        int n = int(cartazes_[quadroAberto_].size());
+        if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) cartazSel_ = (cartazSel_ + 1) % n;
+        if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) cartazSel_ = (cartazSel_ + n - 1) % n;
+        if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) quadroAberto_ = -1;
+        if (!op_.congelarHora) relogio_.avancar(dt);
+        return;
+    }
     // pausa: Esc, ou a janela perdeu o foco
     if (!op_.semEntrada) {
         if (IsKeyPressed(KEY_ESCAPE)) {
@@ -159,6 +175,14 @@ void Jogo::atualizar(float dt) {
         passada_ += dt * jogador_.vel * 3.2f;
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
+        quadroPerto_ = -1;
+        for (size_t q = 0; q < cenario_.quadros.size(); q++)
+            if (std::hypot(cenario_.quadros[q].pos.x - jogador_.pos.x, cenario_.quadros[q].pos.z - jogador_.pos.z) < 2.2f) quadroPerto_ = int(q);
+        if (e.interagir && quadroPerto_ >= 0) {
+            quadroAberto_ = quadroPerto_;
+            cartazSel_ = 0;
+            e.interagir = false;
+        }
         if (e.interagir && cavaloPerto_ >= 0 && tentarMontar(cavalos_[cavaloPerto_], jogador_)) {
             montadoEm_ = cavaloPerto_;
             rig_.distAlvo = 6.f;
