@@ -207,7 +207,10 @@ void Iluminacao::carregar(Nivel nivel) {
         for (auto* t : {&cena_, &meiaA_, &meiaB_, &raiosRT_}) SetTextureFilter(t->texture, TEXTURE_FILTER_BILINEAR);
         posOk_ = cena_.id > 0;
     }
-    if (cabecaOk_) setF(cabeca_, "passosMax", nivel_ == Nivel::Alto ? 64.f : 40.f);
+    if (cabecaOk_) {
+        setF(cabeca_, "passosMax", nivel_ == Nivel::Alto ? 64.f : 40.f);
+        setF(cabeca_, "economico", nivel_ == Nivel::Alto ? 0.f : 1.f);
+    }
 }
 
 void Iluminacao::descarregar() {

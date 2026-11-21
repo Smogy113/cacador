@@ -214,7 +214,10 @@ uniform vec4 volInfo;    // h, hCor, colunas (dist), colunas (cor)
 uniform vec4 atlasTam;   // largura e altura dos dois atlas
 uniform vec3 escalaRep;  // escultura -> modelo
 uniform float passosMax;
+uniform float economico;  // Medio: sem sombra propria e sem translucidez
 mat4 Mc, Mp, iC, iP;
+mat3 mnG;   // repouso -> mundo (normais)
+vec3 nqG;   // normal na escultura
 mat4 inversaR(mat4 m) {
     mat3 rt = transpose(mat3(m));
     return mat4(vec4(rt[0], 0.0), vec4(rt[1], 0.0), vec4(rt[2], 0.0), vec4(-(rt * m[3].xyz), 1.0));
@@ -295,6 +298,8 @@ void marchar() {
     nRep = normalize(nq / escalaRep);
     float w = pesoCab(q.y);
     mat3 mn = mat3(matModel) * (mat3(Mc) * w + mat3(Mp) * (1.0 - w));
+    mnG = mn;
+    nqG = nq;
     mc0 = mn[0]; mc1 = mn[1]; mc2 = mn[2];
     posMundo = (matModel * vec4(p, 1.0)).xyz;
     normalMundo = normalize(mn * nRep);
@@ -314,6 +319,28 @@ void marchar() {
     extra = vec2(ao, c.a > 0.75 ? 18.0 : 10.0);
     vec4 cp = matVP * vec4(posMundo, 1.0);
     gl_FragDepth = (cp.z / cp.w) * 0.5 + 0.5;
+}
+// direcao do mundo -> escultura
+vec3 paraEscultura(vec3 d) { return normalize((transpose(mnG) * d) / escalaRep); }
+// sombra do proprio rosto (nariz na bochecha, sobrancelha no olho): marcha curta ate o sol;
+// a penumbra vem do menor afastamento da pele ao longo do raio
+float sombraPropria(vec3 q, vec3 L) {
+    q += nqG * 0.0015;  // sai da pele (o ponto achado pode estar um pouco dentro)
+    float res = 1.0, t = 0.002;
+    for (int i = 0; i < 16; i++) {
+        float h = distVol(q + L * t);
+        res = min(res, 9.0 * h / t);
+        t += clamp(h, 0.0015, 0.02);
+        if (res < 0.02 || t > 0.12) break;
+    }
+    return clamp(res, 0.0, 1.0);
+}
+// espessura local (andando para dentro pela normal): orelha e asas do nariz sao finas (a luz
+// atravessa), o resto da cabeca e grosso. Nao depende da direcao do sol (sem faixas no limite da sombra).
+float finura(vec3 q) {
+    float e = 0.0;
+    for (int k = 1; k <= 4; k++) e += max(-distVol(q - nqG * (0.0025 * float(k))), 0.0);
+    return exp(-e * 300.0);
 }
 #endif
 
@@ -505,7 +532,13 @@ void main() {
     // sol e lua (com sombra)
     float sombra = sombraEm(posMundo, n);
 #ifdef PERSONAGEM
-    if (usarSombraPerto > 0.5) {  // sombra de perto: 3 mm por texel (chapeu no rosto, braco no corpo)
+#ifdef RAYMARCH
+    // no Alto o rosto usa a sombra propria exata (abaixo) no lugar do mapa de perto (serrilhado de 3 mm)
+    if (usarSombraPerto > 0.5 && economico > 0.5) {
+#else
+    if (usarSombraPerto > 0.5) {  // sombra de perto
+#endif
+        // 3 mm por texel (chapeu no rosto, braco no corpo)
         vec4 pl2 = matLuzPerto * vec4(posMundo + n * 0.004, 1.0);
         vec3 q2 = pl2.xyz / pl2.w * 0.5 + 0.5;
         if (q2.x > 0.0 && q2.x < 1.0 && q2.y > 0.0 && q2.y < 1.0 && q2.z < 1.0) {
@@ -525,6 +558,10 @@ void main() {
             sombra = min(sombra, s2 / 9.0);
         }
     }
+#endif
+#ifdef RAYMARCH
+    vec3 Lq = paraEscultura(dirSol);
+    if (economico < 0.5 && sombra > 0.01) sombra = min(sombra, sombraPropria(qHit, Lq));
 #endif
     float ndl = dot(n, dirSol);
     float difSol = mix(max(ndl, 0.0), clamp((ndl + 0.45) / 1.45, 0.0, 1.0), sss);
@@ -584,6 +621,25 @@ void main() {
     }
     if (veludo > 0.0) c += (ambCeu * 0.5 + corSol * max(ndl, 0.0) * sombra * 0.15) * albedo * veludo * pow(1.0 - max(dot(n, v), 0.0), 2.0);
     if (sss > 0.0) c += corSol * sombra * vec3(0.55, 0.14, 0.07) * albedo * sss * (1.0 - abs(ndl)) * 0.45;
+#ifdef RAYMARCH
+    {
+        // brilho oleoso na zona T (testa e nariz): segundo lobulo, estreito
+        float ax = abs(qHit.x);
+        float oleo = smoothstep(0.045, 0.02, ax) * smoothstep(1.72, 1.735, qHit.y) * smoothstep(1.79, 1.765, qHit.y)
+                   + smoothstep(0.014, 0.006, ax) * smoothstep(1.652, 1.665, qHit.y) * smoothstep(1.712, 1.695, qHit.y);
+        vec3 h2 = normalize(dirSol + v);
+        float fres2 = 0.04 + 0.96 * pow(1.0 - max(dot(h2, v), 0.0), 5.0);
+        c += corSol * fres2 * pow(max(dot(n, h2), 0.0), 260.0) * 2.2 * oleo * max(ndl, 0.0) * sombra;
+        // luz atravessando: pouca espessura + sol atras -> vermelho de sangue (orelhas, narinas, nariz)
+        if (economico < 0.5 && ndl < 0.2) {
+            vec2 dOlho = vec2(abs(qHit.x) - 0.0315, qHit.y - 1.703);
+            float tr = finura(qHit) * smoothstep(0.012, 0.022, length(dOlho));  // palpebras: nao (olho "vermelho")
+            float atras = 0.3 + 0.7 * pow(max(dot(-v, dirSol), 0.0), 3.0);
+            float solAtras = sombraEm(posMundo + dirSol * 0.02, dirSol);
+            c += corSol * solAtras * albedo * vec3(0.9, 0.3, 0.17) * tr * atras * smoothstep(0.2, -0.3, ndl) * 0.75;
+        }
+    }
+#endif
     if (extra.y > 2.5 && extra.y < 3.5) {
         // janela: vidro escuro de dia, luz quente a noite
         vec3 vidro = vec3(0.03, 0.035, 0.045) * luz + vec3(0.02);
