@@ -154,6 +154,9 @@ private:
     } dbg_;
     PerfilGPU perfil_;
     void desenharDepuracao();
+public:
+    void imprimirPerfil() const;  // tempos por parte (capturas com --depuracao)
+private:
     Vec3f direitaJogador() const { return {-std::cos(jogador_.yaw), 0, std::sin(jogador_.yaw)}; }
     Vec3f cabeloX_{}, cabeloV_{}, cabecaAntes_{}, velCabecaAntes_{};  // fisica do cabelo (mola)
     float yawCabeloAntes_ = 0;

@@ -205,3 +205,7 @@ void Jogo::desenharDepuracao() {
         k++;
     }
 }
+
+void Jogo::imprimirPerfil() const {
+    for (int p = 0; p < N_PARTES; p++) std::printf("perfil %s=%.2f\n", PerfilGPU::nome(ParteQuadro(p)), perfil_.ms(ParteQuadro(p)));
+}

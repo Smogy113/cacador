@@ -150,6 +150,7 @@ int main(int argc, char** argv) {
         if (!g_op.screenshot.empty() && g_frame >= g_op.frames) {
             Image img = LoadImageFromScreen();
             ExportImage(img, g_op.screenshot.c_str());
+            g_jogo->imprimirPerfil();
             UnloadImage(img);
             std::printf("triangulos=%zu chamadas=%d\n", g_jogo->triangulos(), g_jogo->chamadas());
             break;

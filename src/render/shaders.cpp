@@ -540,11 +540,6 @@ bool luzGuardada(vec3 p, vec3 n, out vec4 L1, out vec3 L2) {
     L1 = textureLod(texLuz1, auv, 0.0);
     if (L1.a < 0.5) return false;   // ainda nao calculada: caminho por pixel
     L2 = textureLod(texLuz2, auv, 0.0).rgb * 2.0;
-    // borda de sombra (beiral, casa vizinha): os texels em volta discordam -> sombra fina no pixel
-    float tx = 1.0 / tamAtlas;
-    float s1 = textureLod(texLuz1, auv + vec2(tx, 0.0), 0.0).r, s2 = textureLod(texLuz1, auv - vec2(tx, 0.0), 0.0).r;
-    float s3 = textureLod(texLuz1, auv + vec2(0.0, tx), 0.0).r, s4 = textureLod(texLuz1, auv - vec2(0.0, tx), 0.0).r;
-    bordaSombra = max(max(s1, s2), max(s3, s4)) - min(min(s1, s2), min(s3, s4)) > 0.03;
     return true;
 }
 // janelas acesas a noite clareiam a parede em volta
@@ -574,7 +569,7 @@ void relevoParede(inout vec3 n, inout vec3 albedo, inout float ao, vec3 v, float
         vec3 vt = vec3(dot(v, T), dot(v, B), dot(v, N0));
         prof *= smoothstep(0.05, 0.25, vt.z);            // olhando rente: relevo raso (sem estourar)
         float alto = paredes > 1.5 ? 1.0 : 0.0;
-        float nPassos = mix(12.0, 24.0, alto);
+        float nPassos = mix(mix(12.0, 24.0, alto), mix(5.0, 8.0, alto), vt.z);  // de frente precisa de menos passos
         float dz = 0.03 / nPassos;
         vec2 passo = -vt.xy / max(vt.z, 0.25) * dz * prof;
         vec2 uvA = uv;
@@ -668,7 +663,7 @@ void main() {
         nParede = n;
         if (alcance > 0.0) {
             guardada = luzGuardada(posMundo, n, luz1, luz2);
-            aoCena = mix(1.0, guardada ? luz1.g : oclusaoCena(posMundo + n * 0.02, n), alcance);
+            aoCena = mix(1.0, guardada ? luz1.g : 1.0, alcance);  // sem luz guardada (1o quadro): sem oclusao extra
             ao *= aoCena;
         }
         if (dist < 45.0) relevoParede(n, albedo, ao, v, dist, floor(extra.y + 0.5));
@@ -879,7 +874,8 @@ void main() {
 #endif
 #ifdef PAREDES
     if (ehParede && paredes > 1.5 && alcance > 0.0) {  // Alto: a sombra vem dos raios contra as construcoes
-        float sc = guardada && !bordaSombra ? luz1.r : (dot(nParede, dirSombra) > 0.0 ? sombraCena(posMundo + nParede * 0.03, dirSombra) : 0.0);
+        // guardada a cada 25 cm: o contraste realca a borda (beiral nitido); sem luz guardada, o mapa de sombras
+        float sc = guardada ? smoothstep(0.08, 0.92, luz1.r) : sombra;
         sombra = mix(sombra, sc, alcance);
     }
     sombra *= sombraRelevo;
@@ -901,7 +897,6 @@ void main() {
 #ifdef PAREDES
     if (ehParede && alcance > 0.0) {
         if (paredes > 1.5 && guardada) luz += luz2 * alcance * aoCena;
-        else if (paredes > 1.5 && dot(corSol, corSol) > 0.0) luz += reboteCena(posMundo + nParede * 0.03, nParede, normalize(cross(vec3(0.0, 1.0, 0.0), nParede))) * alcance * aoCena;
         luz += luzJanelas(posMundo, n) * alcance;
     }
 #endif
