@@ -65,3 +65,43 @@ TEST_CASE("galope balança mais que passo") {
     }
     CHECK(galope > passo * 1.5f);
 }
+
+// ---------- juntas nao podem achatar ao dobrar ----------
+static float espessuraRelativa(const MalhaPele& m, const Esqueleto& e, const Pose& p, int pai, int filho) {
+    std::vector<Mat4> mt;
+    calcularMatrizes(e, p, mt);
+    Vec3f j = e.ossos[filho].inicio;                       // junta em repouso
+    Vec3f jp = mt[pai].ponto(j);                           // junta na pose
+    float soma = 0, somaRep = 0;
+    int n = 0;
+    for (auto& v : m.v) {
+        bool doPar = (v.osso[0] == pai || v.osso[0] == filho) && (v.osso[1] == pai || v.osso[1] == filho);
+        if (!doPar || std::abs(v.pos.y - j.y) > 0.03f) continue;
+        Vec3f q = mt[v.osso[0]].ponto(v.pos) * v.peso + mt[v.osso[1]].ponto(v.pos) * (1 - v.peso);
+        soma += len(q - jp);
+        somaRep += len(v.pos - j);
+        n++;
+    }
+    REQUIRE(n > 0);
+    return soma / somaRep;
+}
+static Pose maisDobrado(const Esqueleto& e, int osso) {
+    Pose melhor;
+    float maior = -1;
+    for (float f = 0; f < 6.3f; f += 0.1f) {
+        Pose p = poseAndar(e, f, 5.f);
+        if (std::abs(p.rot[osso].x) > maior) { maior = std::abs(p.rot[osso].x); melhor = p; }
+    }
+    return melhor;
+}
+TEST_CASE("joelho e cotovelo não achatam correndo (modelo leve e HD)") {
+    Proporcoes pr;
+    Esqueleto e = esqueletoHumano(pr);
+    Visual v;
+    v.sobretudo = false;
+    for (int hd = 0; hd < 2; hd++) {
+        MalhaPele m = hd ? corpoHumanoHD(pr, v) : corpoHumano(pr, v);
+        CHECK_MESSAGE(espessuraRelativa(m, e, maisDobrado(e, CANELA_E), COXA_E, CANELA_E) > 0.88f, "joelho hd=" << hd);
+        CHECK_MESSAGE(espessuraRelativa(m, e, maisDobrado(e, ANTEBRACO_E), BRACO_E, ANTEBRACO_E) > 0.88f, "cotovelo hd=" << hd);
+    }
+}

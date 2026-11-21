@@ -114,7 +114,8 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
         };
         std::vector<Anel> br = {
             Ar(L(ob.inicio, ob.fim, -0.12f), .068f, .070f, b, b, 1), Ar(L(ob.inicio, ob.fim, 0.3f), .058f, .060f, b, b, 1),
-            Ar(L(ob.inicio, ob.fim, 0.72f), .050f, .051f, b, b, 1),  Ar(oa.inicio, .044f, .046f, b, ab, .5f),
+            Ar(L(ob.inicio, ob.fim, 0.72f), .050f, .051f, b, b, 1),  Ar(L(ob.inicio, ob.fim, 0.9f), .048f, .049f, b, ab, .78f),
+            Ar(oa.inicio, .049f, .051f, b, ab, .5f), Ar(L(oa.inicio, oa.fim, 0.1f), .047f, .048f, ab, b, .78f),
             Ar(L(oa.inicio, oa.fim, 0.3f), .047f, .048f, ab, ab, 1), Ar(L(oa.inicio, oa.fim, 0.72f), .038f, .038f, ab, ab, 1),
             Ar(om.inicio, .028f, .03f, ab, mo, .5f),                 Ar(L(om.inicio, om.fim, 0.4f), .018f, .046f, mo, mo, 1),
             Ar(L(om.inicio, om.fim, 0.85f), .016f, .04f, mo, mo, 1),
@@ -122,8 +123,8 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
         k.tubo(br, 8, {0, 0, 1}, true, true,
                [&](int i, float ang, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb {
                    if (i == 0) ao = 0.78f;
-                   if (i >= 7 || (ang < 0 && i > 3)) return vis.pele;
-                   if (i == 6) return vis.pele * 0.95f;
+                   if (i >= 9 || (ang < 0 && i > 5)) return vis.pele;
+                   if (i == 8) return vis.pele * 0.95f;
                    return mangas;
                },
                0.02f * s, 0.022f * s);
@@ -139,8 +140,9 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
         };
         auto L = [](Vec3f a, Vec3f b2, float t) { return a + (b2 - a) * t; };
         std::vector<Anel> pr2 = {
-            Ar(L(oc.inicio, oc.fim, -0.05f), .090f, .095f, c, c, 1), Ar(L(oc.inicio, oc.fim, 0.4f), .078f, .082f, c, c, 1),
-            Ar(L(oc.inicio, oc.fim, 0.85f), .060f, .062f, c, c, 1),  Ar(oca.inicio, .052f, .056f, c, ca, .5f),
+            Ar(L(oc.inicio, oc.fim, -0.05f), .090f, .095f, c, QUADRIL, .6f), Ar(L(oc.inicio, oc.fim, 0.4f), .078f, .082f, c, c, 1),
+            Ar(L(oc.inicio, oc.fim, 0.85f), .060f, .062f, c, ca, .85f), Ar(L(oc.inicio, oc.fim, 0.93f), .057f, .06f, c, ca, .75f),
+            Ar(oca.inicio, .058f, .062f, c, ca, .5f), Ar(L(oca.inicio, oca.fim, 0.08f), .056f, .06f, ca, c, .75f),
             Ar(L(oca.inicio, oca.fim, 0.3f) + Vec3f{0, 0, -0.01f * s}, .056f, .062f, ca, ca, 1),
             Ar(L(oca.inicio, oca.fim, 0.7f), .044f, .046f, ca, ca, 1), Ar(oca.fim + Vec3f{0, 0.01f * s, 0}, .036f, .04f, ca, pe, .6f),
         };
@@ -149,7 +151,7 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
                    float lx = (p.x - pr2[i].c.x) * sx;  // < 0 = lado de dentro
                    if (i <= 1 && lx < 0) ao = 0.82f;
                    (void)ang;
-                   return i >= 5 ? vis.botas : vis.calca;
+                   return i >= 7 ? vis.botas : vis.calca;
                });
         // pe: tubo do calcanhar ate a ponta, "frente" do anel = para cima
         float px = oca.fim.x;

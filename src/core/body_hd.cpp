@@ -156,7 +156,8 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
         const Osso &ob = esq.ossos[b], &oa = esq.ossos[ab], &om = esq.ossos[mo];
         std::vector<Anel> br = {
             An(L(ob.inicio, ob.fim, -0.03f), .062f, .066f, b, b, 1), An(L(ob.inicio, ob.fim, 0.3f), .058f, .060f, b, b, 1),
-            An(L(ob.inicio, ob.fim, 0.72f), .050f, .051f, b, b, 1), An(oa.inicio, .044f, .046f, b, ab, .5f),
+            An(L(ob.inicio, ob.fim, 0.72f), .050f, .051f, b, b, 1), An(L(ob.inicio, ob.fim, 0.9f), .048f, .049f, b, ab, .78f),
+            An(oa.inicio, .049f, .051f, b, ab, .5f), An(L(oa.inicio, oa.fim, 0.1f), .047f, .048f, ab, b, .78f),
             An(L(oa.inicio, oa.fim, 0.3f), .047f, .048f, ab, ab, 1), An(L(oa.inicio, oa.fim, 0.8f), .040f, .040f, ab, ab, 1),
             An(L(oa.inicio, oa.fim, 0.93f), .043f, .043f, ab, ab, 1),  // punho do casaco
             An(om.inicio, .028f, .03f, ab, mo, .5f), An(L(om.inicio, om.fim, 0.35f), .016f, .045f, mo, mo, 1),
@@ -200,8 +201,9 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
         float sx = lado == 0 ? 1.f : -1.f;
         auto Ap = [&](Vec3f cc, float rx, float rz, int a_, int b_, float p) { return Anel{cc, rx * s * ms * lq, rz * s * ms, uint8_t(a_), uint8_t(b_), p}; };
         std::vector<Anel> pr2 = {
-            Ap(L(oc.inicio, oc.fim, -0.05f), .090f, .095f, c, c, 1), Ap(L(oc.inicio, oc.fim, 0.4f), .078f, .082f, c, c, 1),
-            Ap(L(oc.inicio, oc.fim, 0.85f), .060f, .062f, c, c, 1),  Ap(oca.inicio, .052f, .056f, c, ca, .5f),
+            Ap(L(oc.inicio, oc.fim, -0.05f), .090f, .095f, c, QUADRIL, .6f), Ap(L(oc.inicio, oc.fim, 0.4f), .078f, .082f, c, c, 1),
+            Ap(L(oc.inicio, oc.fim, 0.85f), .060f, .062f, c, ca, .85f), Ap(L(oc.inicio, oc.fim, 0.93f), .057f, .06f, c, ca, .75f),
+            Ap(oca.inicio, .058f, .062f, c, ca, .5f), Ap(L(oca.inicio, oca.fim, 0.08f), .056f, .06f, ca, c, .75f),
             Ap(L(oca.inicio, oca.fim, 0.3f) + Vec3f{0, 0, -0.01f * s}, .056f, .062f, ca, ca, 1),
             Ap(L(oca.inicio, oca.fim, 0.52f), .056f, .058f, ca, ca, 1),  // borda da bota
             Ap(L(oca.inicio, oca.fim, 0.58f), .050f, .052f, ca, ca, 1),
