@@ -36,18 +36,19 @@ public:
     Material& materialSombraPele() { return matProfPele_; }
 
     // Pos-processamento (brilho e raios de luz): envolve o desenho da cena.
-    bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz) && posOk_; }
+    bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) && posOk_; }
     void comecarPos();
     void terminarPos(const Camera3D& cam);
 
 private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
     void liberarEfeitos();
-    Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{};
+    Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{};
     Shader pele_{}, profPele_{};
     Material mat_{}, matProf_{}, matPele_{}, matProfPele_{};
     Model esfera_{};
-    RenderTexture2D sombraRT_{}, cena_{}, meiaA_{}, meiaB_{}, raiosRT_{};
+    RenderTexture2D sombraRT_{}, cena_{}, meiaA_{}, meiaB_{}, raiosRT_{}, aoA_{}, aoB_{};
+    bool cenaComProfundidade_ = false;
     Matrix luzVP_{};
     bool sombraOk_ = false, posOk_ = false;
     int largPos_ = 0, altPos_ = 0;

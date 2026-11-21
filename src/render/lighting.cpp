@@ -38,6 +38,29 @@ static RenderTexture2D criarMapaSombra(int tam) {
     return t;
 }
 
+// Render target com cor + profundidade em textura (o SSAO le a profundidade).
+static RenderTexture2D criarCenaComProfundidade(int w, int h) {
+    RenderTexture2D t{};
+    t.id = rlLoadFramebuffer();
+    if (!t.id) return t;
+    rlEnableFramebuffer(t.id);
+    t.texture.id = rlLoadTexture(nullptr, w, h, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+    t.texture.width = w; t.texture.height = h; t.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8; t.texture.mipmaps = 1;
+    t.depth.id = rlLoadTextureDepth(w, h, false);
+    t.depth.width = w; t.depth.height = h; t.depth.format = 19; t.depth.mipmaps = 1;
+    rlFramebufferAttach(t.id, t.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+    rlFramebufferAttach(t.id, t.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
+    bool ok = rlFramebufferComplete(t.id);
+    rlDisableFramebuffer();
+    if (!ok) {
+        rlUnloadTexture(t.texture.id);
+        rlUnloadTexture(t.depth.id);
+        rlUnloadFramebuffer(t.id);
+        return RenderTexture2D{};
+    }
+    return t;
+}
+
 void Iluminacao::liberarEfeitos() {
     if (sombraOk_) {
         rlUnloadTexture(sombraRT_.depth.id);
@@ -45,7 +68,15 @@ void Iluminacao::liberarEfeitos() {
         sombraOk_ = false;
     }
     if (posOk_) {
-        UnloadRenderTexture(cena_);
+        if (cenaComProfundidade_) {
+            rlUnloadTexture(cena_.texture.id);
+            rlUnloadTexture(cena_.depth.id);
+            rlUnloadFramebuffer(cena_.id);
+            UnloadRenderTexture(aoA_);
+            UnloadRenderTexture(aoB_);
+        } else
+            UnloadRenderTexture(cena_);
+        cenaComProfundidade_ = false;
         UnloadRenderTexture(meiaA_);
         UnloadRenderTexture(meiaB_);
         UnloadRenderTexture(raiosRT_);
@@ -81,6 +112,7 @@ void Iluminacao::carregar(Nivel nivel) {
     blur_ = carregarShaderPos(FS_BLUR);
     raios_ = carregarShaderPos(FS_RAIOS);
     junta_ = carregarShaderPos(FS_JUNTA);
+    ssao_ = carregarShaderPos(FS_SSAO);
     lit_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(lit_, "texSombra");
     pele_ = carregarShader(VS_PELE, FS_LIT);
     pele_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(pele_, "matModel");
@@ -107,10 +139,21 @@ void Iluminacao::carregar(Nivel nivel) {
             setF(pele_, "texelMetros", tm);
         }
     }
-    if (ef_.bloom || ef_.raiosDeLuz) {
+    if (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) {
         largPos_ = GetScreenWidth();
         altPos_ = GetScreenHeight();
-        cena_ = LoadRenderTexture(largPos_, altPos_);
+        if (ef_.ssao) {
+            cena_ = criarCenaComProfundidade(largPos_, altPos_);
+            cenaComProfundidade_ = cena_.id > 0;
+            if (!cenaComProfundidade_) ef_.ssao = false;
+            else {
+                aoA_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
+                aoB_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
+                SetTextureFilter(aoA_.texture, TEXTURE_FILTER_BILINEAR);
+                SetTextureFilter(aoB_.texture, TEXTURE_FILTER_BILINEAR);
+            }
+        }
+        if (!cenaComProfundidade_) cena_ = LoadRenderTexture(largPos_, altPos_);
         meiaA_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
         meiaB_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
         raiosRT_ = LoadRenderTexture(largPos_ / 2, altPos_ / 2);
@@ -122,7 +165,7 @@ void Iluminacao::carregar(Nivel nivel) {
 void Iluminacao::descarregar() {
     if (!carregado_) return;
     liberarEfeitos();
-    for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_}) UnloadShader(sh);
+    for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_}) UnloadShader(sh);
     UnloadModel(esfera_);
     UnloadShader(lit_);
     UnloadShader(ceu_);
@@ -288,6 +331,33 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
         EndShaderMode();
         EndTextureMode();
     }
+    // 3b) oclusao de ambiente em tela (meia resolucao, desfocada)
+    bool ao = ef_.ssao && cenaComProfundidade_;
+    if (ao) {
+        BeginTextureMode(aoA_);
+        BeginShaderMode(ssao_);
+        float tx[2] = {1.f / largPos_, 1.f / altPos_};
+        float escala = altPos_ / (2.f * std::tan(cam.fovy * 0.5f * DEG2RAD));
+        SetShaderValue(ssao_, GetShaderLocation(ssao_, "texel"), tx, SHADER_UNIFORM_VEC2);
+        SetShaderValue(ssao_, GetShaderLocation(ssao_, "escalaProj"), &escala, SHADER_UNIFORM_FLOAT);
+        float th = std::tan(cam.fovy * 0.5f * DEG2RAD);
+        float tm[2] = {th * float(largPos_) / float(altPos_), th};
+        SetShaderValue(ssao_, GetShaderLocation(ssao_, "tanMeio"), tm, SHADER_UNIFORM_VEC2);
+        DrawTexturePro(cena_.depth, {0, 0, float(largPos_), float(-altPos_)}, {0, 0, float(mw), float(mh)}, {0, 0}, 0, WHITE);
+        EndShaderMode();
+        EndTextureMode();
+        for (int k = 0; k < 2; k++) {
+            float d[2] = {k == 0 ? 1.f / mw : 0.f, k == 0 ? 0.f : 1.f / mh};
+            RenderTexture2D& de = k == 0 ? aoA_ : aoB_;
+            RenderTexture2D& para = k == 0 ? aoB_ : aoA_;
+            BeginTextureMode(para);
+            BeginShaderMode(blur_);
+            SetShaderValue(blur_, GetShaderLocation(blur_, "direcao"), d, SHADER_UNIFORM_VEC2);
+            DrawTexturePro(de.texture, {0, 0, float(mw), float(mh)}, {0, 0, float(mw), float(mh)}, {0, 0}, 0, WHITE);
+            EndShaderMode();
+            EndTextureMode();
+        }
+    }
     // 4) junta tudo na tela
     BeginShaderMode(junta_);
     float fb = ef_.bloom ? 0.6f : 0.f, ur = raios ? 1.f : 0.f;
@@ -295,6 +365,9 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     SetShaderValue(junta_, GetShaderLocation(junta_, "usarRaios"), &ur, SHADER_UNIFORM_FLOAT);
     SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texBrilho"), meiaA_.texture);
     SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texRaios"), raiosRT_.texture);
+    float ua = ao ? 1.f : 0.f;
+    SetShaderValue(junta_, GetShaderLocation(junta_, "usarAO"), &ua, SHADER_UNIFORM_FLOAT);
+    if (ao) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texAO"), aoA_.texture);
     desenharTela(cena_, GetScreenWidth(), GetScreenHeight());
     EndShaderMode();
 }

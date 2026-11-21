@@ -8,6 +8,7 @@ struct Efeitos {
     int resolucaoSombra;
     float escalaRender;
     float distanciaVisao;
+    bool ssao = false;  // oclusao de ambiente em tela
 };
 
 Efeitos efeitosDe(Nivel n);

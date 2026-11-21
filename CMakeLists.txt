@@ -14,6 +14,8 @@ FetchContent_Declare(raylib
   GIT_REPOSITORY https://github.com/raysan5/raylib.git
   GIT_TAG 5.5 GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(raylib)
+# plano de corte proximo a 10 cm: muito mais precisao de profundidade (sombras e SSAO)
+target_compile_definitions(raylib PUBLIC RL_CULL_DISTANCE_NEAR=0.1)
 
 # --- logica pura (sem raylib) ---
 file(GLOB CORE_SRC CONFIGURE_DEPENDS src/core/*.cpp)

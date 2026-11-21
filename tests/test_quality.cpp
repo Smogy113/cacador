@@ -57,3 +57,8 @@ TEST_CASE("AMD integrada não começa no Alto") {
     CHECK(sugerirNivel("AMD Radeon R5 Graphics") != Nivel::Alto);
     CHECK(sugerirNivel("AMD Radeon RX 580") == Nivel::Alto);
 }
+TEST_CASE("SSAO só no Alto") {
+    CHECK(efeitosDe(Nivel::Alto).ssao);
+    CHECK_FALSE(efeitosDe(Nivel::Medio).ssao);
+    CHECK_FALSE(efeitosDe(Nivel::Baixo).ssao);
+}

@@ -297,10 +297,13 @@ const char* FS_JUNTA = R"(
 uniform sampler2D texture0;
 uniform sampler2D texBrilho;
 uniform sampler2D texRaios;
+uniform sampler2D texAO;
 uniform float forcaBrilho;
 uniform float usarRaios;
+uniform float usarAO;
 void main() {
     vec3 c = TEX(texture0, fragTexCoord).rgb;
+    if (usarAO > 0.5) c *= TEX(texAO, fragTexCoord).r;
     c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
     if (usarRaios > 0.5) c += TEX(texRaios, fragTexCoord).rgb;
     // vinheta suave
@@ -352,5 +355,50 @@ VARY float tipo;
 void main() {
     tipo = 0.0;
     gl_Position = mvp * (matrizPele() * vec4(vertexPosition, 1.0));
+}
+)";
+
+// ---------- oclusao de ambiente em tela (SSAO) ----------
+const char* FS_SSAO = R"(
+uniform sampler2D texture0;   // profundidade da cena
+uniform vec2 texel;           // 1 / resolucao da profundidade
+uniform float escalaProj;     // pixels por metro a 1 m de distancia
+uniform vec2 tanMeio;         // tan(fov/2) * (aspecto, 1)
+float linear(float d) {
+    float z = d * 2.0 - 1.0;
+    return (2.0 * 0.1 * 1000.0) / (1000.0 + 0.1 - z * (1000.0 - 0.1));
+}
+vec3 posVista(vec2 uv) {
+    float z = linear(TEX(texture0, uv).r);
+    return vec3((uv * 2.0 - 1.0) * tanMeio * z, -z);
+}
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+    vec2 uv = fragTexCoord;
+    float d0 = TEX(texture0, uv).r;
+    if (d0 >= 0.99999) { FRAG = vec4(1.0); return; }
+    vec3 P = posVista(uv);
+    // normal reconstruida pelos vizinhos (usa o lado com menor salto de profundidade)
+    vec2 t3 = texel * 3.0;
+    vec3 px1 = posVista(uv + vec2(t3.x, 0.0)) - P, px2 = P - posVista(uv - vec2(t3.x, 0.0));
+    vec3 py1 = posVista(uv + vec2(0.0, t3.y)) - P, py2 = P - posVista(uv - vec2(0.0, t3.y));
+    vec3 dx = abs(px1.z) < abs(px2.z) ? px1 : px2;
+    vec3 dy = abs(py1.z) < abs(py2.z) ? py1 : py2;
+    vec3 n = normalize(cross(dx, dy));
+    if (n.z < 0.0) n = -n;
+    float z0 = -P.z;
+    float raio = min(0.7 * escalaProj / z0, 80.0);
+    float giro = hash(uv * 913.7) * 6.2831;
+    float soma = 0.0;
+    for (int i = 0; i < 12; i++) {
+        float a = float(i) * 2.39996 + giro;
+        float r = sqrt((float(i) + 0.5) / 12.0) * raio;
+        vec3 v = posVista(uv + vec2(cos(a), sin(a)) * r * texel) - P;
+        float dist = length(v);
+        float alcance = 1.0 - smoothstep(0.7, 1.4, dist);
+        soma += max(0.0, dot(v, n) - 0.03 * z0) / (dot(v, v) + 0.02) * alcance;
+    }
+    float ao = clamp(1.0 - soma * (1.2 / 12.0), 0.0, 1.0);
+    FRAG = vec4(vec3(ao * ao), 1.0);
 }
 )";

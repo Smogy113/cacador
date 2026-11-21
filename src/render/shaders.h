@@ -15,6 +15,7 @@ extern const char* FS_BRILHO;
 extern const char* FS_BLUR;
 extern const char* FS_RAIOS;
 extern const char* FS_JUNTA;
+extern const char* FS_SSAO;
 extern const char* VS_LIT;
 extern const char* FS_LIT;
 extern const char* VS_CEU;
