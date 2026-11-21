@@ -28,7 +28,7 @@ vec3 finalizar(vec3 c) {
 }
 vec3 neblinaCor(vec3 dirVista) {
     float s = max(dot(dirVista, dirSol), 0.0);
-    return corNeblina + corSol * 0.18 * pow(s, 6.0);
+    return corNeblina + corSol * (0.16 * pow(s, 5.0) + 0.2 * pow(s, 28.0));  // a nevoa brilha dourada para o lado do sol
 }
 float neblinaFator(float d) {
     return clamp(1.0 - exp(-pow(d * densNeblina, 2.0)), 0.0, 1.0);
@@ -97,6 +97,7 @@ uniform int numLuzes;
 uniform float noite;
 uniform float descartarPerto;
 uniform float raioGrama;
+uniform float neblinaBaixa;
 uniform float usarSombra;
 uniform mat4 matLuz;
 uniform sampler2D texSombra;
@@ -471,6 +472,10 @@ void main() {
 
     float f = neblinaFator(dist);
     c = mix(c, neblinaCor(-v), f);
+    // neblina baixa: acumula nos vales e nas partes mais baixas que a camera (forte ao amanhecer/entardecer)
+    float baixa = exp(-max(posMundo.y - (posCamera.y - 3.0), 0.0) * 0.12);
+    float fb = (1.0 - exp(-dist * 0.006 * neblinaBaixa)) * baixa;
+    c = mix(c, neblinaCor(-v), fb * 0.6);
     FRAG = vec4(finalizar(c), 1.0);
 }
 )";
@@ -612,20 +617,33 @@ void main() {
 }
 )";
 const char* FS_RAIOS = R"(
-uniform sampler2D texture0;
-uniform vec2 posSol;   // posicao do sol na tela (0..1)
+uniform sampler2D texture0;   // cena
+uniform sampler2D texProf;    // profundidade (ceu = 1)
+uniform float usarProf;
+uniform vec2 posSol;          // posicao do sol na tela (0..1)
+uniform float aspecto;
+uniform vec3 corRaio;
 uniform float forca;
+// fonte dos raios: so o ceu (o que tapa o ceu vira sombra no facho), mais forte perto do sol
+vec3 fonte(vec2 uv) {
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0);
+    vec3 c = TEX(texture0, uv).rgb;
+    float ceu = usarProf > 0.5 ? step(0.99995, TEX(texProf, uv).r) : smoothstep(0.55, 0.9, dot(c, vec3(0.3, 0.59, 0.11)));
+    vec2 dd = (uv - posSol) * vec2(aspecto, 1.0);
+    float perto = exp(-dot(dd, dd) * 9.0);
+    return (c * 0.55 + corRaio * 0.25) * ceu * perto;
+}
 void main() {
     vec2 uv = fragTexCoord;
-    vec2 d = (uv - posSol) * (0.9 / 28.0);
+    vec2 d = (uv - posSol) * (1.0 / 40.0);
     vec3 c = vec3(0.0);
     float peso = 1.0;
-    for (int i = 0; i < 28; i++) {
+    for (int i = 0; i < 40; i++) {
+        c += fonte(uv) * peso;
         uv -= d;
-        c += TEX(texture0, uv).rgb * peso;
-        peso *= 0.955;
+        peso *= 0.968;
     }
-    FRAG = vec4(c * (forca / 28.0), 1.0);
+    FRAG = vec4(c * (forca / 40.0), 1.0);
 }
 )";
 const char* FS_JUNTA = R"(
@@ -636,11 +654,36 @@ uniform sampler2D texAO;
 uniform float forcaBrilho;
 uniform float usarRaios;
 uniform float usarAO;
+uniform vec2 posSol;
+uniform float aspecto;
+uniform vec3 corRaio;
 void main() {
     vec3 c = TEX(texture0, fragTexCoord).rgb;
     if (usarAO > 0.5) c *= TEX(texAO, fragTexCoord).r;
     c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
-    if (usarRaios > 0.5) c += TEX(texRaios, fragTexCoord).rgb;
+    if (usarRaios > 0.5) {
+        c += TEX(texRaios, fragTexCoord).rgb;
+        // reflexos da lente: o sol visivel deixa "fantasmas" na linha que passa pelo centro da tela
+        vec3 solTela = TEX(texture0, clamp(posSol, 0.001, 0.999)).rgb;
+        float vis = smoothstep(0.75, 0.98, dot(solTela, vec3(0.33))) * step(0.0, posSol.x) * step(posSol.x, 1.0) * step(0.0, posSol.y) * step(posSol.y, 1.0);
+        vec2 eixo = vec2(0.5) - posSol;
+        for (int k = 0; k < 4; k++) {
+            float fk = k == 0 ? 0.45 : (k == 1 ? 0.9 : (k == 2 ? 1.35 : 1.75));
+            float rk = k == 0 ? 0.035 : (k == 1 ? 0.06 : (k == 2 ? 0.025 : 0.09));
+            vec3 ck = k == 0 ? vec3(0.9, 0.6, 0.3) : (k == 1 ? vec3(0.4, 0.8, 0.5) : (k == 2 ? vec3(0.7, 0.5, 0.9) : vec3(0.3, 0.5, 0.9)));
+            vec2 g = (fragTexCoord - (posSol + eixo * fk)) * vec2(aspecto, 1.0);
+            float dg = length(g);
+            c += ck * corRaio * 0.06 * vis * smoothstep(rk, rk * 0.6, dg);
+        }
+        vec2 h = (fragTexCoord - posSol) * vec2(aspecto, 1.0);  // halo em volta do sol
+        c += corRaio * vis * 0.12 * exp(-length(h) * 6.0);
+    }
+    // cor de cinema: um pouco mais quente e contrastada (sombras mais fundas)
+    c = clamp(c, 0.0, 1.0);
+    float lum = dot(c, vec3(0.299, 0.587, 0.114));
+    c = clamp(mix(vec3(lum), c, 1.12), 0.0, 1.0);
+    c = c * c * (3.0 - 2.0 * c) * 0.35 + c * 0.65;
+    c *= vec3(1.03, 1.0, 0.95);
     // vinheta suave
     vec2 v = fragTexCoord - 0.5;
     c *= 1.0 - dot(v, v) * 0.35;

@@ -28,6 +28,7 @@ public:
     const Efeitos& efeitos() const { return ef_; }
     Nivel nivel() const { return nivel_; }
     void definirRaioGrama(float r);
+    float posSolTela_[2] = {-1.f, -1.f};
     void definirCabelo(Vec3f deslocamentoModelo);  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().

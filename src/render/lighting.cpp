@@ -214,6 +214,8 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
         uniformesComuns(sh, paleta_, sol_, noite_);
         setV3(sh, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
         setF(sh, "tempoVento", tempo);
+        // neblina baixa: forte com o sol baixo, fraca ao meio-dia, media a noite
+        setF(sh, "neblinaBaixa", sol_.y > 0.f ? 0.25f + 0.85f * (1.f - smoothstep(0.05f, 0.45f, sol_.y)) : 0.5f);
         setRgb(sh, "ambCeu", paleta_.ambienteCeu);
         setRgb(sh, "ambChao", paleta_.ambienteChao);
         float luaAcima = smoothstep(-0.05f, 0.15f, lua_.y);
@@ -336,7 +338,7 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     // 1) partes claras da cena (meia resolucao)
     BeginTextureMode(meiaA_);
     BeginShaderMode(brilho_);
-    float limiar = 0.9f;
+    float limiar = 0.85f;
     SetShaderValue(brilho_, GetShaderLocation(brilho_, "limiar"), &limiar, SHADER_UNIFORM_FLOAT);
     desenharTela(cena_, mw, mh);
     EndShaderMode();
@@ -346,15 +348,24 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     if (ef_.raiosDeLuz && sol_.y > -0.02f) {
         Vector3 ps{cam.position.x + sol_.x * 300, cam.position.y + sol_.y * 300, cam.position.z + sol_.z * 300};
         Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
-        if (Vector3DotProduct(fwd, {sol_.x, sol_.y, sol_.z}) > 0.2f) {
+        float olhaSol = Vector3DotProduct(fwd, {sol_.x, sol_.y, sol_.z});
+        if (olhaSol > 0.05f) {
             Vector2 t = GetWorldToScreenEx(ps, cam, largPos_, altPos_);
-            float pos[2] = {t.x / largPos_, 1.f - t.y / altPos_};
-            float forca = 0.55f * (1.f - smoothstep(0.35f, 0.8f, sol_.y)) + 0.15f;
+            posSolTela_[0] = t.x / largPos_;
+            posSolTela_[1] = 1.f - t.y / altPos_;
+            // fachos fortes com o sol baixo (manha e fim de tarde), mais suaves ao meio-dia
+            float forca = (0.75f * (1.f - smoothstep(0.25f, 0.8f, sol_.y)) + 0.25f) * smoothstep(0.05f, 0.45f, olhaSol);
+            float asp = float(largPos_) / float(altPos_), up = cenaComProfundidade_ ? 1.f : 0.f;
             BeginTextureMode(raiosRT_);
             BeginShaderMode(raios_);
-            SetShaderValue(raios_, GetShaderLocation(raios_, "posSol"), pos, SHADER_UNIFORM_VEC2);
+            SetShaderValue(raios_, GetShaderLocation(raios_, "posSol"), posSolTela_, SHADER_UNIFORM_VEC2);
             SetShaderValue(raios_, GetShaderLocation(raios_, "forca"), &forca, SHADER_UNIFORM_FLOAT);
-            DrawTexturePro(meiaA_.texture, {0, 0, float(mw), float(mh)}, {0, 0, float(mw), float(mh)}, {0, 0}, 0, WHITE);
+            SetShaderValue(raios_, GetShaderLocation(raios_, "aspecto"), &asp, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(raios_, GetShaderLocation(raios_, "usarProf"), &up, SHADER_UNIFORM_FLOAT);
+            Vector3 cr{paleta_.sol.r, paleta_.sol.g, paleta_.sol.b};
+            SetShaderValue(raios_, GetShaderLocation(raios_, "corRaio"), &cr, SHADER_UNIFORM_VEC3);
+            if (cenaComProfundidade_) SetShaderValueTexture(raios_, GetShaderLocation(raios_, "texProf"), cena_.depth);
+            DrawTexturePro(cena_.texture, {0, 0, float(largPos_), float(-altPos_)}, {0, 0, float(mw), float(mh)}, {0, 0}, 0, WHITE);
             EndShaderMode();
             EndTextureMode();
             raios = true;
@@ -405,7 +416,12 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     }
     // 4) junta tudo na tela
     BeginShaderMode(junta_);
-    float fb = ef_.bloom ? 0.6f : 0.f, ur = raios ? 1.f : 0.f;
+    float fb = ef_.bloom ? 0.65f : 0.f, ur = raios ? 1.f : 0.f;
+    float aspJ = float(largPos_) / float(altPos_);
+    Vector3 crJ{paleta_.sol.r, paleta_.sol.g, paleta_.sol.b};
+    SetShaderValue(junta_, GetShaderLocation(junta_, "posSol"), posSolTela_, SHADER_UNIFORM_VEC2);
+    SetShaderValue(junta_, GetShaderLocation(junta_, "aspecto"), &aspJ, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(junta_, GetShaderLocation(junta_, "corRaio"), &crJ, SHADER_UNIFORM_VEC3);
     SetShaderValue(junta_, GetShaderLocation(junta_, "forcaBrilho"), &fb, SHADER_UNIFORM_FLOAT);
     SetShaderValue(junta_, GetShaderLocation(junta_, "usarRaios"), &ur, SHADER_UNIFORM_FLOAT);
     SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texBrilho"), meiaA_.texture);
