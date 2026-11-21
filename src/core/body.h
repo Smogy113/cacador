@@ -37,3 +37,22 @@ struct MalhaPele {
 
 Esqueleto esqueletoHumano(const Proporcoes& p);
 MalhaPele corpoHumano(const Proporcoes& p, const Visual& vis);
+
+// ---------------- cavalo ----------------
+enum OssoCavalo {
+    C_CORPO, C_PESCOCO, C_CABECA, C_CAUDA,
+    C_BRACO_DE, C_CANELA_DE, C_CASCO_DE,  // diant. esquerda
+    C_BRACO_DD, C_CANELA_DD, C_CASCO_DD,  // diant. direita
+    C_COXA_TE, C_JARRETE_TE, C_CASCO_TE,  // tras. esquerda
+    C_COXA_TD, C_JARRETE_TD, C_CASCO_TD,  // tras. direita
+    N_OSSOS_CAVALO
+};
+
+struct VisualCavalo {
+    Rgb pelo{0.4f, 0.25f, 0.16f}, crina{0.12f, 0.08f, 0.06f};
+    bool selado = true, meias = false;
+};
+
+Esqueleto esqueletoCavalo();
+MalhaPele corpoCavalo(const VisualCavalo& v);
+Vec3f assentoCavalo();  // onde fica o quadril do cavaleiro (espaco do modelo, parado)

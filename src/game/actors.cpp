@@ -17,6 +17,24 @@ void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose)
     malha_.desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
 }
 
+void ModeloCavaloAnat::carregar(const VisualCavalo& v) {
+    esq_ = esqueletoCavalo();
+    malha_.carregar(corpoCavalo(v));
+}
+
+void ModeloCavaloAnat::descarregar() { malha_.descarregar(); }
+
+void ModeloCavaloAnat::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose) const {
+    calcularMatrizes(esq_, pose, ossos_);
+    malha_.desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
+}
+
+Vec3f ModeloCavaloAnat::assento(Vec3f p, float yaw, const Pose& pose) const {
+    std::vector<Mat4> m;
+    calcularMatrizes(esq_, pose, m);
+    return p + rotY(m[C_CORPO].ponto(assentoCavalo()), yaw);
+}
+
 void ModeloPessoa::carregar(const Roupa& r) {
     MeshBuilder c;
     // tronco e casaco

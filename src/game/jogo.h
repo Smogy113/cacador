@@ -61,7 +61,7 @@ private:
     Populacao populacao_;
     std::vector<ModeloHumano> roupasNpc_;
     std::vector<Cavalo> cavalos_;
-    std::vector<ModeloCavalo> modelosCavalo_;
+    std::vector<ModeloCavaloAnat> modelosCavalo_;
     int montadoEm_ = -1;
     int cavaloPerto_ = -1;
     std::vector<std::vector<Cartaz>> cartazes_;  // um conjunto por quadro

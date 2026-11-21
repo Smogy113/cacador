@@ -24,6 +24,22 @@ private:
     mutable std::vector<Mat4> ossos_;
 };
 
+// Cavalo anatomico com esqueleto.
+class ModeloCavaloAnat {
+public:
+    void carregar(const VisualCavalo& v);
+    void descarregar();
+    void desenhar(Material& mat, Vec3f pos, float yaw, const Pose& pose) const;
+    // onde fica o quadril do cavaleiro, no mundo (acompanha o balanco do corpo)
+    Vec3f assento(Vec3f pos, float yaw, const Pose& pose) const;
+    const Esqueleto& esqueleto() const { return esq_; }
+
+private:
+    Esqueleto esq_;
+    MalhaEsqueleto malha_;
+    mutable std::vector<Mat4> ossos_;
+};
+
 // Pessoa low-poly articulada (pernas e bracos balancam ao andar).
 class ModeloPessoa {
 public:

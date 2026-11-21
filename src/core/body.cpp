@@ -293,3 +293,138 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
     for (size_t i = 0; i < m.v.size(); i++) m.v[i].normal = normalizar(acc[i]);
     return m;
 }
+
+// =====================================================================
+// cavalo
+// =====================================================================
+
+Esqueleto esqueletoCavalo() {
+    Esqueleto e;
+    e.ossos.resize(N_OSSOS_CAVALO);
+    e.ossos[C_CORPO] = {-1, {0, 1.35f, -0.55f}, {0, 1.38f, 0.55f}};
+    e.ossos[C_PESCOCO] = {C_CORPO, {0, 1.55f, 0.7f}, {0, 2.0f, 1.1f}};
+    e.ossos[C_CABECA] = {C_PESCOCO, {0, 2.0f, 1.1f}, {0, 1.72f, 1.6f}};
+    e.ossos[C_CAUDA] = {C_CORPO, {0, 1.5f, -0.92f}, {0, 0.95f, -1.08f}};
+    for (int lado = 0; lado < 2; lado++) {
+        float x = lado == 0 ? 0.2f : -0.2f;
+        int b = lado == 0 ? C_BRACO_DE : C_BRACO_DD;
+        e.ossos[b] = {C_CORPO, {x, 1.2f, 0.62f}, {x, 0.68f, 0.64f}};
+        e.ossos[b + 1] = {b, {x, 0.68f, 0.64f}, {x, 0.12f, 0.64f}};
+        e.ossos[b + 2] = {b + 1, {x, 0.12f, 0.64f}, {x, 0.0f, 0.68f}};
+        int c = lado == 0 ? C_COXA_TE : C_COXA_TD;
+        e.ossos[c] = {C_CORPO, {x, 1.25f, -0.62f}, {x, 0.68f, -0.78f}};
+        e.ossos[c + 1] = {c, {x, 0.68f, -0.78f}, {x, 0.12f, -0.7f}};
+        e.ossos[c + 2] = {c + 1, {x, 0.12f, -0.7f}, {x, 0.0f, -0.66f}};
+    }
+    return e;
+}
+
+Vec3f assentoCavalo() { return {0, 1.79f, -0.08f}; }
+
+MalhaPele corpoCavalo(const VisualCavalo& vc) {
+    MalhaPele m;
+    Construtor k{m};
+    Esqueleto e = esqueletoCavalo();
+    Rgb pelo = vc.pelo, escuro = vc.pelo * 0.62f, casco{0.12f, 0.1f, 0.08f};
+    auto A = [](Vec3f c, float rx, float rz, int a, int b, float p) { return Anel{c, rx, rz, uint8_t(a), uint8_t(b), p}; };
+    auto L = [](Vec3f a, Vec3f b, float t) { return a + (b - a) * t; };
+
+    // tronco (ao longo de z; "frente" do anel = para cima)
+    const struct { float z, y, rx, rz; } tr[] = {{-0.98f, 1.42f, .14f, .20f}, {-0.85f, 1.40f, .26f, .32f}, {-0.6f, 1.37f, .30f, .36f},
+                                              {-0.25f, 1.34f, .31f, .37f},  {0.1f, 1.33f, .315f, .38f},   {0.45f, 1.36f, .29f, .37f},
+                                              {0.68f, 1.40f, .24f, .33f},   {0.82f, 1.48f, .17f, .26f}};
+    std::vector<Anel> corpo;
+    for (auto& t : tr) corpo.push_back(A({0, t.y, t.z}, t.rx, t.rz, C_CORPO, C_CORPO, 1));
+    k.tubo(corpo, 16, {0, 1, 0}, true, true,
+           [&](int, float ang, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb {
+               float cima = ang < 0 ? 0.f : std::sin(ang);
+               if (cima < -0.6f) ao = 0.75f;  // barriga
+               return pelo;
+           },
+           0.06f, 0.05f);
+
+    // pescoco
+    std::vector<Anel> pes = {A({0, 1.45f, 0.6f}, .16f, .27f, C_CORPO, C_PESCOCO, .5f), A({0, 1.68f, 0.82f}, .13f, .25f, C_PESCOCO, C_PESCOCO, 1),
+                             A({0, 1.88f, 0.98f}, .11f, .19f, C_PESCOCO, C_PESCOCO, 1), A({0, 2.03f, 1.1f}, .09f, .13f, C_PESCOCO, C_CABECA, .5f)};
+    k.tubo(pes, 12, {0, 0, 1}, false, false, [&](int, float ang, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
+        return std::sin(ang) < -0.75f ? vc.crina : pelo;  // crina no alto do pescoco
+    });
+    // cabeca (da nuca ao focinho)
+    std::vector<Anel> cab = {A({0, 2.07f, 1.08f}, .085f, .1f, C_CABECA, C_CABECA, 1), A({0, 1.98f, 1.24f}, .095f, .13f, C_CABECA, C_CABECA, 1),
+                             A({0, 1.86f, 1.42f}, .078f, .1f, C_CABECA, C_CABECA, 1), A({0, 1.76f, 1.56f}, .07f, .085f, C_CABECA, C_CABECA, 1)};
+    k.tubo(cab, 10, {0, 1, 0}, true, true,
+           [&](int i, float ang, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
+               if (ang < 0) return i == 0 ? vc.crina : escuro;
+               float cima = std::sin(ang), lado = std::abs(std::cos(ang));
+               if (i == 1 && lado > 0.7f && cima > 0.2f) return Rgb{0.05f, 0.04f, 0.03f};  // olhos
+               if (i == 0 && cima > 0.6f) return vc.crina;                                // topete
+               if (i == 3) return escuro;                                                 // focinho
+               return pelo;
+           },
+           0.02f, 0.04f);
+    // orelhas
+    for (float sx : {1.f, -1.f}) {
+        std::vector<Anel> o = {A({sx * 0.05f, 2.09f, 1.07f}, .028f, .022f, C_CABECA, C_CABECA, 1), A({sx * 0.06f, 2.2f, 1.06f}, .012f, .01f, C_CABECA, C_CABECA, 1)};
+        k.tubo(o, 5, {0, 0, 1}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return pelo; }, 0, 0.02f);
+    }
+    // cauda
+    std::vector<Anel> ca = {A({0, 1.48f, -0.95f}, .05f, .05f, C_CORPO, C_CAUDA, .5f), A({0, 1.3f, -1.03f}, .09f, .08f, C_CAUDA, C_CAUDA, 1),
+                            A({0, 1.05f, -1.08f}, .1f, .08f, C_CAUDA, C_CAUDA, 1), A({0, 0.85f, -1.09f}, .07f, .06f, C_CAUDA, C_CAUDA, 1)};
+    k.tubo(ca, 7, {0, 0, 1}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return vc.crina; }, 0, 0.05f);
+
+    // pernas
+    for (int perna = 0; perna < 4; perna++) {
+        bool frente = perna < 2;
+        int b0 = frente ? (perna == 0 ? C_BRACO_DE : C_BRACO_DD) : (perna == 2 ? C_COXA_TE : C_COXA_TD);
+        const Osso &o0 = e.ossos[b0], &o1 = e.ossos[b0 + 1], &o2 = e.ossos[b0 + 2];
+        std::vector<Anel> an;
+        if (frente) {
+            an.push_back(A(o0.inicio + Vec3f{0, 0.05f, 0}, .085f, .11f, b0, b0, 1));
+            an.push_back(A(L(o0.inicio, o0.fim, 0.45f), .07f, .085f, b0, b0, 1));
+        } else {
+            an.push_back(A(o0.inicio + Vec3f{0, 0.05f, 0.03f}, .11f, .17f, b0, b0, 1));
+            an.push_back(A(L(o0.inicio, o0.fim, 0.4f), .085f, .12f, b0, b0, 1));
+            an.push_back(A(L(o0.inicio, o0.fim, 0.78f), .06f, .075f, b0, b0, 1));
+        }
+        an.push_back(A(o1.inicio, .052f, .058f, b0, b0 + 1, .5f));
+        an.push_back(A(L(o1.inicio, o1.fim, 0.5f), .038f, .042f, b0 + 1, b0 + 1, 1));
+        an.push_back(A(L(o1.inicio, o1.fim, 0.88f), .046f, .05f, b0 + 1, b0 + 1, 1));
+        an.push_back(A(o2.inicio + Vec3f{0, -0.03f, 0.015f}, .04f, .044f, b0 + 1, b0 + 2, .4f));
+        an.push_back(A({o2.inicio.x, 0.06f, o2.fim.z}, .055f, .06f, b0 + 2, b0 + 2, 1));
+        an.push_back(A({o2.inicio.x, 0.0f, o2.fim.z}, .06f, .066f, b0 + 2, b0 + 2, 1));
+        size_t n = an.size();
+        k.tubo(an, 8, {0, 0, 1}, false, true,
+               [&](int i, float, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb {
+                   if (i == 0) ao = 0.8f;
+                   if (i >= int(n) - 2 || i < 0) return casco;
+                   if (i >= int(n) - 4) return vc.meias ? Rgb{0.85f, 0.83f, 0.78f} : escuro;
+                   return pelo;
+               },
+               0, 0);
+    }
+
+    // sela e manta
+    if (vc.selado) {
+        Rgb couro{0.3f, 0.19f, 0.11f}, manta{0.55f, 0.14f, 0.11f};
+        std::vector<Anel> mt = {A({0, 1.69f, -0.42f}, .30f, .035f, C_CORPO, C_CORPO, 1), A({0, 1.71f, -0.1f}, .33f, .04f, C_CORPO, C_CORPO, 1),
+                                A({0, 1.71f, 0.3f}, .31f, .035f, C_CORPO, C_CORPO, 1)};
+        k.tubo(mt, 12, {0, 1, 0}, true, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return manta; });
+        std::vector<Anel> se = {A({0, 1.79f, -0.36f}, .16f, .07f, C_CORPO, C_CORPO, 1), A({0, 1.74f, -0.2f}, .2f, .05f, C_CORPO, C_CORPO, 1),
+                                A({0, 1.74f, 0.08f}, .2f, .05f, C_CORPO, C_CORPO, 1), A({0, 1.81f, 0.22f}, .1f, .07f, C_CORPO, C_CORPO, 1)};
+        k.tubo(se, 10, {0, 1, 0}, true, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return couro; });
+        for (float sx : {1.f, -1.f}) {
+            std::vector<Anel> es = {A({sx * 0.31f, 1.72f, -0.05f}, .02f, .012f, C_CORPO, C_CORPO, 1), A({sx * 0.33f, 1.22f, -0.05f}, .02f, .012f, C_CORPO, C_CORPO, 1),
+                                    A({sx * 0.33f, 1.14f, -0.05f}, .05f, .03f, C_CORPO, C_CORPO, 1)};
+            k.tubo(es, 4, {0, 0, 1}, false, true, [&](int i, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return i == 2 ? Rgb{0.3f, 0.3f, 0.32f} : couro; }, 0, 0.01f);
+        }
+    }
+
+    std::vector<Vec3f> acc(m.v.size());
+    for (size_t t = 0; t < m.idx.size(); t += 3) {
+        Vec3f a = m.v[m.idx[t]].pos, b = m.v[m.idx[t + 1]].pos, c = m.v[m.idx[t + 2]].pos;
+        Vec3f nn = cross(b - a, c - a);
+        for (int j = 0; j < 3; j++) acc[m.idx[t + j]] = acc[m.idx[t + j]] + nn;
+    }
+    for (size_t i = 0; i < m.v.size(); i++) m.v[i].normal = normalizar(acc[i]);
+    return m;
+}

@@ -66,5 +66,7 @@ void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const 
     }
     k.pos.y = std::max(t.altura(k.pos.x, k.pos.z), col.alturaPiso(k.pos.x, k.pos.z, k.pos.y));
     c.andadura = classificar(k.vel);
-    c.passada += dt * (k.vel * 1.1f + (c.andadura == Andadura::Parado ? 0 : 1.f));
+    // fase da passada: um ciclo a cada ~1,6 m (passo), 2,5 m (trote), 3,5 m (galope)
+    float porMetro = c.andadura == Andadura::Galope ? 1.8f : (c.andadura == Andadura::Trote ? 2.5f : 3.9f);
+    c.passada += dt * k.vel * porMetro;
 }

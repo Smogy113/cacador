@@ -71,7 +71,11 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
         c.corpo.yaw = i == 0 && op.comecarMontado ? yaw : float(i) * 1.7f;
         cavalos_.push_back(c);
         modelosCavalo_.emplace_back();
-        modelosCavalo_.back().carregar(pelos[i % 4], crinas[i % 4], true);
+        VisualCavalo vc;
+        vc.pelo = pelos[i % 4];
+        vc.crina = crinas[i % 4];
+        vc.meias = i % 3 == 2;
+        modelosCavalo_.back().carregar(vc);
     }
     if (op.comecarMontado && !cavalos_.empty()) {
         cavalos_[0].montado = true;
@@ -247,9 +251,10 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         const Cavalo& c = cavalos_[i];
         Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
         if (d.x * d.x + d.z * d.z > distMax * distMax) continue;
-        modelosCavalo_[i].desenhar(mat, c.corpo.pos, c.corpo.yaw, c.passada, int(c.andadura));
+        Pose pc = poseCavalo(modelosCavalo_[i].esqueleto(), c.passada, int(c.andadura), tempo_ + float(i) * 3.7f);
+        modelosCavalo_[i].desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc);
         if (int(i) == montadoEm_) {
-            Vec3f q = ModeloCavalo::assento(c.corpo.pos, c.corpo.yaw);
+            Vec3f q = modelosCavalo_[i].assento(c.corpo.pos, c.corpo.yaw, pc);
             float quadril = modeloJogador_.esqueleto().ossos[QUADRIL].inicio.y;
             modeloJogador_.desenhar(matPele, q - Vec3f{0, quadril, 0}, c.corpo.yaw, poseMontado(modeloJogador_.esqueleto(), c.passada, int(c.andadura)));
         }

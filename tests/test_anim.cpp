@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <cmath>
 #include "core/anim.h"
 
@@ -38,4 +39,29 @@ TEST_CASE("pés no chão em todas as fases") {
 TEST_CASE("proporções diferentes também ficam no chão") {
     Esqueleto baixo = esqueletoHumano({1.6f, 0.9f, 1.1f, 1.f});
     for (float f = 0; f < 6.3f; f += 0.7f) CHECK(alturaDosPes(baixo, poseAndar(baixo, f, 1.6f)) == doctest::Approx(0).epsilon(0.01));
+}
+
+static const Esqueleto& cav() {
+    static Esqueleto e = esqueletoCavalo();
+    return e;
+}
+TEST_CASE("cavalo parado com cascos no chão") {
+    for (float t = 0; t < 5; t += 0.7f) CHECK(alturaDosCascos(cav(), poseCavalo(cav(), 0, 0, t)) == doctest::Approx(0).epsilon(0.01));
+}
+TEST_CASE("cavalo andando nunca afunda nem flutua") {
+    for (int a = 1; a <= 3; a++)
+        for (float f = 0; f < 6.3f; f += 0.4f) CHECK(alturaDosCascos(cav(), poseCavalo(cav(), f, a, 0)) == doctest::Approx(0).epsilon(0.01));
+}
+TEST_CASE("trote: diagonais juntas") {
+    Pose p = poseCavalo(cav(), 1.2f, 2, 0);
+    CHECK(p.rot[C_BRACO_DE].x == doctest::Approx(p.rot[C_COXA_TD].x).epsilon(0.05));
+    CHECK(p.rot[C_BRACO_DE].x * p.rot[C_BRACO_DD].x < 0);
+}
+TEST_CASE("galope balança mais que passo") {
+    float passo = 0, galope = 0;
+    for (float f = 0; f < 6.3f; f += 0.1f) {
+        passo = std::max(passo, std::abs(poseCavalo(cav(), f, 1, 0).rot[C_BRACO_DE].x));
+        galope = std::max(galope, std::abs(poseCavalo(cav(), f, 3, 0).rot[C_BRACO_DE].x));
+    }
+    CHECK(galope > passo * 1.5f);
 }

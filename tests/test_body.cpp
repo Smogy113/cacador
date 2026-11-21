@@ -90,3 +90,32 @@ TEST_CASE("lado esquerdo do personagem fica em +x (ele olha para +z)") {
     CHECK(e.ossos[MAO_E].inicio.x > 0);
     CHECK(e.ossos[MAO_D].inicio.x < 0);
 }
+
+TEST_CASE("cavalo: até 2000 triângulos, ossos válidos") {
+    for (bool sel : {false, true}) {
+        VisualCavalo v;
+        v.selado = sel;
+        auto m = corpoCavalo(v);
+        CHECK(m.triangulos() <= 2000);
+        CHECK(m.triangulos() >= 600);
+        for (auto& x : m.v) {
+            CHECK(x.osso[0] < N_OSSOS_CAVALO);
+            CHECK(x.osso[1] < N_OSSOS_CAVALO);
+        }
+    }
+    auto e = esqueletoCavalo();
+    REQUIRE(e.ossos.size() == N_OSSOS_CAVALO);
+    CHECK(N_OSSOS_CAVALO <= 17);
+    for (size_t i = 0; i < e.ossos.size(); i++) CHECK(e.ossos[i].pai < int(i));
+}
+TEST_CASE("cavalo: cascos no chão e olha para +z") {
+    auto m = corpoCavalo({});
+    float base = 1e9f, zCabeca = -1e9f;
+    for (auto& v : m.v) {
+        base = std::min(base, v.pos.y);
+        if (v.osso[0] == C_CABECA) zCabeca = std::max(zCabeca, v.pos.z);
+    }
+    CHECK(base == doctest::Approx(0).epsilon(0.01));
+    CHECK(zCabeca > 1.2f);
+    CHECK(assentoCavalo().y > 1.6f);
+}
