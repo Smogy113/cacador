@@ -26,6 +26,7 @@ public:
     void modoEstudio(Vec3f dirLuz, bool argila);
     Shader shaderLit() const { return lit_; }
     Material& material() { return mat_; }
+    Material& materialConstrucoes() { return matConstr_; }  // construcoes: com o bloco das paredes
     const Efeitos& efeitos() const { return ef_; }
     Nivel nivel() const { return nivel_; }
     void definirRaioGrama(float r);
@@ -74,9 +75,10 @@ private:
     std::vector<Shader> personagens() const;  // pele_ e, se houver, cabeca_
     std::vector<Shader> sombreados() const;   // lit_, pele_ e cabeca_
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blur4_{}, longe_{};
-    Shader pele_{}, profPele_{}, cabeca_{};
+    Shader pele_{}, profPele_{}, cabeca_{}, litParede_{};
+    bool paredeOk_ = false;
     bool cabecaOk_ = false;
-    Material mat_{}, matProf_{}, matPele_{}, matProfPele_{}, matCabeca_{};
+    Material mat_{}, matProf_{}, matPele_{}, matProfPele_{}, matCabeca_{}, matConstr_{};
     Model esfera_{};
     Texture2D ruidoNuvem_{};  // ruido 3D barato (1 leitura) para as nuvens
     RenderTexture2D sombraPertoRT_{};

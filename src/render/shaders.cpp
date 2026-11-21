@@ -347,7 +347,7 @@ float finura(vec3 q) {
 #endif
 
 
-#if !defined(PERSONAGEM) && !defined(GL_ES)
+#ifdef PAREDES
 // ---- paredes das casas: relevo desenhado pixel a pixel (o raio entra num campo de alturas por
 // material) com sombra propria do relevo; coordenadas = posicao no plano da face (sem UV) ----
 uniform float paredes;  // 0 desligado, 1 Medio, 2 Alto
@@ -400,13 +400,15 @@ float hParede(vec2 uv, float mat) {
 uniform vec4 formaA[32];    // centro.xyz, rotY
 uniform vec4 formaB[32];    // meia.xyz, tipo (0 caixa, 1 prisma, 2 cilindro)
 uniform vec3 formaCor[32];
+uniform vec2 formaCS[32];   // cos e sen da rotacao (calculados no processador)
+uniform float formaR[32];   // raio da esfera que envolve a forma
 uniform int numFormas;
 uniform vec4 janelaP[12];
 uniform vec3 janelaN[12];
 uniform int numJanelas;
 float dForma(int i, vec3 p) {
     vec3 d = p - formaA[i].xyz;
-    float c = cos(formaA[i].w), s = sin(formaA[i].w);
+    float c = formaCS[i].x, s = formaCS[i].y;
     vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
     vec3 h = formaB[i].xyz;
     vec3 dd = abs(q) - h;
@@ -425,6 +427,8 @@ float mapaCena(vec3 p, out int id) {
     id = -1;
     for (int i = 0; i < 32; i++) {
         if (i >= numFormas) break;
+        // a forma inteira cabe numa esfera: se ate a esfera ja e mais longe que a melhor, pula
+        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
         float di = dForma(i, p);
         if (di < d) { d = di; id = i; }
     }
@@ -594,7 +598,7 @@ void main() {
         if (dg > raioGrama - 9.0 * hg) discard;
         gGrama = 1.0;
     }
-#if !defined(PERSONAGEM) && !defined(GL_ES)
+#ifdef PAREDES
     bool ehParede = paredes > 0.5 && extra.y > 4.5 && extra.y < 7.5 && abs(n.y) < 0.3;
     float alcance = 1.0 - smoothstep(40.0, 70.0, dist);  // luz tracada: ate 40 m, some ate 70 m
     if (ehParede) {
@@ -809,7 +813,7 @@ void main() {
     vec3 Lq = paraEscultura(dirSol);
     if (economico < 0.5 && sombra > 0.01) sombra = min(sombra, mix(0.22, 1.0, sombraPropria(qHit, Lq)));  // a luz rebatida na pele nao deixa a sombra preta
 #endif
-#if !defined(PERSONAGEM) && !defined(GL_ES)
+#ifdef PAREDES
     if (ehParede && paredes > 1.5 && alcance > 0.0) {  // Alto: a sombra vem dos raios contra as construcoes
         float sc = dot(nParede, dirSombra) > 0.0 ? sombraCena(posMundo + nParede * 0.03, dirSombra) : 0.0;
         sombra = mix(sombra, sc, alcance);
@@ -830,9 +834,9 @@ void main() {
     // contorno: o ceu "abraca" as bordas (luz indireta)
     float borda = pow(1.0 - max(dot(n, v), 0.0), 3.0);
     luz += ambCeu * borda * 0.25 * (1.0 - abs(n.y)) * ao;
-#if !defined(PERSONAGEM) && !defined(GL_ES)
+#ifdef PAREDES
     if (ehParede && alcance > 0.0) {
-        if (paredes > 1.5) luz += reboteCena(posMundo + nParede * 0.03, nParede, normalize(cross(vec3(0.0, 1.0, 0.0), nParede))) * alcance * aoCena;
+        if (paredes > 1.5 && dot(corSol, corSol) > 0.0) luz += reboteCena(posMundo + nParede * 0.03, nParede, normalize(cross(vec3(0.0, 1.0, 0.0), nParede))) * alcance * aoCena;
         luz += luzJanelas(posMundo, n) * alcance;
     }
 #endif

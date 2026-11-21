@@ -992,7 +992,7 @@ void Cenario::atualizar(Vec3f foco, float tempo, int maxConstrucoes) {
     }
 }
 
-void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat) {
+void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr) {
     tris_ = 0;
     chamadas_ = 0;
     Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
@@ -1009,7 +1009,7 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat) {
             if (ang - std::asin(std::min(1.f, p.raio / d)) > meio) continue;
         }
         if (p.temConstr) {
-            DrawMesh(p.construcoes, mat, id);
+            DrawMesh(p.construcoes, matConstr ? *matConstr : mat, id);
             tris_ += p.construcoes.triangleCount;
             chamadas_++;
         }

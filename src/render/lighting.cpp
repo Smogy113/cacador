@@ -95,7 +95,7 @@ void Iluminacao::liberarEfeitos() {
         UnloadRenderTexture(raiosRT_);
         posOk_ = false;
     }
-    mat_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
+    mat_.maps[MATERIAL_MAP_SPECULAR].texture = matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
     float zero = 0;
     for (Shader sh : sombreados()) SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &zero, SHADER_UNIFORM_FLOAT);
     matPele_.maps[MATERIAL_MAP_SPECULAR].texture = matCabeca_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
@@ -117,6 +117,19 @@ void Iluminacao::carregar(Nivel nivel) {
     ceu_ = carregarShader(VS_CEU, FS_CEU);
     mat_ = LoadMaterialDefault();
     mat_.shader = lit_;
+    // construcoes: o mesmo shader com o bloco das paredes (o resto do mundo, grama inclusive, fica
+    // com o shader menor, que roda mais pixels ao mesmo tempo na placa)
+    matConstr_ = LoadMaterialDefault();
+    matConstr_.shader = lit_;
+#if !defined(PLATFORM_WEB)
+    litParede_ = carregarShaderDef(VS_LIT, FS_LIT, "#define PAREDES\n");
+    paredeOk_ = litParede_.id > 0 && litParede_.id != rlGetShaderIdDefault();
+    if (paredeOk_) {
+        litParede_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(litParede_, "matModel");
+        litParede_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(litParede_, "texSombra");
+        matConstr_.shader = litParede_;
+    }
+#endif
     esfera_ = LoadModelFromMesh(GenMeshSphere(400.f, 24, 32));
     esfera_.materials[0].shader = ceu_;
     {   // textura de ruido: G(x,y) = R(x-37, y-17) -> ruido 3D com uma leitura (camadas em z deslocadas)
@@ -181,13 +194,15 @@ void Iluminacao::carregar(Nivel nivel) {
             for (Shader sh : personagens()) setF(sh, "texelSombraPerto", t);
         }
         if (sombraOk_) {
-            mat_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
+            mat_.maps[MATERIAL_MAP_SPECULAR].texture = matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
             matPele_.maps[MATERIAL_MAP_SPECULAR].texture = matCabeca_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
             float texel = 1.f / ef_.resolucaoSombra;
             setF(lit_, "texelSombra", texel);
+            if (paredeOk_) setF(litParede_, "texelSombra", texel);
             for (Shader sh : personagens()) setF(sh, "texelSombra", texel);
             float tm = 2 * AREA_SOMBRA / ef_.resolucaoSombra;
             setF(lit_, "texelMetros", tm);
+            if (paredeOk_) setF(litParede_, "texelMetros", tm);
             for (Shader sh : personagens()) setF(sh, "texelMetros", tm);
         }
     }
@@ -235,6 +250,12 @@ void Iluminacao::descarregar() {
     UnloadModel(esfera_);
     UnloadTexture(ruidoNuvem_);
     UnloadShader(lit_);
+    if (paredeOk_) {
+        matConstr_.shader = lit_;
+        matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
+        UnloadShader(litParede_);
+        paredeOk_ = false;
+    }
     UnloadShader(ceu_);
     carregado_ = false;
 }
@@ -296,7 +317,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
         SetShaderValue(sh, GetShaderLocation(sh, "numLuzes"), &ni, SHADER_UNIFORM_INT);
     }
 #if !defined(PLATFORM_WEB)
-    setF(lit_, "paredes", dbg.semParedes || nivel_ == Nivel::Baixo ? 0.f : (nivel_ == Nivel::Alto ? 2.f : 1.f));
+    if (paredeOk_) setF(litParede_, "paredes", dbg.semParedes || nivel_ == Nivel::Baixo ? 0.f : (nivel_ == Nivel::Alto ? 2.f : 1.f));
 #endif
     uniformesComuns(ceu_, paleta_, sol_, noite_);
     setRgb(ceu_, "ceuTopo", paleta_.ceuTopo);
@@ -309,7 +330,10 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     setF(ceu_, "passosNuvem", dbg.semNuvens ? -1.f : pn);
 }
 
-void Iluminacao::modoHorizonte(float d) { setF(lit_, "descartarPerto", d); }
+void Iluminacao::modoHorizonte(float d) {
+    setF(lit_, "descartarPerto", d);
+    if (paredeOk_) setF(litParede_, "descartarPerto", d);
+}
 
 void Iluminacao::modoEstudio(Vec3f dir, bool argila) {
     for (Shader sh : sombreados()) {
@@ -359,6 +383,7 @@ void Iluminacao::comecarSombra(Vec3f centro) {
     cl.projection = CAMERA_ORTHOGRAPHIC;
     dirSombra_ = dir;
     setV3(lit_, "dirSombra", dir);
+    if (paredeOk_) setV3(litParede_, "dirSombra", dir);
     for (Shader sh : personagens()) setV3(sh, "dirSombra", dir);
     BeginTextureMode(sombraRT_);
     ClearBackground(WHITE);
@@ -566,6 +591,7 @@ std::vector<Shader> Iluminacao::personagens() const {
 }
 std::vector<Shader> Iluminacao::sombreados() const {
     std::vector<Shader> v{lit_, pele_};
+    if (paredeOk_) v.push_back(litParede_);
     if (cabecaOk_) v.push_back(cabeca_);
     return v;
 }
@@ -576,20 +602,34 @@ void Iluminacao::definirHeroi(bool sim) {
 void Iluminacao::definirFoco(float d) { distFoco_ = d; }
 void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& js, Vec3f foco) {
 #if !defined(PLATFORM_WEB)
-    float a[32 * 4] = {0}, b[32 * 4] = {0}, c[32 * 3] = {0};
+    if (!paredeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes) return;  // nada le esses valores
+    Shader sh = litParede_;
+    static unsigned int ultimo = 0;
+    static int loc[9];
+    if (sh.id != ultimo) {  // posicoes dos uniformes: uma vez por shader
+        ultimo = sh.id;
+        const char* nomes[9] = {"formaA", "formaB", "formaCor", "numFormas", "janelaP", "janelaN", "numJanelas", "formaCS", "formaR"};
+        for (int i = 0; i < 9; i++) loc[i] = GetShaderLocation(sh, nomes[i]);
+    }
+    float a[32 * 4] = {0}, b[32 * 4] = {0}, c[32 * 3] = {0}, cs[32 * 2] = {0}, r[32] = {0};
     int n = std::min<int>(32, int(idx.size()));
     for (int k = 0; k < n; k++) {
         const FormaCena& f = fs[idx[k]];
         a[k * 4] = f.centro.x, a[k * 4 + 1] = f.centro.y, a[k * 4 + 2] = f.centro.z, a[k * 4 + 3] = f.rotY;
         b[k * 4] = f.meia.x, b[k * 4 + 1] = f.meia.y, b[k * 4 + 2] = f.meia.z, b[k * 4 + 3] = float(int(f.tipo));
         c[k * 3] = f.cor.r, c[k * 3 + 1] = f.cor.g, c[k * 3 + 2] = f.cor.b;
+        cs[k * 2] = std::cos(f.rotY), cs[k * 2 + 1] = std::sin(f.rotY);
+        r[k] = len(f.meia);  // raio da esfera que envolve a forma (pular formas longe)
     }
-    SetShaderValueV(lit_, GetShaderLocation(lit_, "formaA"), a, SHADER_UNIFORM_VEC4, 32);
-    SetShaderValueV(lit_, GetShaderLocation(lit_, "formaB"), b, SHADER_UNIFORM_VEC4, 32);
-    SetShaderValueV(lit_, GetShaderLocation(lit_, "formaCor"), c, SHADER_UNIFORM_VEC3, 32);
-    SetShaderValue(lit_, GetShaderLocation(lit_, "numFormas"), &n, SHADER_UNIFORM_INT);
+    SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 32);
+    SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 32);
+    SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 32);
+    SetShaderValue(sh, loc[3], &n, SHADER_UNIFORM_INT);
+    SetShaderValueV(sh, loc[7], cs, SHADER_UNIFORM_VEC2, 32);
+    SetShaderValueV(sh, loc[8], r, SHADER_UNIFORM_FLOAT, 32);
     // as 12 janelas mais proximas do foco
     std::vector<std::pair<float, int>> ord;
+    ord.reserve(64);
     for (int i = 0; i < int(js.size()); i++) {
         Vec3f d = js[i].pos - foco;
         float d2 = dot(d, d);
@@ -603,9 +643,9 @@ void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vect
         jp[k * 4] = j.pos.x, jp[k * 4 + 1] = j.pos.y, jp[k * 4 + 2] = j.pos.z;
         jn[k * 3] = j.normal.x, jn[k * 3 + 1] = j.normal.y, jn[k * 3 + 2] = j.normal.z;
     }
-    SetShaderValueV(lit_, GetShaderLocation(lit_, "janelaP"), jp, SHADER_UNIFORM_VEC4, 12);
-    SetShaderValueV(lit_, GetShaderLocation(lit_, "janelaN"), jn, SHADER_UNIFORM_VEC3, 12);
-    SetShaderValue(lit_, GetShaderLocation(lit_, "numJanelas"), &nj, SHADER_UNIFORM_INT);
+    SetShaderValueV(sh, loc[4], jp, SHADER_UNIFORM_VEC4, 12);
+    SetShaderValueV(sh, loc[5], jn, SHADER_UNIFORM_VEC3, 12);
+    SetShaderValue(sh, loc[6], &nj, SHADER_UNIFORM_INT);
 #else
     (void)fs, (void)idx, (void)js, (void)foco;
 #endif

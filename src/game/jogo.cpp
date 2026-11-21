@@ -484,7 +484,7 @@ void Jogo::desenhar() {
     terrenoR_->desenharHorizonte(luz_.material());
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
-    cenario_.desenhar(cam_, dv, luz_.material());
+    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes());
     luz_.definirRaioGrama(grama_.raio());
     rlDisableBackfaceCulling();  // folhas vistas dos dois lados
     grama_.desenhar(cam_, luz_.material());
