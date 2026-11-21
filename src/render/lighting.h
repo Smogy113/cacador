@@ -72,6 +72,8 @@ public:
 private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
     void liberarEfeitos();
+    void assarMateriais();
+    RenderTexture2D texMat_[3]{};  // material das paredes: alturas, fatores de cor, pesos
     std::vector<Shader> personagens() const;  // pele_ e, se houver, cabeca_
     std::vector<Shader> sombreados() const;   // lit_, pele_ e cabeca_
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blur4_{}, longe_{};

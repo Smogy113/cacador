@@ -357,46 +357,14 @@ float vn2(vec2 p) {
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-// alturas em metros, de -0,03 (fundo) a 0 (face da parede); "id" sorteia tom por peca
-float hTabua(vec2 uv, out float id) {
-    float alt = 0.2, row = floor(uv.y / alt), fy = fract(uv.y / alt);
-    float x = uv.x + hash12(vec2(row, 7.0)) * 3.0;
-    float seg = floor(x / 2.4), fx = fract(x / 2.4);
-    id = hash12(vec2(row, seg + 31.0));
-    float face = smoothstep(0.0, 0.04, fy) * smoothstep(1.0, 0.96, fy) * smoothstep(0.0, 0.004, fx) * smoothstep(1.0, 0.996, fx);
-    float topo = -0.005 + 0.0035 * sin(fy * 3.1416) - 0.003 * id + 0.0012 * vn2(vec2(x * 2.0, uv.y * 70.0 + id * 9.0));
-    return mix(-0.026, topo, face);
-}
-float hPedra(vec2 uv, out float id) {
-    vec2 tam = vec2(0.42, 0.27);
-    float row = floor(uv.y / tam.y);
-    vec2 s = vec2(uv.x / tam.x + hash12(vec2(row, 3.0)) * 0.9 + row * 0.5, uv.y / tam.y);
-    s.x += (vn2(vec2(s.x * 0.8, row * 3.1)) - 0.5) * 0.7;  // juntas verticais irregulares (pedra, nao tijolo)
-    vec2 c = floor(s), f = fract(s);
-    id = hash12(c + 17.0);
-    vec2 e = min(f, 1.0 - f) * tam;
-    float borda = min(e.x, e.y) + (vn2(uv * 9.0) - 0.5) * 0.014;
-    float m = smoothstep(0.003, 0.018, borda);
-    float face = -0.014 + 0.011 * smoothstep(0.0, 0.07, borda) - 0.004 * vn2(uv * 7.0 + id * 13.0) - 0.0015 * vn2(uv * 30.0);
-    return mix(-0.029, face, m);
-}
-float hReboco(vec2 uv, out float caiu, out float id) {
-    float h = -0.0025 * vn2(uv * 1.7) - 0.0009 * vn2(uv * 14.0);
-    float rach = abs(vn2(uv * 3.3) + 0.5 * vn2(uv * 7.1 + 3.0) - 0.75);
-    // rachaduras finas: tracos interrompidos (nao contornos fechados), so em algumas regioes
-    h -= 0.004 * smoothstep(0.007, 0.0, rach) * smoothstep(0.6, 0.75, vn2(uv * 2.2 + 9.0)) * step(0.6, vn2(uv * 0.9 + 5.0));
-    float pc = vn2(uv * 0.8 + 11.0) * 0.7 + vn2(uv * 3.5) * 0.3;
-    caiu = smoothstep(0.62, 0.65, pc);                                                    // reboco caido: pedra por baixo
-    id = 0.0;
-    if (caiu <= 0.0) return h;                                                            // reboco inteiro: nao precisa da pedra
-    float hp = hPedra(uv, id);
-    return mix(h, -0.012 + hp * 0.6, caiu);
-}
+// material assado em texturas na abertura (FS_ASSAR_MATERIAL): repete a cada 4 m
+uniform sampler2D texAltura;
+uniform sampler2D texFator;
+uniform sampler2D texPeso;
+float lodMat = 0.0;
 float hParede(vec2 uv, float mat) {
-    float id, caiu;
-    if (mat < 5.5) return hReboco(uv, caiu, id);
-    if (mat < 6.5) return hTabua(uv, id);
-    return hPedra(uv, id);
+    vec3 a = textureLod(texAltura, uv * 0.25, lodMat).rgb;
+    return -0.03 * (mat < 5.5 ? a.r : (mat < 6.5 ? a.g : a.b));
 }
 // ---- o vilarejo como formula de distancia: as construcoes perto da camera (formas exatas) ----
 uniform vec4 formaA[32];    // centro.xyz, rotY
@@ -592,26 +560,20 @@ void relevoParede(inout vec3 n, inout vec3 albedo, inout float ao, vec3 v, float
     float h0 = hParede(uv, mat), hx = hParede(uv + vec2(e, 0.0), mat), hy = hParede(uv + vec2(0.0, e), mat);
     vec3 nt = normalize(vec3(-(hx - h0) / e * kn, -(hy - h0) / e * kn, 1.0));
     n = normalize(T * nt.x + B * nt.y + N0 * nt.z);
-    // cor e oclusao das cavidades
-    float id, caiu;
+    // cor e oclusao das cavidades (fatores e pesos assados)
     vec3 corPedra = vec3(0.46, 0.44, 0.41);
+    vec4 F = textureLod(texFator, uv * 0.25, lodMat) * 2.0;
+    vec4 P = textureLod(texPeso, uv * 0.25, lodMat);
     if (mat < 5.5) {
-        hReboco(uv, caiu, id);
-        albedo *= 0.86 + 0.2 * vn2(uv * 0.5) - 0.1 * vn2(uv * 2.3) + 0.06 * vn2(uv * 9.0);  // manchas em varias escalas
-        albedo = mix(albedo, albedo * vec3(0.93, 0.92, 0.88), smoothstep(0.4, 0.8, vn2(uv * 0.25 + 40.0)));  // pintura gasta
-        albedo *= 1.0 - 0.14 * smoothstep(0.55, 0.9, vn2(vec2(uv.x * 7.0, uv.y * 0.35)));   // escorridos da chuva
-        float tomP = 0.8 + 0.4 * id;
-        vec3 pedraVista = mix(corPedra * 1.25, corPedra * tomP, smoothstep(-0.026, -0.018, h0 + 0.012));
-        albedo = mix(albedo, pedraVista, caiu);
+        albedo *= F.r;
+        albedo = mix(albedo, albedo * vec3(0.93, 0.92, 0.88), P.a);   // pintura gasta
+        albedo = mix(albedo, corPedra * (P.g * 2.0), P.r);            // reboco caido: pedra exposta
     } else if (mat < 6.5) {
-        hTabua(uv, id);
         float lumM = dot(albedo, vec3(0.3, 0.59, 0.11));
         albedo = mix(albedo, vec3(lumM) * vec3(1.08, 0.95, 0.82), 0.45);   // madeira envelhecida: menos saturada
-        albedo *= (0.72 + 0.5 * id) * (0.8 + 0.32 * vn2(vec2(uv.x * 2.0, uv.y * 60.0 + id * 7.0)));
+        albedo *= F.g;
     } else {
-        hPedra(uv, id);
-        float arg = smoothstep(-0.02, -0.026, h0);                    // argamassa
-        albedo = mix(albedo * (0.72 + 0.5 * id) * (0.9 + 0.2 * vn2(uv * 11.0)), vec3(0.42, 0.39, 0.34) * 0.75, arg);
+        albedo = mix(albedo * F.b, vec3(0.42, 0.39, 0.34) * 0.75, P.b);   // argamassa
     }
     ao *= mix(0.45, 1.0, smoothstep(-0.03, -0.004, h0));             // fundo das frestas escuro
 }
@@ -619,6 +581,12 @@ void relevoParede(inout vec3 n, inout vec3 albedo, inout float ao, vec3 v, float
 void main() {
 #ifdef RAYMARCH
     marchar();
+#endif
+#ifdef PAREDES
+    {   // nivel de detalhe do material: tamanho de um pixel em metros (texel = 4 m / 2048)
+        float px = max(length(dFdx(posMundo)), length(dFdy(posMundo)));
+        lodMat = clamp(log2(max(px, 1e-5) / (4.0 / 2048.0)), 0.0, 11.0);
+    }
 #endif
     vec3 n = normalize(normalMundo);
     vec3 albedo = pow(cor.rgb, vec3(2.2));
@@ -1116,6 +1084,84 @@ VARY float tipo;
 void main() {
     if ((tipo > 1.5 && tipo < 2.5) || tipo > 23.5) discard;  // chamas e cartoes de pelo nao fazem sombra
     FRAG = vec4(1.0);
+}
+)";
+
+
+// ---------- material das paredes, assado em texturas na abertura (repete a cada 4 m) ----------
+// saida 0: alturas (R reboco, G madeira, B pedra; 0 = face, 1 = 3 cm de fundo)
+// saida 1: fatores de cor / 2 (R reboco, G madeira, B pedra)
+// saida 2: pesos (R reboco caido, G tom da pedra exposta / 2, B argamassa, A desgaste da pintura)
+const char* FS_ASSAR_MATERIAL = R"(
+uniform float saida;
+uniform float tamTex;
+float hashA(vec2 p) {
+    p += vec2(271.3, 517.9);  // o hash e ruim com inteiros pequenos (0..per): desloca para longe da origem
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+// ruido periodico: o reticulado da a volta a cada "per" celulas
+float vp(vec2 p, vec2 per) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    vec2 i0 = mod(i, per), i1 = mod(i + 1.0, per);
+    return mix(mix(hashA(i0), hashA(vec2(i1.x, i0.y)), f.x), mix(hashA(vec2(i0.x, i1.y)), hashA(i1), f.x), f.y);
+}
+float vpf(vec2 uv, float fr, vec2 desl) { return vp(uv * fr + desl, vec2(fr * 4.0)); }
+float hTabua(vec2 uv, out float id) {
+    float alt = 0.2, row = floor(uv.y / alt), fy = fract(uv.y / alt);
+    float rowM = mod(row, 20.0);
+    float x = uv.x + hashA(vec2(rowM, 7.0)) * 3.0;
+    float seg = floor(x / 2.0), fx = fract(x / 2.0);
+    id = hashA(vec2(rowM, mod(seg, 2.0) + 31.0));
+    float face = smoothstep(0.0, 0.04, fy) * smoothstep(1.0, 0.96, fy) * smoothstep(0.0, 0.004, fx) * smoothstep(1.0, 0.996, fx);
+    float topo = -0.005 + 0.0035 * sin(fy * 3.1416) - 0.003 * id + 0.0012 * vp(vec2(x * 2.0, uv.y * 70.0 + id * 9.0), vec2(8.0, 280.0));
+    return mix(-0.026, topo, face);
+}
+float hPedra(vec2 uv, out float id) {
+    vec2 tam = vec2(0.4, 4.0 / 15.0);
+    float row = floor(uv.y / tam.y);
+    float rowM = mod(row, 15.0);
+    vec2 s = vec2(uv.x / tam.x + hashA(vec2(rowM, 3.0)) * 0.9 + mod(row, 2.0) * 0.5, uv.y / tam.y);
+    s.x += (vp(vec2(s.x * 0.8, rowM * 3.0), vec2(8.0, 45.0)) - 0.5) * 0.7;
+    vec2 c = floor(s), f = fract(s);
+    id = hashA(mod(c, vec2(10.0, 15.0)) + 17.0);
+    vec2 e = min(f, 1.0 - f) * tam;
+    float borda = min(e.x, e.y) + (vpf(uv, 9.0, vec2(0.0)) - 0.5) * 0.014;
+    float m = smoothstep(0.003, 0.018, borda);
+    float face = -0.014 + 0.011 * smoothstep(0.0, 0.07, borda) - 0.004 * vpf(uv, 7.0, vec2(id * 13.0)) - 0.0015 * vpf(uv, 30.0, vec2(0.0));
+    return mix(-0.029, face, m);
+}
+float hReboco(vec2 uv, out float caiu, out float id) {
+    float h = -0.0025 * vpf(uv, 1.75, vec2(0.0)) - 0.0009 * vpf(uv, 14.0, vec2(0.0));
+    float rach = abs(vpf(uv, 3.25, vec2(0.0)) + 0.5 * vpf(uv, 7.0, vec2(3.0)) - 0.75);
+    h -= 0.004 * smoothstep(0.007, 0.0, rach) * smoothstep(0.6, 0.75, vpf(uv, 2.25, vec2(9.0))) * step(0.6, vpf(uv, 1.0, vec2(5.0)));
+    // deslocamento e limiar escolhidos para o ladrilho ter a proporcao de reboco caido do original (~4%)
+    float pc = vpf(uv, 0.75, vec2(26.0, 9.62)) * 0.7 + vpf(uv, 3.5, vec2(0.0)) * 0.3;
+    caiu = smoothstep(0.77, 0.80, pc);
+    id = 0.0;
+    if (caiu <= 0.0) return h;
+    float hp = hPedra(uv, id);
+    return mix(h, -0.012 + hp * 0.6, caiu);
+}
+void main() {
+    vec2 uv = gl_FragCoord.xy / tamTex * 4.0;  // metros dentro do ladrilho de 4 m
+    float idR, caiu, idM, idP;
+    float hR = hReboco(uv, caiu, idR), hM = hTabua(uv, idM), hP = hPedra(uv, idP);
+    if (saida < 0.5) { FRAG = vec4(-hR / 0.03, -hM / 0.03, -hP / 0.03, 1.0); return; }
+    if (saida < 1.5) {
+        float fR = (0.86 + 0.2 * vpf(uv, 0.5, vec2(0.0)) - 0.1 * vpf(uv, 2.25, vec2(0.0)) + 0.06 * vpf(uv, 9.0, vec2(0.0)))
+                 * (1.0 - 0.14 * smoothstep(0.55, 0.9, vp(vec2(uv.x * 7.0, uv.y * 0.25), vec2(28.0, 1.0))));
+        float fM = (0.72 + 0.5 * idM) * (0.8 + 0.32 * vp(vec2(uv.x * 2.0, uv.y * 60.0 + idM * 7.0), vec2(8.0, 240.0)));
+        float fP = (0.72 + 0.5 * idP) * (0.9 + 0.2 * vpf(uv, 11.0, vec2(0.0)));
+        FRAG = vec4(fR * 0.5, fM * 0.5, fP * 0.5, 1.0);
+        return;
+    }
+    float tomP = mix(1.25, 0.8 + 0.4 * idR, smoothstep(-0.026, -0.018, hR + 0.012));
+    float arg = smoothstep(-0.02, -0.026, hP);
+    float gasto = smoothstep(0.4, 0.8, vpf(uv, 0.25, vec2(40.0)));
+    FRAG = vec4(caiu, tomP * 0.5, arg, gasto);
 }
 )";
 

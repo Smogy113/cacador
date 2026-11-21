@@ -128,6 +128,7 @@ void Iluminacao::carregar(Nivel nivel) {
         litParede_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(litParede_, "matModel");
         litParede_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(litParede_, "texSombra");
         matConstr_.shader = litParede_;
+        assarMateriais();
     }
 #endif
     esfera_ = LoadModelFromMesh(GenMeshSphere(400.f, 24, 32));
@@ -250,8 +251,12 @@ void Iluminacao::descarregar() {
     UnloadModel(esfera_);
     UnloadTexture(ruidoNuvem_);
     UnloadShader(lit_);
+    for (auto& t : texMat_)
+        if (t.id) UnloadRenderTexture(t);
+    for (auto& t : texMat_) t = RenderTexture2D{};
     if (paredeOk_) {
         matConstr_.shader = lit_;
+        for (int m : {MATERIAL_MAP_NORMAL, MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION}) matConstr_.maps[m].texture = Texture2D{};
         matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
         UnloadShader(litParede_);
         paredeOk_ = false;
@@ -584,6 +589,38 @@ void Iluminacao::terminarSombraPerto() {
         SetShaderValue(sh, GetShaderLocation(sh, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
     }
 }
+// Tabuas, pedra e reboco desenhados uma vez em texturas (mesmas funcoes do shader, periodicas em 4 m):
+// o relevo das paredes passa a ler a textura em vez de calcular o ruido em todo pixel.
+void Iluminacao::assarMateriais() {
+    const int TAM = 2048;
+    Shader sh = carregarShaderPos(FS_ASSAR_MATERIAL);
+    if (sh.id == 0 || sh.id == rlGetShaderIdDefault()) return;
+    const int mapas[3] = {MATERIAL_MAP_NORMAL, MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION};
+    const char* nomes[3] = {"texAltura", "texFator", "texPeso"};
+    float tam = float(TAM);
+    for (int k = 0; k < 3; k++) {
+        texMat_[k] = LoadRenderTexture(TAM, TAM);
+        float saida = float(k);
+        BeginTextureMode(texMat_[k]);
+        ClearBackground(BLANK);
+        BeginShaderMode(sh);
+        SetShaderValue(sh, GetShaderLocation(sh, "saida"), &saida, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(sh, GetShaderLocation(sh, "tamTex"), &tam, SHADER_UNIFORM_FLOAT);
+        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // grava o alfa como esta
+        BeginBlendMode(BLEND_CUSTOM);
+        DrawRectangle(0, 0, TAM, TAM, WHITE);
+        EndBlendMode();
+        EndShaderMode();
+        EndTextureMode();
+        GenTextureMipmaps(&texMat_[k].texture);
+        SetTextureFilter(texMat_[k].texture, TEXTURE_FILTER_TRILINEAR);
+        SetTextureWrap(texMat_[k].texture, TEXTURE_WRAP_REPEAT);
+        matConstr_.maps[mapas[k]].texture = texMat_[k].texture;
+        litParede_.locs[SHADER_LOC_MAP_DIFFUSE + mapas[k]] = GetShaderLocation(litParede_, nomes[k]);
+    }
+    UnloadShader(sh);
+}
+
 std::vector<Shader> Iluminacao::personagens() const {
     std::vector<Shader> v{pele_};
     if (cabecaOk_) v.push_back(cabeca_);
