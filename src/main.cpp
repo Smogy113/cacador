@@ -18,7 +18,7 @@ static Opcoes lerArgs(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         auto prox = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : "0"; };
-        if (a == "--screenshot") { o.screenshot = prox(); o.jogo.congelarHora = true; }
+        if (a == "--screenshot") { o.screenshot = prox(); o.jogo.congelarHora = true; o.jogo.semEntrada = true; }
         else if (a == "--frames") o.frames = std::atoi(prox());
         else if (a == "--hora") o.jogo.hora = (float)std::atof(prox());
         else if (a == "--pos") { o.jogo.temPos = true; o.jogo.x = (float)std::atof(prox()); o.jogo.z = (float)std::atof(prox()); }
@@ -41,6 +41,7 @@ static void quadro() {
     g_jogo->atualizar(dt);
     BeginDrawing();
     g_jogo->desenhar();
+    g_jogo->desenharInterface();
     if (g_op.screenshot.empty()) DrawFPS(10, 10);
     EndDrawing();
     g_frame++;
@@ -51,11 +52,12 @@ int main(int argc, char** argv) {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 720, "Caçador");
     SetTargetFPS(60);
+    SetExitKey(KEY_NULL);  // Esc pausa; sair pelo menu de pausa
     g_jogo = new Jogo(g_op.jogo);
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(quadro, 0, 1);
 #else
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !g_jogo->querSair()) {
         quadro();
         if (!g_op.screenshot.empty() && g_frame >= g_op.frames) {
             Image img = LoadImageFromScreen();
