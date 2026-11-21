@@ -31,6 +31,9 @@ public:
     void comecarSombra(Vec3f centro);
     void terminarSombra();
     Material& materialSombra() { return matProf_; }
+    // personagens com esqueleto
+    Material& materialPele() { return matPele_; }
+    Material& materialSombraPele() { return matProfPele_; }
 
     // Pos-processamento (brilho e raios de luz): envolve o desenho da cena.
     bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz) && posOk_; }
@@ -41,7 +44,8 @@ private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
     void liberarEfeitos();
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{};
-    Material mat_{}, matProf_{};
+    Shader pele_{}, profPele_{};
+    Material mat_{}, matProf_{}, matPele_{}, matProfPele_{};
     Model esfera_{};
     RenderTexture2D sombraRT_{}, cena_{}, meiaA_{}, meiaB_{}, raiosRT_{};
     Matrix luzVP_{};

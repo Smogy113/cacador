@@ -281,3 +281,48 @@ void main() {
     FRAG = vec4(c, 1.0);
 }
 )";
+
+// ---------- personagens com esqueleto (deformados na placa de video) ----------
+// vertexTexCoord2: x = osso A, y = osso B + 0.99 * peso de A
+#define CORPO_SKIN R"(
+ATTR vec3 vertexPosition;
+ATTR vec2 vertexTexCoord;
+ATTR vec2 vertexTexCoord2;
+ATTR vec3 vertexNormal;
+ATTR vec4 vertexColor;
+uniform mat4 mvp;
+uniform mat4 matModel;
+uniform mat4 ossos[17];
+mat4 matrizPele() {
+    int a = int(vertexTexCoord2.x + 0.5);
+    float fy = vertexTexCoord2.y;
+    int b = int(floor(fy));
+    float w = fract(fy) / 0.99;
+    return ossos[a] * w + ossos[b] * (1.0 - w);
+}
+)"
+
+const char* VS_PELE = CORPO_SKIN R"(
+VARY vec3 posMundo;
+VARY vec3 normalMundo;
+VARY vec4 cor;
+VARY vec2 extra;
+void main() {
+    mat4 S = matrizPele();
+    vec4 pl = S * vec4(vertexPosition, 1.0);
+    vec4 p = matModel * pl;
+    posMundo = p.xyz;
+    normalMundo = normalize(mat3(matModel) * (mat3(S) * vertexNormal));
+    cor = vertexColor;
+    extra = vertexTexCoord;
+    gl_Position = mvp * pl;
+}
+)";
+
+const char* VS_PROF_PELE = CORPO_SKIN R"(
+VARY float tipo;
+void main() {
+    tipo = 0.0;
+    gl_Position = mvp * (matrizPele() * vec4(vertexPosition, 1.0));
+}
+)";

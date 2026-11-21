@@ -18,30 +18,36 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     cam_.up = {0, 1, 0};
     cam_.fovy = 60.f;
     cam_.projection = CAMERA_PERSPECTIVE;
-    Roupa r;
+    Visual r;
     r.casaco = {0.36f, 0.26f, 0.18f};
-    r.calca = {0.22f, 0.2f, 0.2f};
-    r.camisa = {0.7f, 0.65f, 0.55f};
+    r.calca = {0.24f, 0.21f, 0.2f};
+    r.camisa = {0.72f, 0.66f, 0.55f};
     r.chapeu = {0.2f, 0.15f, 0.11f};
     r.pele = {0.78f, 0.58f, 0.45f};
     r.lenco = {0.55f, 0.12f, 0.1f};
-    modeloJogador_.carregar(r);
+    r.cabelo = {0.18f, 0.13f, 0.09f};
+    r.barba = true;
+    modeloJogador_.carregar(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
     // moradores: roupas variadas
     {
         const Rgb cas[] = {{0.45f, 0.35f, 0.22f}, {0.30f, 0.36f, 0.45f}, {0.55f, 0.22f, 0.18f}, {0.35f, 0.42f, 0.28f}, {0.62f, 0.56f, 0.44f}, {0.25f, 0.22f, 0.25f}};
         const Rgb pel[] = {{0.85f, 0.66f, 0.52f}, {0.62f, 0.44f, 0.32f}, {0.45f, 0.31f, 0.22f}, {0.78f, 0.58f, 0.45f}};
-        for (int k = 0; k < 6; k++) {
-            Roupa rp;
-            rp.casaco = cas[k];
+        const Rgb cab[] = {{0.12f, 0.09f, 0.07f}, {0.35f, 0.22f, 0.12f}, {0.55f, 0.4f, 0.22f}, {0.5f, 0.48f, 0.45f}};
+        for (int k = 0; k < 12; k++) {
+            Visual rp;
+            rp.casaco = cas[k % 6];
             rp.calca = cas[(k + 3) % 6] * 0.6f;
-            rp.camisa = {0.82f, 0.78f, 0.68f};
+            rp.camisa = Rgb{0.82f, 0.78f, 0.68f} * (k % 3 == 1 ? 0.85f : 1.f);
             rp.chapeu = k % 2 ? Rgb{0.35f, 0.25f, 0.15f} : Rgb{0.28f, 0.2f, 0.12f};
             rp.pele = pel[k % 4];
             rp.lenco = cas[(k + 1) % 6];
+            rp.cabelo = cab[(k * 7) % 4];
             rp.chapeuAba = k % 3 != 0;
-            rp.casacoLongo = k % 2 == 0;
+            rp.sobretudo = k % 2 == 0;
+            rp.barba = k % 4 == 1;
+            Proporcoes pp{1.62f + 0.03f * float((k * 5) % 9), 0.9f + 0.03f * float(k % 5), 0.95f + 0.03f * float((k * 3) % 4), 0.92f + 0.04f * float(k % 4)};
             roupasNpc_.emplace_back();
-            roupasNpc_.back().carregar(rp);
+            roupasNpc_.back().carregar(pp, rp);
         }
         populacao_ = Populacao(cenario_.rotasNPC, 1337, 60);
     }
@@ -72,6 +78,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
         rig_.distAlvo = 6.f;
     }
     sombra_.carregar();
+    if (op.distCamera > 0) rig_.distAlvo = op.distCamera;
     for (int i = 0; i < 40; i++) rig_.atualizar(montadoEm_ >= 0 ? jogador_.pos + Vec3f{0, 0.9f, 0} : jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
     atualizarCamera(0, Entrada{});
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, 0, 100000);
@@ -224,29 +231,30 @@ void Jogo::atualizar(float dt) {
     }
 }
 
-void Jogo::desenharAtores(Material& mat, bool sombraBolha, float distMax) {
+void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax) {
     for (auto& n : populacao_.npcs()) {
         if (!n.ativo) continue;
         float dx = n.corpo.pos.x - cam_.position.x, dz = n.corpo.pos.z - cam_.position.z;
         float d2 = dx * dx + dz * dz;
         if (d2 > distMax * distMax) continue;
-        const ModeloPessoa& m = roupasNpc_[n.semente % roupasNpc_.size()];
-        if (d2 < 35.f * 35.f) {
-            m.desenhar(mat, n.corpo.pos, n.corpo.yaw, n.passada, n.corpo.vel > 0.1f ? 0.45f : 0.f);
-            if (sombraBolha) sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
-        } else
-            m.desenharSimples(mat, n.corpo.pos, n.corpo.yaw);
+        const ModeloHumano& m = roupasNpc_[n.semente % roupasNpc_.size()];
+        m.desenhar(matPele, n.corpo.pos, n.corpo.yaw, poseRepouso(m.esqueleto()));
+        if (sombraBolha && d2 < 35.f * 35.f) sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
     }
     for (size_t i = 0; i < cavalos_.size(); i++) {
         const Cavalo& c = cavalos_[i];
         Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
         if (d.x * d.x + d.z * d.z > distMax * distMax) continue;
         modelosCavalo_[i].desenhar(mat, c.corpo.pos, c.corpo.yaw, c.passada, int(c.andadura));
-        if (int(i) == montadoEm_) modeloJogador_.desenharSentado(mat, ModeloCavalo::assento(c.corpo.pos, c.corpo.yaw), c.corpo.yaw);
+        if (int(i) == montadoEm_) {
+            Vec3f q = ModeloCavalo::assento(c.corpo.pos, c.corpo.yaw);
+            modeloJogador_.desenhar(matPele, q - Vec3f{0, 0.95f, 0}, c.corpo.yaw, poseRepouso(modeloJogador_.esqueleto()));
+        }
     }
     if (montadoEm_ < 0) {
         float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
-        modeloJogador_.desenhar(mat, jogador_.pos, jogador_.yaw, passada_, amp);
+        (void)amp;
+        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseRepouso(modeloJogador_.esqueleto()));
         if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     }
     for (auto& c : cavalos_) {
@@ -283,7 +291,7 @@ void Jogo::desenhar() {
         luz_.comecarSombra(jogador_.pos);
         terrenoR_->desenharArea(jogador_.pos, a, luz_.materialSombra());
         cenario_.desenharArea(jogador_.pos, a, luz_.materialSombra());
-        desenharAtores(luz_.materialSombra(), false, a);
+        desenharAtores(luz_.materialSombra(), luz_.materialSombraPele(), false, a);
         luz_.terminarSombra();
     }
     if (luz_.usaPos()) luz_.comecarPos();
@@ -296,7 +304,7 @@ void Jogo::desenhar() {
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
     cenario_.desenhar(cam_, dv, luz_.material());
-    desenharAtores(luz_.material(), !luz_.usaSombras(), dv);
+    desenharAtores(luz_.material(), luz_.materialPele(), !luz_.usaSombras(), dv);
     EndMode3D();
     if (luz_.usaPos()) luz_.terminarPos(cam_);
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos();

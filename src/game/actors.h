@@ -1,10 +1,27 @@
 #pragma once
 #include "raylib.h"
+#include "core/body.h"
 #include "core/math.h"
+#include "render/skinned.h"
 
 struct Roupa {
     Rgb casaco, calca, camisa, chapeu, pele, lenco;
     bool chapeuAba = true, casacoLongo = true;
+};
+
+// Pessoa anatomica com esqueleto (malha unica deformada na placa de video).
+class ModeloHumano {
+public:
+    void carregar(const Proporcoes& p, const Visual& v);
+    void descarregar();
+    void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose) const;
+    const Esqueleto& esqueleto() const { return esq_; }
+    int triangulos() const { return malha_.triangulos(); }
+
+private:
+    Esqueleto esq_;
+    MalhaEsqueleto malha_;
+    mutable std::vector<Mat4> ossos_;
 };
 
 // Pessoa low-poly articulada (pernas e bracos balancam ao andar).

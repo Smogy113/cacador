@@ -28,6 +28,7 @@ struct OpcoesJogo {
     bool comecarMontado = false;
     float girarCamera = 0;  // graus (so para screenshots)
     bool abrirQuadro = false;
+    float distCamera = 0;  // 0 = padrao (so para screenshots)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };
@@ -56,9 +57,9 @@ private:
     MundoColisao col_;
     Corpo jogador_{};
     RigCamera rig_;
-    ModeloPessoa modeloJogador_;
+    ModeloHumano modeloJogador_;
     Populacao populacao_;
-    std::vector<ModeloPessoa> roupasNpc_;
+    std::vector<ModeloHumano> roupasNpc_;
     std::vector<Cavalo> cavalos_;
     std::vector<ModeloCavalo> modelosCavalo_;
     int montadoEm_ = -1;
@@ -71,7 +72,7 @@ private:
     bool pausado_ = false, sair_ = false;
     Entrada lerEntrada();
     void atualizarCamera(float dt, const Entrada& e);
-    void desenharAtores(Material& mat, bool sombraBolha, float distMax);
+    void desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax);
     void trocarNivel(Nivel n);
     float tempo_ = 0;
     std::vector<LuzPontual> luzes_;

@@ -131,8 +131,8 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
         {0.97f, .175f, .120f, -.010f, QUADRIL, QUADRIL, 1},  {1.05f, .158f, .108f, .000f, QUADRIL, COLUNA, .5f},
         {1.13f, .150f, .102f, .005f, COLUNA, COLUNA, 1},     {1.22f, .158f, .108f, .010f, COLUNA, PEITO, .5f},
         {1.31f, .172f, .118f, .015f, PEITO, PEITO, 1},       {1.39f, .185f, .122f, .010f, PEITO, PEITO, 1},
-        {1.45f, .195f, .108f, .000f, PEITO, PEITO, 1},       {1.50f, .100f, .075f, .000f, PEITO, PESCOCO, .6f},
-        {1.54f, .062f, .060f, .005f, PESCOCO, PESCOCO, 1},   {1.59f, .058f, .058f, .010f, PESCOCO, CABECA, .6f},
+        {1.45f, .195f, .108f, .000f, PEITO, PEITO, 1},       {1.50f, .125f, .080f, .000f, PEITO, PESCOCO, .6f},
+        {1.54f, .068f, .066f, .005f, PESCOCO, PESCOCO, 1},   {1.59f, .064f, .064f, .010f, PESCOCO, CABECA, .6f},
         {1.625f, .066f, .078f, .020f, CABECA, CABECA, 1},    {1.655f, .075f, .092f, .015f, CABECA, CABECA, 1},
         {1.69f, .083f, .100f, .010f, CABECA, CABECA, 1},     {1.72f, .088f, .103f, .000f, CABECA, CABECA, 1},
         {1.75f, .087f, .100f, -.005f, CABECA, CABECA, 1},    {1.775f, .075f, .088f, -.010f, CABECA, CABECA, 1},
@@ -164,19 +164,20 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
                    if (y == 1.625f) ao = 0.8f;
                    bool olho = y == 1.72f && f > 0.6f && f < 0.95f;
                    if (olho) return Rgb{0.12f, 0.09f, 0.07f};
-                   if (vis.barba && y <= 1.655f && f > -0.3f) return vis.cabelo;
+                   if (vis.barba && y <= 1.655f && f > 0.15f) return vis.cabelo;
                    if (y >= 1.745f && f < 0.45f) return vis.cabelo;
+                   if (y >= 1.655f && f < -0.35f) return vis.cabelo;  // nuca
                    if (y >= 1.775f) return vis.cabelo;
                    return vis.pele;
                }
-               if (y >= 1.5f && y < 1.56f) return vis.lenco;
+               if (y >= 1.53f && y < 1.56f) return vis.lenco;
                if (y > 1.56f) return vis.pele;
                if (y >= 1.0f && y <= 1.06f) return cinto;
                if (y < 1.0f) {
                    if (y <= 0.9f) ao = 0.82f;
                    return vis.calca;
                }
-               if (vis.sobretudo && f > 0.8f && y > 1.1f) return vis.camisa;  // casaco aberto na frente
+               if (vis.sobretudo && f > 0.97f && y > 1.1f && y < 1.4f) return vis.casaco * 0.8f;  // fecho do casaco
                if (y >= 1.45f && f < -0.2f) ao = 0.92f;
                return tronco;
            },
@@ -191,9 +192,9 @@ MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
             return Anel{c, rx * s * ms, rz * s * ms, uint8_t(oa_), uint8_t(ob_), p};
         };
         std::vector<Anel> br = {
-            Ar(L(ob.inicio, ob.fim, -0.12f), .060f, .062f, b, b, 1), Ar(L(ob.inicio, ob.fim, 0.3f), .052f, .054f, b, b, 1),
-            Ar(L(ob.inicio, ob.fim, 0.72f), .045f, .046f, b, b, 1),  Ar(oa.inicio, .040f, .042f, b, ab, .5f),
-            Ar(L(oa.inicio, oa.fim, 0.3f), .042f, .044f, ab, ab, 1), Ar(L(oa.inicio, oa.fim, 0.72f), .035f, .035f, ab, ab, 1),
+            Ar(L(ob.inicio, ob.fim, -0.12f), .068f, .070f, b, b, 1), Ar(L(ob.inicio, ob.fim, 0.3f), .058f, .060f, b, b, 1),
+            Ar(L(ob.inicio, ob.fim, 0.72f), .050f, .051f, b, b, 1),  Ar(oa.inicio, .044f, .046f, b, ab, .5f),
+            Ar(L(oa.inicio, oa.fim, 0.3f), .047f, .048f, ab, ab, 1), Ar(L(oa.inicio, oa.fim, 0.72f), .038f, .038f, ab, ab, 1),
             Ar(om.inicio, .028f, .03f, ab, mo, .5f),                 Ar(L(om.inicio, om.fim, 0.4f), .018f, .046f, mo, mo, 1),
             Ar(L(om.inicio, om.fim, 0.85f), .016f, .04f, mo, mo, 1),
         };

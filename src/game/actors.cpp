@@ -5,6 +5,18 @@
 #include "render/meshconv.h"
 #include "rlgl.h"
 
+void ModeloHumano::carregar(const Proporcoes& p, const Visual& v) {
+    esq_ = esqueletoHumano(p);
+    malha_.carregar(corpoHumano(p, v));
+}
+
+void ModeloHumano::descarregar() { malha_.descarregar(); }
+
+void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose) const {
+    calcularMatrizes(esq_, pose, ossos_);
+    malha_.desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
+}
+
 void ModeloPessoa::carregar(const Roupa& r) {
     MeshBuilder c;
     // tronco e casaco
