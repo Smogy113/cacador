@@ -40,6 +40,7 @@ public:
     void desenhar();
     void desenharInterface();
     bool querSair() const { return sair_; }
+    void teleportar(float x, float z, float yawGraus, float hora);  // benchmark
     size_t triangulos() const { return tris_; }
     int chamadas() const { return chamadas_; }
 

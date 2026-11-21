@@ -633,7 +633,7 @@ static void gerarMina(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f>
         g.caixa(m, f, {0, 1.5f, -3.05f}, {2.8f, 3.0f, 0.1f}, ESCURO);
         // trilhos
         for (float s : {-0.5f, 0.5f}) g.caixa(m, f, {s, 0.06f, 3}, {0.1f, 0.1f, 12}, FERRO);
-        for (int k = 0; k < 12; k++) g.caixa(m, f, {0, 0.02f, -2 + k}, {1.5f, 0.08f, 0.25f}, MADEIRA_ESC);
+        for (int k = 0; k < 12; k++) g.caixa(m, f, {0, 0.02f, float(k - 2)}, {1.5f, 0.08f, 0.25f}, MADEIRA_ESC);
         // vagonete
         g.caixa(m, f, {0, 0.75f, 4}, {1.3f, 0.9f, 1.8f}, MADEIRA * 0.8f);
         g.caixa(m, f, {0, 1.1f, 4}, {1.1f, 0.3f, 1.6f}, PEDRA_ESC);

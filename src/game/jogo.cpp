@@ -259,6 +259,17 @@ void Jogo::desenharAtores(Material& mat, bool sombraBolha, float distMax) {
     }
 }
 
+void Jogo::teleportar(float x, float z, float yawGraus, float hora) {
+    if (montadoEm_ >= 0) { cavalos_[montadoEm_].montado = false; montadoEm_ = -1; rig_.distAlvo = 4.f; }
+    jogador_.pos = {x, terreno_->altura(x, z), z};
+    jogador_.yaw = rig_.yaw = yawGraus * DEG2RAD;
+    relogio_ = DayClock(hora);
+    for (int i = 0; i < 30; i++) rig_.atualizar(jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
+    atualizarCamera(0, Entrada{});
+    terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_, 100000);
+    cenario_.atualizar(jogador_.pos, tempo_, 100000);
+}
+
 void Jogo::trocarNivel(Nivel n) {
     luz_.carregar(n);
     op_.nivel = n;

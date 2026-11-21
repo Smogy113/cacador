@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -11,6 +12,7 @@ extern "C" const unsigned char* glGetString(unsigned int nome);
 
 struct Opcoes {
     bool qualidadeDada = false;
+    bool benchmark = false;
     std::string screenshot;
     int frames = 30;
     OpcoesJogo jogo;
@@ -26,6 +28,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--hora") o.jogo.hora = (float)std::atof(prox());
         else if (a == "--pos") { o.jogo.temPos = true; o.jogo.x = (float)std::atof(prox()); o.jogo.z = (float)std::atof(prox()); }
         else if (a == "--girar-camera") o.jogo.girarCamera = (float)std::atof(prox());
+        else if (a == "--benchmark") { o.benchmark = true; o.jogo.semEntrada = true; o.jogo.congelarHora = true; }
         else if (a == "--abrir-quadro") o.jogo.abrirQuadro = true;
         else if (a == "--mapa") o.jogo.arquivoMapa = prox();
         else if (a == "--montado") o.jogo.comecarMontado = true;
@@ -60,7 +63,11 @@ int main(int argc, char** argv) {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 720, "Caçador");
     SetTargetFPS(60);
-    SetExitKey(KEY_NULL);  // Esc pausa; sair pelo menu de pausa
+    SetExitKey(KEY_NULL);
+#if !defined(PLATFORM_WEB)
+    // data/ e config.txt ficam ao lado do executavel
+    if (!FileExists(g_op.jogo.arquivoMapa.c_str())) ChangeDirectory(GetApplicationDirectory());
+#endif  // Esc pausa; sair pelo menu de pausa
     BeginDrawing();
     ClearBackground({18, 16, 14, 255});
     DrawText("Carregando o mundo...", 40, GetScreenHeight() - 70, 28, {220, 200, 160, 255});
@@ -77,6 +84,27 @@ int main(int argc, char** argv) {
     double t0 = GetTime();
     g_jogo = new Jogo(g_op.jogo);
     std::printf("carregamento=%.2fs\n", GetTime() - t0);
+    if (g_op.benchmark) {
+        // trajeto fixo: cidade, vilarejo, ponte, floresta, castelo, acampamento, mina; 4 horas do dia
+        const float pontos[][3] = {{320, 345, 0}, {320, 345, 90}, {316, 352, 200}, {230, 260, 45}, {-60, 60, 30}, {60, -100, 200},
+                                   {-420, -230, 0}, {-420, -230, 120}, {-150, -440, 200}, {330, -400, 230}, {-470, 545, 220}, {0, 0, 300}};
+        const float horas[] = {8, 12, 18.5f, 22};
+        size_t maxT = 0, somaT = 0;
+        int maxC = 0, somaC = 0, n = 0;
+        for (float h : horas)
+            for (auto& p : pontos) {
+                g_jogo->teleportar(p[0], p[1], p[2], h);
+                for (int f = 0; f < 3; f++) quadro();
+                size_t t = g_jogo->triangulos();
+                int c = g_jogo->chamadas();
+                maxT = std::max(maxT, t); maxC = std::max(maxC, c);
+                somaT += t; somaC += c; n++;
+            }
+        std::printf("benchmark: triangulos max=%zu media=%zu | chamadas max=%d media=%d | quadros=%d\n", maxT, somaT / n, maxC, somaC / n, n);
+        delete g_jogo;
+        CloseWindow();
+        return 0;
+    }
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(quadro, 0, 1);
 #else
