@@ -1,6 +1,7 @@
 #include "game/ui.h"
 #include <algorithm>
 #include <cstdio>
+#include "core/bussola.h"
 #include "core/noise.h"
 #include "raylib.h"
 
@@ -120,4 +121,106 @@ void desenharDica(const char* t) {
     int tw = MeasureText(t, 22);
     DrawRectangle(w / 2 - tw / 2 - 14, h - 92, tw + 28, 38, {20, 16, 12, 170});
     DrawText(t, w / 2 - tw / 2, h - 84, 22, {240, 225, 195, 255});
+}
+
+// ---------------- HUD do tiroteio ----------------
+void desenharHud(float vida01, int balas, bool recarregando, int dinheiro, bool mirando, float marca, bool matou) {
+    int H = GetScreenHeight(), W = GetScreenWidth();
+    int x = 24, y = H - 92;
+    DrawRectangle(x - 10, y - 10, 270, 82, {0, 0, 0, 110});
+    // vida
+    DrawRectangle(x, y, 240, 14, {40, 20, 18, 220});
+    Color cv = vida01 < 0.35f ? Color{220, 60, 45, 255} : Color{200, 70, 55, 255};
+    DrawRectangle(x, y, int(240 * std::clamp(vida01, 0.f, 1.f)), 14, cv);
+    DrawRectangleLines(x, y, 240, 14, {235, 215, 180, 200});
+    // balas
+    for (int k = 0; k < 6; k++) {
+        Color c = k < balas ? Color{220, 190, 110, 255} : Color{90, 80, 65, 160};
+        DrawRectangle(x + k * 16, y + 24, 9, 20, c);
+        DrawCircle(x + k * 16 + 4, y + 24, 4.5f, c);
+    }
+    if (recarregando) DrawText("recarregando", x + 104, y + 28, 16, {235, 215, 180, 230});
+    char buf[48];
+    std::snprintf(buf, sizeof buf, "%d pratas", dinheiro);
+    DrawText(buf, x, y + 52, 18, {235, 215, 160, 255});
+    // mira
+    int cx = W / 2, cy = H / 2;
+    if (mirando) {
+        Color c{245, 240, 230, 220};
+        DrawRectangle(cx - 1, cy - 9, 2, 6, c);
+        DrawRectangle(cx - 1, cy + 3, 2, 6, c);
+        DrawRectangle(cx - 9, cy - 1, 6, 2, c);
+        DrawRectangle(cx + 3, cy - 1, 6, 2, c);
+    }
+    if (marca > 0) {  // marca de acerto
+        Color c = matou ? Color{230, 50, 40, 255} : Color{250, 245, 235, 255};
+        for (int s : {-1, 1}) {
+            DrawLineEx({float(cx + 5 * s), float(cy + 5)}, {float(cx + 12 * s), float(cy + 12)}, 2, c);
+            DrawLineEx({float(cx + 5 * s), float(cy - 5)}, {float(cx + 12 * s), float(cy - 12)}, 2, c);
+        }
+    }
+}
+
+void desenharBussola(float yaw, bool temObj, float pos, float dist) {
+    int W = GetScreenWidth();
+    const int largura = 460, alt = 30, x0 = W / 2 - largura / 2, y0 = 14;
+    const float campo = 1.6f;
+    DrawRectangle(x0, y0, largura, alt, {0, 0, 0, 110});
+    DrawRectangleLines(x0, y0, largura, alt, {235, 215, 180, 120});
+    const struct { const char* t; float rumo; } P[] = {{"N", 3.14159265f}, {"L", 1.5707963f}, {"S", 0.f}, {"O", -1.5707963f}};
+    for (auto& p : P) {
+        float f = 0.5f + anguloRelativo(yaw, p.rumo) / campo;
+        if (f < 0.03f || f > 0.97f) continue;
+        int px = x0 + int(f * largura);
+        Color c = p.t[0] == 'N' ? Color{240, 120, 90, 255} : Color{235, 215, 180, 255};
+        DrawText(p.t, px - MeasureText(p.t, 20) / 2, y0 + 5, 20, c);
+    }
+    for (int k = -8; k <= 8; k++) {  // riscos a cada 22,5 graus
+        float f = 0.5f + anguloRelativo(yaw, float(k) * 0.3927f) / campo;
+        if (f < 0.02f || f > 0.98f || k % 4 == 0) continue;
+        int px = x0 + int(f * largura);
+        DrawLine(px, y0 + 22, px, y0 + 28, {235, 215, 180, 140});
+    }
+    if (!temObj) return;
+    float f = std::clamp(pos, 0.f, 1.f);
+    int px = x0 + int(f * largura);
+    Color c{250, 200, 80, 255};
+    if (pos < 0 || pos > 1) {  // fora: seta na borda
+        int s = pos < 0 ? -1 : 1;
+        DrawTriangle({float(px - 8 * s), float(y0 + 8)}, {float(px - 8 * s), float(y0 + 22)}, {float(px + 2 * s), float(y0 + 15)}, c);
+        DrawTriangle({float(px - 8 * s), float(y0 + 8)}, {float(px + 2 * s), float(y0 + 15)}, {float(px - 8 * s), float(y0 + 22)}, c);
+    } else {
+        DrawPoly({float(px), float(y0 + alt + 8)}, 4, 7, 0, c);
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%d m", int(dist));
+    DrawText(buf, px - MeasureText(buf, 18) / 2, y0 + alt + 18, 18, c);
+}
+
+void desenharMensagem(const std::string& texto, float t) {
+    if (t <= 0 || texto.empty()) return;
+    int W = GetScreenWidth(), H = GetScreenHeight();
+    unsigned char a = (unsigned char)(255 * std::clamp(t / 0.5f, 0.f, 1.f));
+    std::string s = semAcentos(texto);
+    int tw = MeasureText(s.c_str(), 24);
+    DrawRectangle(W / 2 - tw / 2 - 16, H / 4 - 10, tw + 32, 44, {0, 0, 0, (unsigned char)(a * 0.55f)});
+    DrawText(s.c_str(), W / 2 - tw / 2, H / 4, 24, {245, 230, 200, a});
+}
+
+void desenharBordaDano(float vida01) {
+    if (vida01 >= 0.35f) return;
+    int W = GetScreenWidth(), H = GetScreenHeight();
+    unsigned char a = (unsigned char)(170 * (1.f - vida01 / 0.35f));
+    Color c{150, 10, 5, a}, z{150, 10, 5, 0};
+    int e = H / 5;
+    DrawRectangleGradientV(0, 0, W, e, c, z);
+    DrawRectangleGradientV(0, H - e, W, e, z, c);
+    DrawRectangleGradientH(0, 0, e, H, c, z);
+    DrawRectangleGradientH(W - e, 0, e, H, z, c);
+}
+
+void desenharTelaMorte(float t) {
+    int W = GetScreenWidth(), H = GetScreenHeight();
+    DrawRectangle(0, 0, W, H, {0, 0, 0, (unsigned char)(255 * std::clamp(t / 1.5f, 0.f, 1.f))});
+    if (t > 0.8f) textoCentro("Voce apagou...", W / 2, H / 2 - 20, 36, {200, 60, 45, 255});
 }

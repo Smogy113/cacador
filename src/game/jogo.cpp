@@ -2,6 +2,7 @@
 #include <cmath>
 #include "game/ui.h"
 #include "core/anim.h"
+#include "core/bussola.h"
 
 Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     mapa_ = carregarMapa(op.arquivoMapa);
@@ -138,7 +139,21 @@ void Jogo::desenharInterface() {
         desenharQuadro(cartazes_[quadroAberto_], cartazSel_, semAcentos(nomeLegivel(cenario_.quadros[quadroAberto_].lugar)), aceito);
         return;
     }
+    if (morteT_ >= 0) {
+        desenharTelaMorte(morteT_);
+        return;
+    }
     if (!pausado_) {
+        desenharBordaDano(vida_.fracao());
+        if (cacada_.ativa()) {
+            Vec3f obj = cacada_.objetivo(jogador_.pos, xerifes_);
+            desenharBussola(rig_.yaw, true, posicaoNaBussola(rig_.yaw, jogador_.pos, obj, 1.6f),
+                            std::hypot(obj.x - jogador_.pos.x, obj.z - jogador_.pos.z));
+        } else {
+            desenharBussola(rig_.yaw, false, 0, 0);
+        }
+        desenharHud(vida_.fracao(), arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_);
+        desenharMensagem(mensagem_, mensagemT_);
         if (cacada_.podeAmarrar(jogador_.pos)) desenharDica(amarrarT_ > 0 ? "Amarrando..." : "Segure E  -  Amarrar");
         else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E  -  Entregar ao xerife");
         else if (montadoEm_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E  -  Puxar pela corda");
