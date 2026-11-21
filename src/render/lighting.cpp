@@ -1,6 +1,7 @@
 #include "render/lighting.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include "core/noise.h"
 #include "render/shaders.h"
 #include "raymath.h"
@@ -148,16 +149,16 @@ void Iluminacao::carregar(Nivel nivel) {
     pele_.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(pele_, "texSombraPerto");
     matPele_ = LoadMaterialDefault();
     matPele_.shader = pele_;
+    matCabeca_ = LoadMaterialDefault();  // sempre existe (as texturas de sombra sao atribuidas mesmo sem o shader)
 #if !defined(PLATFORM_WEB)
     cabeca_ = carregarShaderDef(VS_CABECA, FS_LIT, "#define PERSONAGEM\n#define RAYMARCH\n");
-    cabecaOk_ = cabeca_.id > 0 && cabeca_.id != rlGetShaderIdDefault();
+    cabecaOk_ = cabeca_.id > 0 && cabeca_.id != rlGetShaderIdDefault() && !getenv("CACADOR_SEM_CABECA");  // variavel de teste: simula placa sem o shader da cabeca
     if (cabecaOk_) {
         cabeca_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(cabeca_, "matModel");
         cabeca_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(cabeca_, "texSombra");
         cabeca_.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(cabeca_, "texSombraPerto");
         cabeca_.locs[SHADER_LOC_MAP_NORMAL] = GetShaderLocation(cabeca_, "texDist");
         cabeca_.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(cabeca_, "texCor");
-        matCabeca_ = LoadMaterialDefault();
         matCabeca_.shader = cabeca_;
     }
 #endif
