@@ -115,7 +115,7 @@ void Iluminacao::carregar(Nivel nivel) {
     junta_ = carregarShaderPos(FS_JUNTA);
     ssao_ = carregarShaderPos(FS_SSAO);
     lit_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(lit_, "texSombra");
-    pele_ = carregarShader(VS_PELE, FS_LIT);
+    pele_ = carregarShaderDef(VS_PELE, FS_LIT, "#define PERSONAGEM\n");
     pele_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(pele_, "matModel");
     pele_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(pele_, "texSombra");
     matPele_ = LoadMaterialDefault();

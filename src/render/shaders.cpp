@@ -44,9 +44,11 @@ Shader carregarShaderPos(const char* fs) {
     return LoadShaderFromMemory(nullptr, f.c_str());
 }
 
-Shader carregarShader(const char* vs, const char* fs) {
-    std::string v = std::string(CAB_VS) + vs;
-    std::string f = std::string(CAB_FS) + COMUM + fs;
+Shader carregarShader(const char* vs, const char* fs) { return carregarShaderDef(vs, fs, ""); }
+
+Shader carregarShaderDef(const char* vs, const char* fs, const char* defs) {
+    std::string v = std::string(CAB_VS) + defs + vs;
+    std::string f = std::string(CAB_FS) + defs + COMUM + fs;
     return LoadShaderFromMemory(v.c_str(), f.c_str());
 }
 
@@ -134,6 +136,34 @@ float sombraEm(vec3 p, vec3 n) {
     return mix(1.0, s, b.x * b.y);
 } // > 0: horizonte, some onde o terreno detalhado ja desenha
 
+
+#ifdef PERSONAGEM
+VARY vec3 posRep;   // posicao de repouso (o detalhe acompanha o corpo)
+VARY vec3 nRep;
+VARY vec3 mc0;      // colunas da matriz que leva normais do repouso para o mundo
+VARY vec3 mc1;
+VARY vec3 mc2;
+float h3(vec3 p) {
+    p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float vnoise(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y);
+    float b = mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y);
+    return mix(a, b, f.z);
+}
+// relevo fino: inclina a normal pelo gradiente do ruido (escala k por eixo)
+vec3 relevo(vec3 n, vec3 p, vec3 k, float amp) {
+    vec3 q = p * k;
+    float c = vnoise(q);
+    vec3 g = vec3(vnoise(q + vec3(0.3, 0.0, 0.0)) - c, vnoise(q + vec3(0.0, 0.3, 0.0)) - c, vnoise(q + vec3(0.0, 0.0, 0.3)) - c) / 0.3;
+    g -= n * dot(g, n);
+    return normalize(n - g * amp);  // amp = inclinacao maxima da normal
+}
+#endif
 void main() {
     vec3 n = normalize(normalMundo);
     vec3 albedo = pow(cor.rgb, vec3(2.2));
@@ -143,12 +173,53 @@ void main() {
     vec3 v = paraCam / max(dist, 0.001);
     if (descartarPerto > 0.0 && length(paraCam.xz) < descartarPerto) discard;
 
+    // parametros de material (mundo: tudo zero)
+    float brilho = 0.0, aspereza = 1.0, sss = 0.0, veludo = 0.0, metalico = 0.0;
+#ifdef PERSONAGEM
+    float m = extra.y;
+    if (m > 9.5) {
+        vec3 nr = normalize(nRep);
+        vec3 pr = posRep;
+        if (m < 10.5) {          // pele: poros, manchas, luz que atravessa
+            nr = relevo(nr, pr, vec3(420.0), 0.06);
+            albedo *= 0.93 + 0.12 * vnoise(pr * 35.0);
+            brilho = 0.35; aspereza = 0.42; sss = 1.0;
+        } else if (m < 11.5) {   // tecido: trama + fiapos
+            nr = relevo(nr, pr, vec3(220.0), 0.12);
+            float trama = sin(pr.x * 700.0 + pr.z * 700.0) * sin(pr.y * 700.0);
+            albedo *= 0.9 + 0.08 * trama + 0.12 * vnoise(pr * 18.0);
+            brilho = 0.05; aspereza = 0.9; veludo = 0.45;
+        } else if (m < 12.5) {   // couro: granulado, gasto nas bordas
+            nr = relevo(nr, pr, vec3(160.0), 0.1);
+            float gasto = smoothstep(0.55, 0.85, vnoise(pr * 22.0));
+            albedo = mix(albedo, albedo * 1.6 + 0.02, gasto * 0.5);
+            brilho = 0.55; aspereza = 0.35 + 0.3 * gasto;
+        } else if (m < 13.5) {   // metal
+            nr = relevo(nr, pr, vec3(90.0), 0.03);
+            brilho = 1.4; aspereza = 0.18; metalico = 1.0;
+        } else if (m < 14.5) {   // cabelo e barba: fios
+            nr = relevo(nr, pr, vec3(900.0, 120.0, 900.0), 0.18);
+            albedo *= 0.8 + 0.4 * vnoise(pr * vec3(900.0, 90.0, 900.0));
+            brilho = 0.4; aspereza = 0.35;
+        } else if (m < 15.5) {   // olho: molhado
+            brilho = 2.2; aspereza = 0.04;
+        } else {                 // feltro do chapeu
+            nr = relevo(nr, pr, vec3(500.0), 0.08);
+            albedo *= 0.92 + 0.1 * vnoise(pr * 60.0);
+            brilho = 0.04; aspereza = 0.95; veludo = 0.7;
+        }
+        n = normalize(mc0 * nr.x + mc1 * nr.y + mc2 * nr.z);
+    }
+#endif
+
     // ceu e chao (hemisferica) com oclusao de ambiente
     float hemi = n.y * 0.5 + 0.5;
     vec3 luz = mix(ambChao, ambCeu, hemi) * ao;
     // sol e lua (com sombra)
     float sombra = sombraEm(posMundo, n);
-    luz += corSol * max(dot(n, dirSol), 0.0) * sombra;
+    float ndl = dot(n, dirSol);
+    float difSol = mix(max(ndl, 0.0), clamp((ndl + 0.45) / 1.45, 0.0, 1.0), sss);
+    luz += corSol * difSol * mix(sombra, max(sombra, 0.35), sss * 0.5);
     luz += corLua * max(dot(n, dirLua), 0.0) * sombra;
     // luz rebatida: o chao iluminado pelo sol devolve luz colorida para cima
     float solNoChao = max(dirSol.y, 0.0);
@@ -167,12 +238,36 @@ void main() {
         float lamb = max(dot(n, d / max(dd, 0.001)), 0.0) * 0.8 + 0.2;
         luz += luzCor[i] * at * lamb * mix(1.0, ao, 0.5);
     }
-    vec3 c = albedo * luz;
-    if (extra.y > 2.5) {
+    vec3 c = albedo * luz * (1.0 - metalico * 0.6);
+    if (brilho > 0.0) {
+        vec3 h = normalize(dirSol + v);
+        float expo = mix(8.0, 900.0, pow(1.0 - aspereza, 2.0));
+        float fres = 0.04 + 0.96 * pow(1.0 - max(dot(h, v), 0.0), 5.0);
+        vec3 f0 = mix(vec3(fres), albedo * 1.5, metalico);
+        float esp = pow(max(dot(n, h), 0.0), expo) * (expo + 8.0) / 25.0;
+        c += corSol * f0 * esp * brilho * max(ndl, 0.0) * sombra * 0.25;
+        // reflexo do ceu (forte no metal e nos olhos)
+        vec3 r = reflect(-v, n);
+        vec3 ceu = mix(corNeblina, ambCeu * 2.0, clamp(r.y * 1.5 + 0.3, 0.0, 1.0));
+        float fv = 0.04 + 0.96 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+        c += ceu * mix(vec3(fv), albedo, metalico) * brilho * (1.0 - aspereza) * 0.35 * ao;
+        // tochas tambem brilham na superficie
+        for (int i = 0; i < 8; i++) {
+            if (i >= numLuzes) break;
+            vec3 d = luzPos[i].xyz - posMundo;
+            float dd = length(d);
+            vec3 hl = normalize(d / max(dd, 0.001) + v);
+            float at = clamp(1.0 - (dd * dd) / (luzPos[i].w * luzPos[i].w), 0.0, 1.0);
+            c += luzCor[i] * at * at * pow(max(dot(n, hl), 0.0), expo) * brilho * 0.15;
+        }
+    }
+    if (veludo > 0.0) c += (ambCeu * 0.5 + corSol * max(ndl, 0.0) * sombra * 0.15) * albedo * veludo * pow(1.0 - max(dot(n, v), 0.0), 2.0);
+    if (sss > 0.0) c += corSol * sombra * vec3(0.55, 0.14, 0.07) * albedo * sss * (1.0 - abs(ndl)) * 0.45;
+    if (extra.y > 2.5 && extra.y < 3.5) {
         // janela: vidro escuro de dia, luz quente a noite
         vec3 vidro = vec3(0.03, 0.035, 0.045) * luz + vec3(0.02);
         c = mix(vidro, albedo * 3.2, noite);
-    } else if (extra.y > 1.5) {
+    } else if (extra.y > 1.5 && extra.y < 2.5) {
         if (noite < 0.05) discard;  // tochas apagadas de dia
         c = albedo * 6.0 * noite;  // chama
     }
@@ -334,6 +429,11 @@ mat4 matrizPele() {
 )"
 
 const char* VS_PELE = CORPO_SKIN R"(
+VARY vec3 posRep;
+VARY vec3 nRep;
+VARY vec3 mc0;
+VARY vec3 mc1;
+VARY vec3 mc2;
 VARY vec3 posMundo;
 VARY vec3 normalMundo;
 VARY vec4 cor;
@@ -343,9 +443,15 @@ void main() {
     vec4 pl = S * vec4(vertexPosition, 1.0);
     vec4 p = matModel * pl;
     posMundo = p.xyz;
-    normalMundo = normalize(mat3(matModel) * (mat3(S) * vertexNormal));
+    mat3 mn = mat3(matModel) * mat3(S);
+    normalMundo = normalize(mn * vertexNormal);
     cor = vertexColor;
     extra = vertexTexCoord;
+    posRep = vertexPosition;
+    nRep = vertexNormal;
+    mc0 = mn[0];
+    mc1 = mn[1];
+    mc2 = mn[2];
     gl_Position = mvp * pl;
 }
 )";

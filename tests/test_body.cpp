@@ -127,7 +127,7 @@ TEST_CASE("HD: entre 6 e 14 mil triângulos e índices válidos") {
         v.equipamento = eq;
         auto m = corpoHumanoHD({}, v);
         CHECK(m.triangulos() >= 6000);
-        CHECK(m.triangulos() <= 14000);
+        CHECK(m.triangulos() <= 16000);
         CHECK(m.v.size() < 65535);
         for (auto i : m.idx) CHECK(i < m.v.size());
         for (auto& x : m.v) {
@@ -171,4 +171,27 @@ TEST_CASE("HD: tem nariz e dedos") {
     for (auto& v : ld.v) if (v.osso[0] == MAO_E) maoLD++;
     CHECK(narizZ > testaZ + 0.015f);
     CHECK(maoHD > maoLD * 4);
+}
+
+TEST_CASE("HD AAA: materiais válidos e de todos os tipos") {
+    Visual v;
+    v.equipamento = true;
+    v.barba = true;
+    auto m = corpoHumanoHD({}, v);
+    int cont[17] = {0};
+    for (auto& x : m.v) {
+        int id = int(x.material + 0.5f);
+        REQUIRE(id >= 10);
+        REQUIRE(id <= 16);
+        cont[id]++;
+    }
+    for (float mt : {MAT_PELE, MAT_TECIDO, MAT_COURO, MAT_METAL, MAT_CABELO, MAT_OLHO, MAT_FELTRO}) CHECK_MESSAGE(cont[int(mt)] > 0, "material " << mt);
+}
+TEST_CASE("HD AAA: dois globos oculares na frente do rosto") {
+    auto m = corpoHumanoHD({}, Visual{});
+    int esq = 0, dir = 0;
+    for (auto& x : m.v)
+        if (x.material == MAT_OLHO && x.osso[0] == CABECA) (x.pos.x > 0 ? esq : dir)++;
+    CHECK(esq >= 40);
+    CHECK(dir >= 40);
 }

@@ -21,6 +21,9 @@ struct Visual {
     bool equipamento = false;  // bandoleira, besta nas costas e laco (so no modelo HD)
 };
 
+// Materiais dos personagens (vao para o shader; 0 = sem material especial)
+constexpr float MAT_PELE = 10, MAT_TECIDO = 11, MAT_COURO = 12, MAT_METAL = 13, MAT_CABELO = 14, MAT_OLHO = 15, MAT_FELTRO = 16;
+
 // Vertice com ate 2 ossos: osso[0] com "peso", osso[1] com 1 - peso.
 struct VertPele {
     Vec3f pos, normal;
@@ -28,6 +31,7 @@ struct VertPele {
     float ao = 1.f;
     uint8_t osso[2] = {0, 0};
     float peso = 1.f;
+    float material = 0;  // MAT_*
 };
 
 struct MalhaPele {

@@ -4,6 +4,7 @@
 // Shaders embutidos no executavel. Escritos uma vez; um cabecalho por plataforma
 // (GLSL 330 no PC, GLSL 100 na web) troca as palavras-chave.
 Shader carregarShader(const char* vs, const char* fs);
+Shader carregarShaderDef(const char* vs, const char* fs, const char* defs);  // defs = linhas #define extras
 
 Shader carregarShaderPos(const char* fs);  // usa o vertex shader padrao da raylib (tela cheia)
 

@@ -23,6 +23,8 @@ using Pintor = std::function<Rgb(int anel, float ang, Vec3f& pos, Vec3f lado, Ve
 
 struct Construtor {
     MalhaPele& m;
+    float material = 0;       // material padrao do proximo tubo
+    float materialVert = -1;  // o pintor pode trocar o material de um vertice (volta a -1 sozinho)
 
     // Liga uma sequencia de aneis. tampaIni/tampaFim fecham as pontas.
     void tubo(const std::vector<Anel>& an, int n, Vec3f refFrente, bool tampaIni, bool tampaFim, const Pintor& pintar,
@@ -43,7 +45,9 @@ struct Construtor {
                 Vec3f p = an[i].c + la * (std::cos(ang) * an[i].rx) + fr * (std::sin(ang) * an[i].rz);
                 VertPele v;
                 v.ao = 1.f;
+                materialVert = -1;
                 v.cor = pintar(int(i), ang, p, la, fr, v.ao);
+                v.material = materialVert >= 0 ? materialVert : material;
                 v.pos = p;
                 v.osso[0] = an[i].a;
                 v.osso[1] = an[i].b;
@@ -64,7 +68,9 @@ struct Construtor {
             float ao = 1.f;
             Vec3f p = v.pos;
             Vec3f fr = normalizar(refFrente - eixos[anel] * dot(refFrente, eixos[anel]));
+            materialVert = -1;
             v.cor = pintar(int(anel), -1.f, p, cross(fr, eixos[anel]), fr, ao);
+            v.material = materialVert >= 0 ? materialVert : material;
             v.ao = ao;
             v.osso[0] = an[anel].a;
             v.osso[1] = an[anel].b;
