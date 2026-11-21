@@ -32,6 +32,8 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--pos") { o.jogo.temPos = true; o.jogo.x = (float)std::atof(prox()); o.jogo.z = (float)std::atof(prox()); }
         else if (a == "--girar-camera") o.jogo.girarCamera = (float)std::atof(prox());
         else if (a == "--benchmark") { o.benchmark = true; o.jogo.semEntrada = true; o.jogo.congelarHora = true; }
+        else if (a == "--estudio") o.jogo.estudio = true;
+        else if (a == "--argila") { o.jogo.estudio = true; o.jogo.argila = true; }
         else if (a == "--retrato") o.jogo.retrato = (float)std::atof(prox());
         else if (a == "--dist-camera") o.jogo.distCamera = (float)std::atof(prox());
         else if (a == "--abrir-quadro") o.jogo.abrirQuadro = true;

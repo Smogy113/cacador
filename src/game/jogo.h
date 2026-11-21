@@ -30,6 +30,8 @@ struct OpcoesJogo {
     bool abrirQuadro = false;
     float distCamera = 0;  // 0 = padrao (so para screenshots)
     float retrato = 0;     // > 0: camera de frente para o rosto do jogador, a essa distancia (screenshots)
+    bool estudio = false;  // so o jogador, fundo escuro, luz de estudio
+    bool argila = false;   // material cinza (comparar com esculturas)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };

@@ -28,7 +28,9 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.lenco = {0.55f, 0.12f, 0.1f};
     r.cabelo = {0.18f, 0.13f, 0.09f};
     r.barba = true;
-    r.equipamento = true;
+    r.equipamento = !op.estudio;
+    r.heroi = true;
+    if (op.estudio) r.chapeuAba = false;
     modeloJogador_.carregar(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
     // moradores: roupas variadas
     {
@@ -326,6 +328,22 @@ void Jogo::trocarNivel(Nivel n) {
 
 void Jogo::desenhar() {
     luz_.comecarCena(cam_, relogio_, luzes_, jogador_.pos, tempo_);
+    if (op_.estudio) {
+        // luz principal vinda de cima, a frente e a esquerda do personagem
+        Vec3f dirLuz = rotY(normalizar({0.5f, 0.62f, 0.62f}), jogador_.yaw);
+        luz_.modoEstudio(dirLuz, op_.argila);
+        if (luz_.usaSombraPerto()) {
+            luz_.comecarSombraPerto(jogador_.pos + Vec3f{0, 1.0f, 0});
+            desenharJogador(luz_.materialSombraPele(), true);
+            luz_.terminarSombraPerto();
+        }
+        ClearBackground({22, 22, 24, 255});
+        BeginMode3D(cam_);
+        passePrincipal_ = true;
+        desenharJogador(luz_.materialPele(), true);
+        EndMode3D();
+        return;
+    }
     if (luz_.usaSombras()) {
         float a = Iluminacao::AREA_SOMBRA * 1.2f;
         passePrincipal_ = false;  // sombras usam o modelo leve

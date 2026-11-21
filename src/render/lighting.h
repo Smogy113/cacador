@@ -21,6 +21,8 @@ public:
     void comecarCena(const Camera3D& cam, const DayClock& relogio, const std::vector<LuzPontual>& todas, Vec3f foco, float tempo);
     void desenharCeu(const Camera3D& cam);
     void modoHorizonte(float descartarPerto);  // 0 = normal
+    // Estudio (comparar a forma com esculturas): luz fixa, fundo escuro, sem neblina; argila = material cinza
+    void modoEstudio(Vec3f dirLuz, bool argila);
     Shader shaderLit() const { return lit_; }
     Material& material() { return mat_; }
     const Efeitos& efeitos() const { return ef_; }

@@ -19,6 +19,7 @@ struct Visual {
         botas{0.18f, 0.12f, 0.08f}, chapeu{0.22f, 0.16f, 0.11f}, lenco{0.55f, 0.12f, 0.1f}, cabelo{0.2f, 0.14f, 0.1f};
     bool sobretudo = true, chapeuAba = true, barba = false;
     bool equipamento = false;  // bandoleira, besta nas costas e laco (so no modelo HD)
+    bool heroi = false;        // cabeca esculpida em resolucao maxima (o jogador); os outros usam celulas maiores
 };
 
 // Materiais dos personagens (vao para o shader; 0 = sem material especial)

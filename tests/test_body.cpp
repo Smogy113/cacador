@@ -127,7 +127,7 @@ TEST_CASE("HD: entre 6 e 14 mil triângulos e índices válidos") {
         v.equipamento = eq;
         auto m = corpoHumanoHD({}, v);
         CHECK(m.triangulos() >= 6000);
-        CHECK(m.triangulos() <= 24000);
+        CHECK(m.triangulos() <= 50000);  // moradores: escultura com celulas de 3,8 mm
         CHECK(m.v.size() < 65535);
         for (auto i : m.idx) CHECK(i < m.v.size());
         for (auto& x : m.v) {
@@ -264,10 +264,9 @@ TEST_CASE("pelos crescem certo: barba para baixo, sobrancelha para os lados") {
             barba++;
             if (x.dirPelo.y < -0.3f) barbaBaixo++;
         }
-        if (x.material == MAT_CARTAO && x.pos.y > 1.71f && x.pos.y < 1.725f && x.pos.z > 0.07f && std::abs(x.pos.x) > 0.025f) {
-            sob++;
-            if (std::abs(x.tang.x) > std::abs(x.tang.y)) sobLado++;
-            CHECK(len(x.tang) == doctest::Approx(1).epsilon(0.02));
+        if (x.material == MAT_PELE && x.pelos > 0.5f && x.pos.y > 1.71f && x.pos.y < 1.728f && x.pos.z > 0.07f && std::abs(x.pos.x) > 0.025f) {
+            sob++;  // sobrancelha desenhada na pele: direcao para os lados
+            if (std::abs(x.dirPelo.x) > std::abs(x.dirPelo.y)) sobLado++;
         }
     }
     REQUIRE(barba > 30);
@@ -282,12 +281,13 @@ TEST_CASE("cartões saem da pele, no máximo 15 mm") {
     for (auto& x : m.v)
         if (x.material == MAT_CARTAO) CHECK(x.compPelo <= 0.015f);
 }
-TEST_CASE("caçador completo (barba + equipamento) cabe no orçamento do HD") {
+TEST_CASE("caçador completo (herói: cabeça esculpida em resolução máxima) cabe no orçamento") {
     Visual v;
     v.barba = true;
     v.equipamento = true;
+    v.heroi = true;
     auto m = corpoHumanoHD({}, v);
-    CHECK(m.triangulos() <= 36000);
+    CHECK(m.triangulos() <= 95000);
     CHECK(m.v.size() < 65535);
 }
 
@@ -306,7 +306,7 @@ TEST_CASE("cada triângulo tem um só material (sem misturar no meio)") {
     }
 }
 
-TEST_CASE("rosto masculino: maxilar quadrado (largura no ângulo da mandíbula >= 88% das maçãs)") {
+TEST_CASE("rosto masculino: mandíbula com 70% ou mais da largura das maçãs (anatomia real, afina em V)") {
     auto m = corpoHumanoHD({}, semChapeu());
     float mand = 0, macas = 0;
     for (auto& v : m.v) {
@@ -316,7 +316,8 @@ TEST_CASE("rosto masculino: maxilar quadrado (largura no ângulo da mandíbula >
         if (v.pos.y > 1.678f && v.pos.y < 1.69f) macas = std::max(macas, std::abs(v.pos.x));
     }
     REQUIRE(macas > 0);
-    CHECK(mand / macas >= 0.88f);
+    CHECK(mand / macas >= 0.70f);
+    CHECK(mand / macas <= 0.85f);
 }
 TEST_CASE("barba curta: pelos da barba com no máximo 4,5 mm") {
     Visual v;

@@ -251,6 +251,27 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
 
 void Iluminacao::modoHorizonte(float d) { setF(lit_, "descartarPerto", d); }
 
+void Iluminacao::modoEstudio(Vec3f dir, bool argila) {
+    for (Shader sh : {lit_, pele_}) {
+        setV3(sh, "dirSol", dir);
+        setRgb(sh, "corSol", Rgb{1.45f, 1.42f, 1.38f});
+        setRgb(sh, "ambCeu", Rgb{0.16f, 0.165f, 0.18f});
+        setRgb(sh, "ambChao", Rgb{0.07f, 0.07f, 0.075f});
+        setRgb(sh, "corLua", Rgb{0, 0, 0});
+        setRgb(sh, "corChao", Rgb{0.3f, 0.3f, 0.3f});
+        setRgb(sh, "corNeblina", Rgb{0.02f, 0.02f, 0.02f});
+        setF(sh, "densNeblina", 0.f);
+        setF(sh, "exposicao", 1.f);
+        setRgb(sh, "grading", Rgb{1, 1, 1});
+        setV3(sh, "dirSombra", dir);
+        int zero = 0;
+        SetShaderValue(sh, GetShaderLocation(sh, "numLuzes"), &zero, SHADER_UNIFORM_INT);
+    }
+    sol_ = dir;
+    dirSombra_ = dir;
+    setF(pele_, "argila", argila ? 1.f : 0.f);
+}
+
 void Iluminacao::desenharCeu(const Camera3D& cam) {
     rlDisableBackfaceCulling();
     rlDisableDepthMask();
