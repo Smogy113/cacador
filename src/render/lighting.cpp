@@ -111,6 +111,7 @@ void Iluminacao::carregar(Nivel nivel) {
 #endif
     if (carregado_) {
         liberarEfeitos();
+        limparLuzParedes();  // Medio nao guarda o rebote; luz velha nao aparece ao voltar
     } else {
         lit_ = carregarShader(VS_LIT, FS_LIT);
     lit_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(lit_, "matModel");
@@ -622,8 +623,19 @@ void Iluminacao::assarMateriais() {
     UnloadShader(sh);
 }
 
+void Iluminacao::limparLuzParedes() {
+    if (!luzParedeOk_) return;
+    for (auto* rt : {&luz1_, &luz2_}) {
+        BeginTextureMode(*rt);
+        ClearBackground(BLANK);
+        EndTextureMode();
+    }
+    std::fill(feita_.begin(), feita_.end(), 0);
+}
+
 void Iluminacao::liberarLuzParedes() {
     if (!luzParedeOk_) return;
+    if (paredeOk_) setF(litParede_, "usarAtlas", 0.f);
     for (int m : {MATERIAL_MAP_EMISSION, MATERIAL_MAP_HEIGHT, MATERIAL_MAP_BRDF}) matConstr_.maps[m].texture = Texture2D{};
     UnloadRenderTexture(luz1_);
     UnloadRenderTexture(luz2_);
@@ -674,6 +686,7 @@ void Iluminacao::prepararLuzParedes(const std::vector<FormaCena>& fs) {
     setF(litParede_, "tamAtlas", ta);
     setF(litParede_, "metroTexel", mt);
     setF(luzParede_, "metroTexel", mt);
+    setF(litParede_, "usarAtlas", 1.f);
     pertoFace_.assign(fs.size(), {});
     feita_.assign(fs.size() * 4, 0);
     fila_.clear();
@@ -688,18 +701,38 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
     if (!luzParedeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes) return;
     const auto& fs = *formasLuz_;
     // faces no raio de 70 m; as que entram agora vao para a frente da fila
-    std::vector<int> novas, fila;
+    std::vector<int> novas, saindo;
+    std::vector<std::pair<float, int>> fila;  // ja calculadas, pela distancia
     for (size_t i = 0; i < fs.size(); i++) {
         if (!fs[i].parede) continue;
-        bool perto = distanciaForma(fs[i], cam) < 70.f;
+        float d = distanciaForma(fs[i], cam);
+        bool perto = d < 70.f;
         for (int k = 0; k < 4; k++) {
             int f = int(i) * 4 + k;
             if (atlas_[i][k].w == 0) continue;
-            if (!perto) { feita_[f] = 0; continue; }
-            (feita_[f] ? fila : novas).push_back(f);
+            if (!perto) {
+                if (feita_[f]) saindo.push_back(f);  // apaga: nao mostra luz velha quando voltar
+                feita_[f] = 0;
+                continue;
+            }
+            if (feita_[f]) fila.push_back({d, f});
+            else novas.push_back(f);
         }
     }
+    if (!saindo.empty()) {
+        BeginTextureMode(luz1_);
+        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+        BeginBlendMode(BLEND_CUSTOM);
+        for (int f : saindo) {
+            const RetAtlas& ra = atlas_[f / 4][f % 4];
+            DrawRectangle(ra.x, TAM_ATLAS - ra.y - ra.h, ra.w, ra.h, BLANK);
+        }
+        EndBlendMode();
+        EndTextureMode();
+    }
     if (novas.empty() && fila.empty()) return;
+    // as mais perto da camera sao refeitas todo quadro (acompanham o sol sem atraso); o resto em rodizio
+    std::sort(fila.begin(), fila.end());
     // luz que faz sombra (como comecarSombra) e cor do sol do quadro
     Vec3f dir = sol_.y > 0.05f ? sol_ : lua_;
     if (dir.y < 0.05f) dir = {0.3f, 0.9f, 0.2f};
@@ -718,8 +751,14 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
         for (int i = 0; i < 12; i++) loc[i] = GetShaderLocation(sh, nomes[i]);
     }
     std::vector<int> escolhidas(novas.begin(), novas.begin() + std::min<size_t>(novas.size(), size_t(porQuadro)));
-    for (int n = 0; int(escolhidas.size()) < porQuadro && n < int(fila.size()); n++) escolhidas.push_back(fila[(cursor_ + n) % fila.size()]);
-    if (!fila.empty()) cursor_ = (cursor_ + std::max<size_t>(0, size_t(porQuadro) - std::min<size_t>(novas.size(), size_t(porQuadro)))) % fila.size();
+    const int pertoSempre = 20;
+    for (int n = 0; n < int(fila.size()) && n < pertoSempre && int(escolhidas.size()) < porQuadro; n++) escolhidas.push_back(fila[n].second);
+    int resto = int(fila.size()) - pertoSempre;
+    if (resto > 0) {
+        int vagas = porQuadro - int(escolhidas.size());
+        for (int n = 0; n < vagas && n < resto; n++) escolhidas.push_back(fila[pertoSempre + (cursor_ + n) % resto].second);
+        cursor_ = (cursor_ + std::max(vagas, 0)) % size_t(resto);
+    }
     int ultimaForma = -1;
     for (int pass = 0; pass < 2; pass++) {
         if (pass == 1 && nivel_ != Nivel::Alto) break;  // o rebote so aparece no Alto

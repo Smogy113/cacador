@@ -515,11 +515,13 @@ uniform sampler2D texLuz1;    // sombra tracada, oclusao, -, calculada?
 uniform sampler2D texLuz2;    // rebote / 2
 uniform float tamAtlas;
 uniform float metroTexel;
+uniform float usarAtlas;   // 0 ate o atlas existir (sem ele, os amostradores leriam a textura branca)
+bool bordaSombra = false;  // a luz guardada esta numa borda de sombra: a sombra e tracada no pixel
 bool luzGuardada(vec3 p, vec3 n, out vec4 L1, out vec3 L2) {
     L1 = vec4(0.0);
     L2 = vec3(0.0);
     int fid = int(formaV + 0.5) - 1;
-    if (fid < 0) return false;
+    if (fid < 0 || usarAtlas < 0.5) return false;
     vec4 cr = texelFetch(texFaces, ivec2(0, fid), 0);
     vec4 mh = texelFetch(texFaces, ivec2(1, fid), 0);
     float c = cos(cr.w), s = sin(cr.w);
@@ -538,6 +540,11 @@ bool luzGuardada(vec3 p, vec3 n, out vec4 L1, out vec3 L2) {
     L1 = textureLod(texLuz1, auv, 0.0);
     if (L1.a < 0.5) return false;   // ainda nao calculada: caminho por pixel
     L2 = textureLod(texLuz2, auv, 0.0).rgb * 2.0;
+    // borda de sombra (beiral, casa vizinha): os texels em volta discordam -> sombra fina no pixel
+    float tx = 1.0 / tamAtlas;
+    float s1 = textureLod(texLuz1, auv + vec2(tx, 0.0), 0.0).r, s2 = textureLod(texLuz1, auv - vec2(tx, 0.0), 0.0).r;
+    float s3 = textureLod(texLuz1, auv + vec2(0.0, tx), 0.0).r, s4 = textureLod(texLuz1, auv - vec2(0.0, tx), 0.0).r;
+    bordaSombra = max(max(s1, s2), max(s3, s4)) - min(min(s1, s2), min(s3, s4)) > 0.03;
     return true;
 }
 // janelas acesas a noite clareiam a parede em volta
@@ -872,7 +879,7 @@ void main() {
 #endif
 #ifdef PAREDES
     if (ehParede && paredes > 1.5 && alcance > 0.0) {  // Alto: a sombra vem dos raios contra as construcoes
-        float sc = guardada ? luz1.r : (dot(nParede, dirSombra) > 0.0 ? sombraCena(posMundo + nParede * 0.03, dirSombra) : 0.0);
+        float sc = guardada && !bordaSombra ? luz1.r : (dot(nParede, dirSombra) > 0.0 ? sombraCena(posMundo + nParede * 0.03, dirSombra) : 0.0);
         sombra = mix(sombra, sc, alcance);
     }
     sombra *= sombraRelevo;

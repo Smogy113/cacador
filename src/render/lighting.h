@@ -92,6 +92,7 @@ private:
     Shader luzParede_{};
     bool luzParedeOk_ = false;
     void liberarLuzParedes();
+    void limparLuzParedes();  // apaga o atlas (alfa 0) e manda recalcular tudo
     std::vector<Shader> personagens() const;  // pele_ e, se houver, cabeca_
     std::vector<Shader> sombreados() const;   // lit_, pele_ e cabeca_
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blur4_{}, longe_{};
