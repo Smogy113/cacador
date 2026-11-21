@@ -59,7 +59,9 @@ void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const 
     Vec3f f = frenteDe(k.yaw);
     for (int i = 0; i < passos && total > 0; i++) {
         Vec3f prox = k.pos + f * (total / passos);
-        if (!inclinacaoPermitida(t, k.pos, prox)) { k.vel = 0; break; }
+        // sobre um piso (tabuleiro de ponte) o relevo de baixo nao importa
+        bool noPiso = col.alturaPiso(prox.x, prox.z, k.pos.y) > t.altura(prox.x, prox.z);
+        if (!noPiso && !inclinacaoPermitida(t, k.pos, prox)) { k.vel = 0; break; }
         prox = col.resolver(prox, RAIO_CAVALO);
         prox.y = std::max(t.altura(prox.x, prox.z), col.alturaPiso(prox.x, prox.z, k.pos.y));
         k.pos = prox;

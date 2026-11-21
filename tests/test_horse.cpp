@@ -117,3 +117,19 @@ TEST_CASE("não escala a montanha") {
     CHECK(c.corpo.pos.y < serra.altura(745, 0) - 5);
     CHECK(serra.dentroDoJogavel(c.corpo.pos.x, c.corpo.pos.z));
 }
+TEST_CASE("anda em cima da ponte mesmo com barranco embaixo") {
+    Mapa m;
+    Terreno serra(m, 2);
+    float topo = 0;
+    for (float x = 640; x < 746; x += 1) topo = std::max(topo, serra.altura(x, 0));
+    MundoColisao col;
+    col.adicionarPiso({{640, topo + 0.5f, -3}, {746, topo + 1.f, 3}});  // tabuleiro acima do morro
+    Cavalo c;
+    c.corpo.pos = {642, topo + 1.f, 0};
+    c.corpo.yaw = 3.14159265f / 2;  // +x
+    c.montado = true;
+    Entrada e; e.frente = 1;
+    for (int i = 0; i < 600; i++) moverCavalo(c, e, 1 / 60.f, serra, col);
+    CHECK(c.corpo.pos.x > 690.f);  // antes da correcao travava em ~673
+    CHECK(c.corpo.pos.y == doctest::Approx(topo + 1.f));
+}
