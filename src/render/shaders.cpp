@@ -35,6 +35,15 @@ float neblinaFator(float d) {
 }
 )";
 
+Shader carregarShaderPos(const char* fs) {
+#if defined(PLATFORM_WEB)
+    std::string f = std::string("#version 100\nprecision mediump float;\nvarying vec2 fragTexCoord;\nvarying vec4 fragColor;\n#define FRAG gl_FragColor\n#define TEX texture2D\n") + fs;
+#else
+    std::string f = std::string("#version 330\nin vec2 fragTexCoord;\nin vec4 fragColor;\nout vec4 corSaida;\n#define FRAG corSaida\n#define TEX texture\n") + fs;
+#endif
+    return LoadShaderFromMemory(nullptr, f.c_str());
+}
+
 Shader carregarShader(const char* vs, const char* fs) {
     std::string v = std::string(CAB_VS) + vs;
     std::string f = std::string(CAB_FS) + COMUM + fs;
@@ -76,7 +85,32 @@ uniform vec4 luzPos[8];   // xyz + raio
 uniform vec3 luzCor[8];
 uniform int numLuzes;
 uniform float noite;
-uniform float descartarPerto; // > 0: horizonte, some onde o terreno detalhado ja desenha
+uniform float descartarPerto;
+uniform float usarSombra;
+uniform mat4 matLuz;
+uniform sampler2D texSombra;
+uniform float texelSombra;
+uniform vec3 dirSombra;
+
+float sombraEm(vec3 p, vec3 n) {
+    if (usarSombra < 0.5) return 1.0;
+    float nl = clamp(dot(n, dirSombra), 0.0, 1.0);
+    if (nl <= 0.0) return 0.0;  // de costas para a luz: ja esta no escuro
+    vec4 pl = matLuz * vec4(p + n * (0.06 + 0.25 * (1.0 - nl)), 1.0);
+    vec3 q = pl.xyz / pl.w * 0.5 + 0.5;
+    if (q.x <= 0.0 || q.x >= 1.0 || q.y <= 0.0 || q.y >= 1.0 || q.z >= 1.0) return 1.0;
+    float bias = 0.0006 + 0.0025 * (1.0 - nl);
+    float s = 0.0;
+    for (int x = -1; x <= 1; x++)
+        for (int y = -1; y <= 1; y++) {
+            float d = TEX(texSombra, q.xy + vec2(float(x), float(y)) * texelSombra).r;
+            s += (q.z - bias > d) ? 0.0 : 1.0;
+        }
+    s /= 9.0;
+    // some suavemente na borda da area com sombra
+    vec2 b = smoothstep(vec2(0.0), vec2(0.08), q.xy) * smoothstep(vec2(1.0), vec2(0.92), q.xy);
+    return mix(1.0, s, b.x * b.y);
+} // > 0: horizonte, some onde o terreno detalhado ja desenha
 
 void main() {
     vec3 n = normalize(normalMundo);
@@ -90,9 +124,10 @@ void main() {
     // ceu e chao (hemisferica) com oclusao de ambiente
     float hemi = n.y * 0.5 + 0.5;
     vec3 luz = mix(ambChao, ambCeu, hemi) * ao;
-    // sol e lua
-    luz += corSol * max(dot(n, dirSol), 0.0);
-    luz += corLua * max(dot(n, dirLua), 0.0);
+    // sol e lua (com sombra)
+    float sombra = sombraEm(posMundo, n);
+    luz += corSol * max(dot(n, dirSol), 0.0) * sombra;
+    luz += corLua * max(dot(n, dirLua), 0.0) * sombra;
     // tochas, fogueiras, lanterna
     for (int i = 0; i < 8; i++) {
         if (i >= numLuzes) break;
@@ -169,5 +204,80 @@ void main() {
     float abaixo = smoothstep(0.02, -0.12, d.y);
     c = mix(c, corNeblina, max(abaixo, smoothstep(0.25, 0.0, d.y) * 0.65));
     FRAG = vec4(finalizar(c), 1.0);
+}
+)";
+
+// ---------- passe de profundidade (mapa de sombras) ----------
+const char* VS_PROF = R"(
+ATTR vec3 vertexPosition;
+ATTR vec2 vertexTexCoord;
+uniform mat4 mvp;
+VARY float tipo;
+void main() {
+    tipo = vertexTexCoord.y;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+)";
+const char* FS_PROF = R"(
+VARY float tipo;
+void main() {
+    if (tipo > 1.5 && tipo < 2.5) discard;  // chamas nao fazem sombra
+    FRAG = vec4(1.0);
+}
+)";
+
+// ---------- pos-processamento ----------
+const char* FS_BRILHO = R"(
+uniform sampler2D texture0;
+uniform float limiar;
+void main() {
+    vec3 c = TEX(texture0, fragTexCoord).rgb;
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    FRAG = vec4(c * smoothstep(limiar, limiar + 0.08, l), 1.0);
+}
+)";
+const char* FS_BLUR = R"(
+uniform sampler2D texture0;
+uniform vec2 direcao;  // (1/largura, 0) ou (0, 1/altura)
+void main() {
+    vec3 c = TEX(texture0, fragTexCoord).rgb * 0.227;
+    c += TEX(texture0, fragTexCoord + direcao * 1.38).rgb * 0.316;
+    c += TEX(texture0, fragTexCoord - direcao * 1.38).rgb * 0.316;
+    c += TEX(texture0, fragTexCoord + direcao * 3.23).rgb * 0.070;
+    c += TEX(texture0, fragTexCoord - direcao * 3.23).rgb * 0.070;
+    FRAG = vec4(c, 1.0);
+}
+)";
+const char* FS_RAIOS = R"(
+uniform sampler2D texture0;
+uniform vec2 posSol;   // posicao do sol na tela (0..1)
+uniform float forca;
+void main() {
+    vec2 uv = fragTexCoord;
+    vec2 d = (uv - posSol) * (0.9 / 28.0);
+    vec3 c = vec3(0.0);
+    float peso = 1.0;
+    for (int i = 0; i < 28; i++) {
+        uv -= d;
+        c += TEX(texture0, uv).rgb * peso;
+        peso *= 0.955;
+    }
+    FRAG = vec4(c * (forca / 28.0), 1.0);
+}
+)";
+const char* FS_JUNTA = R"(
+uniform sampler2D texture0;
+uniform sampler2D texBrilho;
+uniform sampler2D texRaios;
+uniform float forcaBrilho;
+uniform float usarRaios;
+void main() {
+    vec3 c = TEX(texture0, fragTexCoord).rgb;
+    c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
+    if (usarRaios > 0.5) c += TEX(texRaios, fragTexCoord).rgb;
+    // vinheta suave
+    vec2 v = fragTexCoord - 0.5;
+    c *= 1.0 - dot(v, v) * 0.35;
+    FRAG = vec4(c, 1.0);
 }
 )";

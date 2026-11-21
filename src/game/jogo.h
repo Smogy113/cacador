@@ -29,6 +29,7 @@ struct OpcoesJogo {
     float girarCamera = 0;  // graus (so para screenshots)
     bool abrirQuadro = false;
     std::string arquivoMapa = "data/lugares.txt";
+    std::string arquivoConfig;  // vazio = nao salvar
 };
 
 class Jogo {
@@ -69,6 +70,8 @@ private:
     bool pausado_ = false, sair_ = false;
     Entrada lerEntrada();
     void atualizarCamera(float dt, const Entrada& e);
+    void desenharAtores(Material& mat, bool sombraBolha, float distMax);
+    void trocarNivel(Nivel n);
     float tempo_ = 0;
     std::vector<LuzPontual> luzes_;
     size_t tris_ = 0;

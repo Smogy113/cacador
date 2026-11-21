@@ -118,6 +118,16 @@ void Jogo::desenharInterface() {
     const char* t2 = "Clique para continuar   -   Q para sair";
     DrawText(t1, w / 2 - MeasureText(t1, 48) / 2, h / 2 - 50, 48, {235, 220, 190, 255});
     DrawText(t2, w / 2 - MeasureText(t2, 22) / 2, h / 2 + 10, 22, {220, 210, 190, 255});
+    const char* nomes[] = {"1 - Baixo", "2 - Medio", "3 - Alto"};
+    const char* t3 = "Qualidade grafica:";
+    DrawText(t3, w / 2 - MeasureText(t3, 22) / 2, h / 2 + 70, 22, {220, 210, 190, 255});
+    for (int k = 0; k < 3; k++) {
+        bool atual = int(luz_.nivel()) == k;
+        Color c = atual ? Color{255, 200, 110, 255} : Color{190, 180, 165, 255};
+        int x = w / 2 - 210 + k * 150;
+        if (atual) DrawRectangleLines(x - 8, h / 2 + 104, 136, 34, c);
+        DrawText(nomes[k], x, h / 2 + 110, 22, c);
+    }
 }
 
 Jogo::~Jogo() {
@@ -151,6 +161,9 @@ void Jogo::atualizar(float dt) {
         if (pausado_) {
             if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { pausado_ = false; DisableCursor(); }
             if (IsKeyPressed(KEY_Q)) sair_ = true;
+            if (IsKeyPressed(KEY_ONE)) trocarNivel(Nivel::Baixo);
+            if (IsKeyPressed(KEY_TWO)) trocarNivel(Nivel::Medio);
+            if (IsKeyPressed(KEY_THREE)) trocarNivel(Nivel::Alto);
             return;
         }
     }
@@ -211,8 +224,58 @@ void Jogo::atualizar(float dt) {
     }
 }
 
+void Jogo::desenharAtores(Material& mat, bool sombraBolha, float distMax) {
+    for (auto& n : populacao_.npcs()) {
+        if (!n.ativo) continue;
+        float dx = n.corpo.pos.x - cam_.position.x, dz = n.corpo.pos.z - cam_.position.z;
+        float d2 = dx * dx + dz * dz;
+        if (d2 > distMax * distMax) continue;
+        const ModeloPessoa& m = roupasNpc_[n.semente % roupasNpc_.size()];
+        if (d2 < 35.f * 35.f) {
+            m.desenhar(mat, n.corpo.pos, n.corpo.yaw, n.passada, n.corpo.vel > 0.1f ? 0.45f : 0.f);
+            if (sombraBolha) sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
+        } else
+            m.desenharSimples(mat, n.corpo.pos, n.corpo.yaw);
+    }
+    for (size_t i = 0; i < cavalos_.size(); i++) {
+        const Cavalo& c = cavalos_[i];
+        Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
+        if (d.x * d.x + d.z * d.z > distMax * distMax) continue;
+        modelosCavalo_[i].desenhar(mat, c.corpo.pos, c.corpo.yaw, c.passada, int(c.andadura));
+        if (int(i) == montadoEm_) modeloJogador_.desenharSentado(mat, ModeloCavalo::assento(c.corpo.pos, c.corpo.yaw), c.corpo.yaw);
+    }
+    if (montadoEm_ < 0) {
+        float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
+        modeloJogador_.desenhar(mat, jogador_.pos, jogador_.yaw, passada_, amp);
+        if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
+    }
+    for (auto& c : cavalos_) {
+        if (!sombraBolha) break;
+        Vec3f f = frenteDe(c.corpo.yaw);
+        for (float s : {0.6f, -0.6f}) {
+            Vec3f q = c.corpo.pos + f * s;
+            sombra_.desenhar({q.x, terreno_->altura(q.x, q.z), q.z}, terreno_->normal(q.x, q.z), 0.6f);
+        }
+    }
+}
+
+void Jogo::trocarNivel(Nivel n) {
+    luz_.carregar(n);
+    op_.nivel = n;
+    if (!op_.arquivoConfig.empty()) salvarConfig(op_.arquivoConfig, n);
+}
+
 void Jogo::desenhar() {
     luz_.comecarCena(cam_, relogio_, luzes_, jogador_.pos, tempo_);
+    if (luz_.usaSombras()) {
+        float a = Iluminacao::AREA_SOMBRA * 1.2f;
+        luz_.comecarSombra(jogador_.pos);
+        terrenoR_->desenharArea(jogador_.pos, a, luz_.materialSombra());
+        cenario_.desenharArea(jogador_.pos, a, luz_.materialSombra());
+        desenharAtores(luz_.materialSombra(), false, a);
+        luz_.terminarSombra();
+    }
+    if (luz_.usaPos()) luz_.comecarPos();
     ClearBackground(BLACK);
     BeginMode3D(cam_);
     luz_.desenharCeu(cam_);
@@ -222,38 +285,9 @@ void Jogo::desenhar() {
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
     cenario_.desenhar(cam_, dv, luz_.material());
-    for (auto& n : populacao_.npcs()) {
-        if (!n.ativo) continue;
-        float dx = n.corpo.pos.x - cam_.position.x, dz = n.corpo.pos.z - cam_.position.z;
-        float d2 = dx * dx + dz * dz;
-        if (d2 > 160.f * 160.f) continue;
-        const ModeloPessoa& m = roupasNpc_[n.semente % roupasNpc_.size()];
-        if (d2 < 35.f * 35.f) {
-            m.desenhar(luz_.material(), n.corpo.pos, n.corpo.yaw, n.passada, n.corpo.vel > 0.1f ? 0.45f : 0.f);
-            sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
-        } else
-            m.desenharSimples(luz_.material(), n.corpo.pos, n.corpo.yaw);
-    }
-    for (size_t i = 0; i < cavalos_.size(); i++) {
-        const Cavalo& c = cavalos_[i];
-        Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
-        if (d.x * d.x + d.z * d.z > dv * dv) continue;
-        modelosCavalo_[i].desenhar(luz_.material(), c.corpo.pos, c.corpo.yaw, c.passada, int(c.andadura));
-        if (int(i) == montadoEm_) modeloJogador_.desenharSentado(luz_.material(), ModeloCavalo::assento(c.corpo.pos, c.corpo.yaw), c.corpo.yaw);
-    }
-    if (montadoEm_ < 0) {
-        float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
-        modeloJogador_.desenhar(luz_.material(), jogador_.pos, jogador_.yaw, passada_, amp);
-        sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
-    }
-    for (auto& c : cavalos_) {
-        Vec3f f = frenteDe(c.corpo.yaw);
-        for (float s : {0.6f, -0.6f}) {
-            Vec3f q = c.corpo.pos + f * s;
-            sombra_.desenhar({q.x, terreno_->altura(q.x, q.z), q.z}, terreno_->normal(q.x, q.z), 0.6f);
-        }
-    }
+    desenharAtores(luz_.material(), !luz_.usaSombras(), dv);
     EndMode3D();
+    if (luz_.usaPos()) luz_.terminarPos(cam_);
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas();
 }

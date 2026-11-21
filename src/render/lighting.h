@@ -14,7 +14,8 @@ struct LuzPontual {
 class Iluminacao {
 public:
     static constexpr int MAX_LUZES = 8;
-    void carregar(Nivel nivel);
+    static constexpr float AREA_SOMBRA = 80.f;  // metros cobertos pelo mapa de sombras
+    void carregar(Nivel nivel);                 // pode ser chamado de novo para trocar o nivel
     void descarregar();
     // Prepara as luzes do frame: escolhe as 8 mais proximas de "foco".
     void comecarCena(const Camera3D& cam, const DayClock& relogio, const std::vector<LuzPontual>& todas, Vec3f foco, float tempo);
@@ -25,11 +26,27 @@ public:
     const Efeitos& efeitos() const { return ef_; }
     Nivel nivel() const { return nivel_; }
 
+    // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
+    bool usaSombras() const { return ef_.sombras && sombraOk_; }
+    void comecarSombra(Vec3f centro);
+    void terminarSombra();
+    Material& materialSombra() { return matProf_; }
+
+    // Pos-processamento (brilho e raios de luz): envolve o desenho da cena.
+    bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz) && posOk_; }
+    void comecarPos();
+    void terminarPos(const Camera3D& cam);
+
 private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
-    Shader lit_{}, ceu_{};
-    Material mat_{};
+    void liberarEfeitos();
+    Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{};
+    Material mat_{}, matProf_{};
     Model esfera_{};
+    RenderTexture2D sombraRT_{}, cena_{}, meiaA_{}, meiaB_{}, raiosRT_{};
+    Matrix luzVP_{};
+    bool sombraOk_ = false, posOk_ = false;
+    int largPos_ = 0, altPos_ = 0;
     Efeitos ef_{};
     Nivel nivel_ = Nivel::Baixo;
     Paleta paleta_{};

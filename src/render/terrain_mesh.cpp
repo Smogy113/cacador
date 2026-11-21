@@ -267,3 +267,18 @@ void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& mat) 
             }
         }
 }
+
+void TerrenoRender::desenharArea(Vec3f centro, float raio, Material& mat) {
+    Matrix id = MatrixIdentity();
+    for (int j = 0; j < n_; j++)
+        for (int i = 0; i < n_; i++) {
+            Pedaco& p = p_[j * n_ + i];
+            Vec3f c = this->centro(i, j);
+            if (std::hypot(c.x - centro.x, c.z - centro.z) > raio + TAM * 0.72f) continue;
+            for (int k = 0; k < 3; k++)
+                if (p.tem[k]) {
+                    DrawMesh(p.lod[k], mat, id);
+                    break;
+                }
+        }
+}

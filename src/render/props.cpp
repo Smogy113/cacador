@@ -961,6 +961,16 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat) {
     }
 }
 
+void Cenario::desenharArea(Vec3f centro, float raio, Material& mat) {
+    Matrix id = MatrixIdentity();
+    for (auto& p : p_) {
+        if (std::hypot(p.centro.x - centro.x, p.centro.z - centro.z) > raio + p.raio) continue;
+        if (p.temConstr) DrawMesh(p.construcoes, mat, id);
+        if (p.temPerto) DrawMesh(p.arvPerto, mat, id);
+        else if (p.temLonge) DrawMesh(p.arvLonge, mat, id);
+    }
+}
+
 void Cenario::descarregar() {
     for (auto& p : p_) {
         if (p.temConstr) UnloadMesh(p.construcoes);

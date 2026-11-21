@@ -7,7 +7,10 @@
 #include <emscripten/emscripten.h>
 #endif
 
+extern "C" const unsigned char* glGetString(unsigned int nome);
+
 struct Opcoes {
+    bool qualidadeDada = false;
     std::string screenshot;
     int frames = 30;
     OpcoesJogo jogo;
@@ -30,6 +33,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--qualidade") {
             std::string q = prox();
             o.jogo.nivel = q == "alto" ? Nivel::Alto : (q == "medio" ? Nivel::Medio : Nivel::Baixo);
+            o.qualidadeDada = true;
         }
     }
     return o;
@@ -61,6 +65,15 @@ int main(int argc, char** argv) {
     ClearBackground({18, 16, 14, 255});
     DrawText("Carregando o mundo...", 40, GetScreenHeight() - 70, 28, {220, 200, 160, 255});
     EndDrawing();
+    if (!g_op.qualidadeDada) {
+        const char* cfg = "config.txt";
+        const unsigned char* r = glGetString(0x1F01);  // GL_RENDERER
+        std::string placa = r ? (const char*)r : "";
+        g_op.jogo.nivel = temConfig(cfg) ? lerConfig(cfg, Nivel::Baixo) : sugerirNivel(placa);
+        g_op.jogo.arquivoConfig = cfg;
+        if (!temConfig(cfg)) salvarConfig(cfg, g_op.jogo.nivel);
+        std::printf("placa=%s nivel=%s\n", placa.c_str(), nomeNivel(g_op.jogo.nivel));
+    }
     double t0 = GetTime();
     g_jogo = new Jogo(g_op.jogo);
     std::printf("carregamento=%.2fs\n", GetTime() - t0);
