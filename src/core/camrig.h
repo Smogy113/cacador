@@ -10,6 +10,7 @@ public:
     static constexpr float PITCH_MIN = -20.f * 0.0174533f, PITCH_MAX = 60.f * 0.0174533f;
     float yaw = 0, pitch = 0.25f;
     float distAlvo = 4.f;
+    float ombroAlvo = 0.45f;  // deslocamento do ombro para a direita (mirando fica maior)
     void atualizar(Vec3f alvoPes, float mouseDx, float mouseDy, const Terreno& t, const MundoColisao& col, float dt);
     Vec3f posicao() const { return pos_; }
     Vec3f olhar() const { return olhar_; }

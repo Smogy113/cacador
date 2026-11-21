@@ -7,6 +7,7 @@ class Terreno;
 struct Entrada {
     float frente = 0, lado = 0;  // -1..1 (lado > 0 = direita)
     bool correr = false, interagir = false;
+    bool mirar = false, atirar = false, recarregar = false, segurarInteragir = false, aceitar = false;
     float mouseDx = 0, mouseDy = 0;
 };
 

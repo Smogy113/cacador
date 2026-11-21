@@ -191,6 +191,12 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
         case EstadoBandido::Combate: {
             // cobertura: atras da caixa mais proxima, do lado oposto ao jogador (revista a cada 2 s)
             b.tempoCobertura -= dt;
+            bool linhaAgora = col.raioLivre(b.corpo.pos + Vec3f{0, 1.5f, 0}, jog + Vec3f{0, 1.3f, 0});
+            b.semLinha = linhaAgora ? 0.f : b.semLinha + dt;
+            if (b.semLinha > 2.f && b.temCobertura) {  // cobertura sem tiro: sai e contorna
+                b.temCobertura = false;
+                b.tempoCobertura = 6.f;
+            }
             if (b.tempoCobertura <= 0) {
                 b.tempoCobertura = 2.f;
                 b.temCobertura = false;
@@ -203,14 +209,24 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
                     float meia = std::max(c.max.x - c.min.x, c.max.z - c.min.z) * 0.5f + 0.8f;
                     Vec3f p = posLivre(centro + Vec3f{fuga.x / n * meia, 0, fuga.z / n * meia}, t, col);
                     float dd = distXZ(p, b.corpo.pos);
-                    if (dd < melhor && distXZ(p, jog) > 6.f) { melhor = dd; b.cobertura = p; b.temCobertura = true; }
+                    bool ocupada = false;  // cada um na sua cobertura
+                    for (auto& o : b_)
+                        if (&o != &b && !fora(o.estado) && ((o.temCobertura && distXZ(o.cobertura, p) < 2.f) || distXZ(o.corpo.pos, p) < 1.5f))
+                            ocupada = true;
+                    if (!ocupada && dd < melhor && distXZ(p, jog) > 6.f) { melhor = dd; b.cobertura = p; b.temCobertura = true; }
                 }
             }
             if (b.temCobertura && distXZ(b.cobertura, b.corpo.pos) > 0.6f) {
                 mover(b, b.cobertura - b.corpo.pos, VEL_COMBATE, dt, t, col);
             } else if (!b.temCobertura) {
                 Vec3f para = jog - b.corpo.pos;
-                if (d > DIST_COMBATE_MAX) mover(b, para, VEL_COMBATE, dt, t, col);
+                if (b.semLinha > 1.f) {  // sem linha de visao: avanca contornando (pelo lado)
+                    b.tempoLado -= dt;
+                    if (b.tempoLado <= 0) { b.tempoLado = 3.f; b.lado = -b.lado; }
+                    float n = std::max(1e-3f, std::hypot(para.x, para.z));
+                    Vec3f f{para.x / n, 0, para.z / n}, l{f.z * b.lado, 0, -f.x * b.lado};
+                    mover(b, f * 0.6f + l, VEL_COMBATE, dt, t, col);
+                } else if (d > DIST_COMBATE_MAX) mover(b, para, VEL_COMBATE, dt, t, col);
                 else if (d < DIST_COMBATE_MIN) mover(b, para * -1.f, VEL_COMBATE, dt, t, col);
                 else {
                     b.tempoLado -= dt;
@@ -244,6 +260,19 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
         }
         }
     }
+    // ninguem dentro de ninguem: afasta pares muito juntos
+    for (size_t i = 0; i < b_.size(); i++)
+        for (size_t j = i + 1; j < b_.size(); j++) {
+            Bandido &a = b_[i], &c = b_[j];
+            if (fora(a.estado) || fora(c.estado) || a.estado == EstadoBandido::Amarrado || c.estado == EstadoBandido::Amarrado) continue;
+            Vec3f d = c.corpo.pos - a.corpo.pos;
+            float n = std::hypot(d.x, d.z);
+            if (n >= 1.3f) continue;
+            Vec3f u = n > 1e-3f ? Vec3f{d.x / n, 0, d.z / n} : Vec3f{1, 0, 0};
+            float m = (1.3f - n) * 0.5f;
+            a.corpo.pos = posLivre(a.corpo.pos - u * m, t, col);
+            c.corpo.pos = posLivre(c.corpo.pos + u * m, t, col);
+        }
     ev.chefeRendeu |= pendRendeu_;
     pendRendeu_ = false;
     return ev;

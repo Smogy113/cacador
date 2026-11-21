@@ -56,7 +56,7 @@ static void retrato(uint32_t semente, int x, int y, int w, int h) {
     if (aleatorio01(r) < 0.3f) DrawLine(cx - hw + 4, cy - 4, cx - 4, cy + hh / 3, {150, 50, 45, 255});  // cicatriz
 }
 
-void desenharQuadro(const std::vector<Cartaz>& cs, int sel, const std::string& lugar) {
+void desenharQuadro(const std::vector<Cartaz>& cs, int sel, const std::string& lugar, int aceito) {
     int W = GetScreenWidth(), H = GetScreenHeight();
     DrawRectangle(0, 0, W, H, {0, 0, 0, 150});
     int pw = std::min(W - 40, 1100), ph = std::min(H - 40, 600);
@@ -92,9 +92,14 @@ void desenharQuadro(const std::vector<Cartaz>& cs, int sel, const std::string& l
         std::snprintf(buf, sizeof buf, "MORTO: %d pratas", c.recompensaMorto);
         textoCentro(buf, mx, y + 108, 18, {110, 40, 30, 255});
         textoCentro("Visto por ultimo: " + c.ultimoVisto, mx, y + 136, 16, tinta);
+        textoCentro(c.pista, mx, y + 158, 16, {110, 40, 30, 255});
+        if (idx == aceito) {  // carimbo
+            DrawRectangleLinesEx({float(mx - 80), float(cy + 120), 160.f, 44.f}, 4, {150, 30, 25, 220});
+            textoCentro("ACEITO", mx, cy + 128, 30, {150, 30, 25, 230});
+        }
     }
     char buf[96];
-    std::snprintf(buf, sizeof buf, "<  %d / %d  >      Setas: trocar cartaz      E: fechar", sel + 1, n);
+    std::snprintf(buf, sizeof buf, "<  %d / %d  >      Setas: trocar      Enter: aceitar      E: fechar", sel + 1, n);
     textoCentro(buf, W / 2, py + ph - 42, 20, {240, 220, 180, 255});
 }
 

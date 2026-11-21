@@ -11,7 +11,7 @@ void RigCamera::atualizar(Vec3f pes, float mdx, float mdy, const Terreno& t, con
     Vec3f pivo = pes + Vec3f{0, 1.6f, 0};
     Vec3f direita{-std::cos(yaw), 0, std::sin(yaw)};
     // ombro deslocado para a direita, mas nunca para dentro de uma parede ao lado
-    float lado = 0.45f;
+    float lado = ombroAlvo;
     if (!col.raioLivre(pivo, pivo + direita * (lado + 0.15f))) {
         float lo = 0.f, hi = lado + 0.15f;
         for (int k = 0; k < 10; k++) {

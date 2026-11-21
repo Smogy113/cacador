@@ -12,6 +12,8 @@
 #include "game/actors.h"
 #include "core/places.h"
 #include "core/bounty.h"
+#include "core/cacada.h"
+#include "core/combat.h"
 #include "core/quality.h"
 #include "core/terrain.h"
 #include "render/lighting.h"
@@ -32,6 +34,9 @@ struct OpcoesJogo {
     float retrato = 0;     // > 0: camera de frente para o rosto do jogador, a essa distancia (screenshots)
     bool estudio = false;  // so o jogador, fundo escuro, luz de estudio
     bool argila = false;   // material cinza (comparar com esculturas)
+    int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
+    bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
+    bool mirar = false;    // segura a mira (screenshots)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };
@@ -46,6 +51,7 @@ public:
     bool querSair() const { return sair_; }
     void teleportar(float x, float z, float yawGraus, float hora);  // benchmark
     size_t triangulos() const { return tris_; }  // terreno + cenario + personagens
+    void prepararTiroteio();                      // jogador a ~22 m do esconderijo da recompensa ativa
     int chamadas() const { return chamadas_; }
 
 private:
@@ -86,4 +92,46 @@ private:
     size_t trisAtores_ = 0;
     bool passePrincipal_ = true;
     int chamadasAtores_ = 0;
+
+    // ---- recompensas e tiroteio (game/combate.cpp) ----
+    struct Particula {
+        Vec3f pos, vel;
+        float vida, tam;
+        Rgb cor;
+    };
+    Cacada cacada_;
+    Revolver arma_;
+    Vida vida_;
+    int dinheiro_ = 0;
+    bool mirando_ = false;
+    float mira_ = 0, anguloMira_ = 0, tiroT_ = 0;
+    float marcaAcerto_ = 0;
+    bool marcaMatou_ = false;
+    float amarrarT_ = 0, morteT_ = -1;
+    float flashT_ = 0;
+    Vec3f flashPos_{};
+    std::vector<Particula> particulas_;
+    std::string mensagem_;
+    float mensagemT_ = 0;
+    std::vector<Vec3f> xerifes_;
+    std::vector<float> yawXerifes_;
+    int xerifePerto_ = -1;
+    std::vector<ModeloHumano> modelosBando_;  // 0 = chefe; 1..3 capangas
+    ModeloHumano modeloXerife_;
+    uint32_t rngTiro_ = 12345;
+    bool tiroOuvido_ = false;
+    EstadoBandido estadoChefeAntes_ = EstadoBandido::Vigiando;
+    void iniciarCombate();
+    void descarregarCombate();
+    void atualizarCombate(float dt, Entrada& e);
+    bool interagirCacada(Entrada& e);   // consome o E quando ele serve a cacada
+    bool entregarNoXerife();
+    void aoMontar();
+    void aoDesmontar();
+    void aceitarCartaz(int quadro, int indice);
+    void avisar(const std::string& texto);
+    void desenharCombatentes(Material& matPele, bool sombraBolha, float distMax);
+    void desenharEfeitos();
+    Pose poseDoJogador(const Esqueleto& e) const;
+    Vec3f canoDoJogador() const;
 };

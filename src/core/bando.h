@@ -19,7 +19,7 @@ struct Bandido {
     float reacao = 0.6f, tranco = 0, tempoMorto = 0, tempoEstado = 0;
     Vec3f cobertura{};
     bool temCobertura = false;
-    float tempoCobertura = 0, proxTiro = 0, lado = 1, tempoLado = 0;
+    float tempoCobertura = 0, proxTiro = 0, lado = 1, tempoLado = 0, semLinha = 0;
     int rajada = 0;  // tiros que faltam na rajada atual (> 0 = atirando)
     uint32_t semente = 1;
 };

@@ -30,6 +30,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.barba = false;  // rosto limpo (pedido do usuario)
     r.equipamento = !op.estudio;
     r.heroi = true;
+    r.revolver = !op.estudio;
     if (op.estudio) r.chapeuAba = false;
     modeloJogador_.carregar(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
     // moradores: roupas variadas
@@ -85,6 +86,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
         montadoEm_ = 0;
         rig_.distAlvo = 6.f;
     }
+    iniciarCombate();
+    if (op.recompensa >= 0) aceitarCartaz(0, op.recompensa);
     sombra_.carregar();
     if (op.distCamera > 0) rig_.distAlvo = op.distCamera;
     for (int i = 0; i < 40; i++) rig_.atualizar(montadoEm_ >= 0 ? jogador_.pos + Vec3f{0, 0.9f, 0} : jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
@@ -92,16 +95,22 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, 0, 100000);
     cenario_.atualizar(jogador_.pos, 0, 100000);
     for (int i = 0; i < 300; i++) populacao_.atualizar(0.1f, relogio_, *terreno_, col_, {1e4f, 0, 1e4f});
+    if (op.tiroteio) prepararTiroteio();
     if (!op.semEntrada) DisableCursor();
 }
 
 Entrada Jogo::lerEntrada() {
     Entrada e;
+    e.mirar = op_.mirar;
     if (op_.semEntrada) return e;
     e.frente = (IsKeyDown(KEY_W) ? 1.f : 0.f) - (IsKeyDown(KEY_S) ? 1.f : 0.f);
     e.lado = (IsKeyDown(KEY_D) ? 1.f : 0.f) - (IsKeyDown(KEY_A) ? 1.f : 0.f);
     e.correr = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     e.interagir = IsKeyPressed(KEY_E);
+    e.segurarInteragir = IsKeyDown(KEY_E);
+    e.mirar = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+    e.atirar = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    e.recarregar = IsKeyPressed(KEY_R);
     Vector2 md = GetMouseDelta();
     e.mouseDx = md.x;
     e.mouseDy = md.y;
@@ -125,11 +134,15 @@ void Jogo::atualizarCamera(float dt, const Entrada& e) {
 void Jogo::desenharInterface() {
     desenharAvisos(mapa_.erros, tempoTotal_);
     if (quadroAberto_ >= 0) {
-        desenharQuadro(cartazes_[quadroAberto_], cartazSel_, semAcentos(nomeLegivel(cenario_.quadros[quadroAberto_].lugar)));
+        int aceito = cacada_.ativa() && cacada_.quadro() == quadroAberto_ ? cacada_.indiceCartaz() : -1;
+        desenharQuadro(cartazes_[quadroAberto_], cartazSel_, semAcentos(nomeLegivel(cenario_.quadros[quadroAberto_].lugar)), aceito);
         return;
     }
     if (!pausado_) {
-        if (quadroPerto_ >= 0) desenharDica("E  -  Ver recompensas");
+        if (cacada_.podeAmarrar(jogador_.pos)) desenharDica(amarrarT_ > 0 ? "Amarrando..." : "Segure E  -  Amarrar");
+        else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E  -  Entregar ao xerife");
+        else if (montadoEm_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E  -  Puxar pela corda");
+        else if (quadroPerto_ >= 0) desenharDica("E  -  Ver recompensas");
         else if (cavaloPerto_ >= 0) desenharDica("E  -  Montar");
         return;
     }
@@ -152,6 +165,7 @@ void Jogo::desenharInterface() {
 }
 
 Jogo::~Jogo() {
+    descarregarCombate();
     for (auto& m : roupasNpc_) m.descarregar();
     for (auto& m : modelosCavalo_) m.descarregar();
     cenario_.descarregar();
@@ -168,6 +182,7 @@ void Jogo::atualizar(float dt) {
         int n = int(cartazes_[quadroAberto_].size());
         if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) cartazSel_ = (cartazSel_ + 1) % n;
         if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) cartazSel_ = (cartazSel_ + n - 1) % n;
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) aceitarCartaz(quadroAberto_, cartazSel_);
         if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) quadroAberto_ = -1;
         if (!op_.congelarHora) relogio_.avancar(dt);
         return;
@@ -191,13 +206,22 @@ void Jogo::atualizar(float dt) {
     tempo_ += dt;
     if (!op_.congelarHora) relogio_.avancar(dt);
     Entrada e = lerEntrada();
+    if (morteT_ >= 0) {  // caido: sem controle
+        Entrada nada;
+        nada.mouseDx = e.mouseDx;
+        nada.mouseDy = e.mouseDy;
+        e = nada;
+    }
     cavaloPerto_ = -1;
     if (montadoEm_ >= 0) {
         Cavalo& c = cavalos_[montadoEm_];
-        if (e.interagir) {
+        if (e.interagir && entregarNoXerife()) {
+            e.interagir = false;
+        } else if (e.interagir) {
             desmontar(c, jogador_, col_);
             montadoEm_ = -1;
             rig_.distAlvo = 4.f;
+            aoDesmontar();
         } else {
             moverCavalo(c, e, dt, *terreno_, col_);
             jogador_.pos = c.corpo.pos;
@@ -205,7 +229,10 @@ void Jogo::atualizar(float dt) {
             jogador_.vel = 0;
         }
     } else {
+        interagirCacada(e);
+        if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
         moverAPe(jogador_, e, rig_.yaw, dt, *terreno_, col_);
+        if (mira_ > 0.5f) jogador_.yaw = rig_.yaw;
         passada_ += dt * jogador_.vel * FASE_POR_METRO;
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
@@ -220,9 +247,12 @@ void Jogo::atualizar(float dt) {
         if (e.interagir && cavaloPerto_ >= 0 && tentarMontar(cavalos_[cavaloPerto_], jogador_)) {
             montadoEm_ = cavaloPerto_;
             rig_.distAlvo = 6.f;
+            rig_.ombroAlvo = 0.45f;
             cavaloPerto_ = -1;
+            aoMontar();
         }
     }
+    atualizarCombate(dt, e);
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
         if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);
@@ -243,6 +273,7 @@ void Jogo::atualizar(float dt) {
         Vec3f p = jogador_.pos + Vec3f{0, 1.25f, 0} + dir * 0.35f + frenteDe(jogador_.yaw) * 0.2f;
         luzes_.push_back({p, Rgb{1.0f, 0.72f, 0.42f} * (2.4f * noite), 15.f, 0.3f});
     }
+    if (flashT_ > 0) luzes_.insert(luzes_.begin(), {flashPos_, Rgb{1.f, 0.75f, 0.4f} * 6.f, 9.f, 0.f});  // clarao do tiro
 }
 
 // fora do campo de visao (atras da camera, com folga): nao calcula pose nem desenha
@@ -263,8 +294,7 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd);
         return;
     }
-    Pose pj = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseParado(ej, tempo_);
-    modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, pj, hd);
+    modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd);
 }
 
 void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax) {
@@ -299,6 +329,7 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         chamadasAtores_++;
         if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     }
+    desenharCombatentes(matPele, sombraBolha, distMax);
     for (auto& c : cavalos_) {
         if (!sombraBolha) break;
         Vec3f f = frenteDe(c.corpo.yaw);
@@ -373,6 +404,7 @@ void Jogo::desenhar() {
     trisAtores_ = 0;
     chamadasAtores_ = 0;
     desenharAtores(luz_.material(), luz_.materialPele(), !luz_.usaSombras(), dv);
+    desenharEfeitos();
     EndMode3D();
     if (luz_.usaPos()) luz_.terminarPos(cam_);
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_;

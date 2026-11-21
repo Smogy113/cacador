@@ -178,3 +178,26 @@ TEST_CASE("colisao: caixasPerto acha so as caixas do raio") {
     REQUIRE(v.size() == 1);
     CHECK(v[0].min.x == 5);
 }
+TEST_CASE("bando: sem linha de visao sai da cobertura e se aproxima") {
+    Bando b(chao(0, 0), Temperamento::Teimoso, 2, 3, plano(), MundoColisao{});
+    MundoColisao parede;
+    parede.adicionar({{-6, -10, 9}, {6, 60, 10}});  // muro entre o bando e o jogador
+    Vec3f jog = chao(0, 22);
+    b.atualizar(0.05f, jog, 0, false, true, plano(), parede);
+    float antes = distXZ(b.chefe()->corpo.pos, jog);
+    int atirou = 0;
+    for (float t = 0; t < 12; t += 1 / 30.f) atirou += int(b.atualizar(1 / 30.f, jog, 0, false, false, plano(), parede).claroes.size());
+    CHECK(distXZ(b.chefe()->corpo.pos, jog) < antes - 2.f);
+    CHECK(atirou > 0);  // contornou o muro e voltou a atirar
+}
+TEST_CASE("bando: capangas nao se amontoam na mesma cobertura") {
+    Bando b(chao(0, 0), Temperamento::Teimoso, 3, 4, plano(), MundoColisao{});
+    MundoColisao col;
+    col.adicionar({{-1, -10, 3}, {1, 60, 4}});  // uma unica caixa por perto
+    Vec3f jog = chao(0, 20);
+    b.atualizar(0.05f, jog, 0, false, true, plano(), col);
+    for (float t = 0; t < 8; t += 1 / 30.f) b.atualizar(1 / 30.f, jog, 0, false, false, plano(), col);
+    auto& v = b.bandidos();
+    for (size_t i = 0; i < v.size(); i++)
+        for (size_t j = i + 1; j < v.size(); j++) CHECK(distXZ(v[i].corpo.pos, v[j].corpo.pos) > 1.2f);
+}
