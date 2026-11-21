@@ -27,7 +27,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.pele = {0.78f, 0.58f, 0.45f};
     r.lenco = {0.55f, 0.12f, 0.1f};
     r.cabelo = {0.18f, 0.13f, 0.09f};
-    r.barba = true;
+    r.barba = false;  // rosto limpo (pedido do usuario)
     r.equipamento = !op.estudio;
     r.heroi = true;
     if (op.estudio) r.chapeuAba = false;

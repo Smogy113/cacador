@@ -58,7 +58,36 @@ float vinco(Vec3f q) {
     return std::max(banda, std::max(-dy, -(q.z - OLHO_Z)));
 }
 
+// linha da boca: elipse fina no plano xz, com espessura constante em y. (Um elipsoide achatado
+// demais subestima a distancia e o corte "vaza" pela bochecha como um vinco ate as orelhas.)
+float fenda(Vec3f pa) {
+    Vec3f r = pa - V(0, 1.6322f, 0.0985f);
+    float e = (std::sqrt((r.x / 0.0232f) * (r.x / 0.0232f) + (r.z / 0.0065f) * (r.z / 0.0065f)) - 1.f) * 0.0065f;
+    float u = clamp01(1.f - (r.x / 0.0232f) * (r.x / 0.0232f));
+    return std::max(e, std::abs(r.y) - 0.0006f * std::sqrt(std::max(u, 0.04f)));  // afina ate a comissura
+}
+
+// espaco curvado pela arcada dentaria: os cantos da boca ficam ~7 mm atras do meio
+inline Vec3f arcada(Vec3f p) { return {p.x, p.y, p.z + 13.f * p.x * p.x}; }
+
 }  // namespace
+
+float narina(Vec3f p) {
+    // gota inclinada 20 graus (ponta da frente para o meio), aberta para baixo, sob a base do nariz
+    Vec3f q{std::abs(p.x), p.y, p.z};
+    Vec3f n = q - V(0.0062f, 1.6529f, 0.1012f);
+    const float c = 0.94f, sn = 0.342f;
+    Vec3f nr{c * n.x - sn * n.z, n.y, sn * n.x + c * n.z};
+    float gota = elips(nr, V(0, 0, 0), V(0.0029f + 0.0006f * clamp01(-nr.z / 0.005f), 0.0019f, 0.0055f));
+    return std::max(gota, q.x - 0.0106f);  // a borda da asa fica inteira (nao fura de lado)
+}
+
+float labios(Vec3f p) {
+    Vec3f pa = arcada(p), qa{std::abs(pa.x), pa.y, pa.z};
+    float lab = elips(pa, V(0, 1.6366f, 0.092f), V(0.0236f, 0.0041f, 0.0064f));                       // superior
+    lab = smin(lab, elips(qa, V(0.005f, 1.638f, 0.0932f), V(0.006f, 0.0028f, 0.0046f)), 0.002f);     // arco do cupido
+    return smin(lab, elips(pa, V(0, 1.6271f, 0.0908f), V(0.0214f, 0.0048f, 0.0071f)), 0.003f);     // inferior
+}
 
 float cabeca(Vec3f p) {
     Vec3f q{std::abs(p.x), p.y, p.z};  // simetria
@@ -70,32 +99,29 @@ float cabeca(Vec3f p) {
     // ---- meio do rosto ----
     d = smin(d, elips(q, V(0.051f, 1.687f, 0.05f), V(0.02f, 0.017f, 0.028f)), 0.025f);     // zigomatico (maca)
     d = smin(d, elips(p, V(0, 1.669f, 0.04f), V(0.05f, 0.042f, 0.06f)), 0.018f);           // maxila
-    d = smin(d, elips(q, V(0.031f, 1.691f, 0.07f), V(0.021f, 0.011f, 0.022f)), 0.01f);    // sob os olhos
-    d = smin(d, elips(q, V(0.037f, 1.667f, 0.032f), V(0.022f, 0.028f, 0.048f)), 0.022f); // lateral do rosto (gordura e musculo sob a maca)
+    d = smin(d, elips(q, V(0.031f, 1.691f, 0.07f), V(0.021f, 0.011f, 0.022f)), 0.016f);   // sob os olhos
+    d = smin(d, elips(q, V(0.037f, 1.667f, 0.032f), V(0.022f, 0.028f, 0.048f)), 0.03f);  // lateral do rosto (gordura e musculo sob a maca)
     // ---- mandibula, queixo e boca ----
-    d = smin(d, elips(p, V(0, 1.624f, 0.026f), V(0.0535f, 0.028f, 0.066f)), 0.02f);        // corpo da mandibula
+    d = smin(d, elips(p, V(0, 1.624f, 0.024f), V(0.0535f, 0.028f, 0.06f)), 0.02f);         // corpo da mandibula (a frente e o queixo)
     d = smin(d, elips(q, V(0.05f, 1.623f, -0.015f), V(0.012f, 0.026f, 0.021f)), 0.02f);    // ramo e angulo (angulo suave)
     d = smin(d, elips(q, V(0.047f, 1.633f, 0.004f), V(0.009f, 0.018f, 0.02f)), 0.014f);    // masseter
     d = smin(d, elips(p, V(0, 1.6085f, 0.0735f), V(0.024f, 0.0145f, 0.019f)), 0.012f);     // queixo
-    d = smin(d, elips(q, V(0.007f, 1.607f, 0.0805f), V(0.0095f, 0.0095f, 0.0095f)), 0.008f); // ponta do queixo
-    d = smin(d, elips(p, V(0, 1.633f, 0.069f), V(0.028f, 0.018f, 0.024f)), 0.012f);        // regiao da boca
-    // labios: superior (com arco do cupido) e inferior
-    float lab = elips(p, V(0, 1.6366f, 0.0912f), V(0.0238f, 0.0039f, 0.0056f));
-    lab = smin(lab, elips(q, V(0.005f, 1.638f, 0.0932f), V(0.006f, 0.0028f, 0.0046f)), 0.002f);
-    lab = smin(lab, elips(p, V(0, 1.6274f, 0.0902f), V(0.0218f, 0.0045f, 0.0064f)), 0.003f);
-    d = smin(d, lab, 0.0045f);
-    d = smax(d, -elips(p, V(0, 1.6322f, 0.097f), V(0.0255f, 0.0008f, 0.012f)), 0.0012f);  // linha da boca
-    d = smax(d, -elips(q, V(0.0255f, 1.6322f, 0.084f), V(0.004f, 0.003f, 0.006f)), 0.003f);  // cantos da boca
-    d = smax(d, -elips(p, V(0, 1.6455f, 0.0985f), V(0.0034f, 0.0055f, 0.0022f)), 0.002f);  // filtro
-    d = smax(d, -elips(p, V(0, 1.6185f, 0.088f), V(0.016f, 0.0032f, 0.006f)), 0.006f);    // sulco do queixo
+    d = smin(d, elips(p, V(0, 1.607f, 0.0795f), V(0.0145f, 0.0098f, 0.0098f)), 0.01f);   // ponta do queixo (sem fenda)
+    d = smin(d, elips(p, V(0, 1.633f, 0.068f), V(0.031f, 0.02f, 0.025f)), 0.016f);         // regiao da boca
+    d = smin(d, elips(q, V(0.029f, 1.645f, 0.05f), V(0.019f, 0.021f, 0.027f)), 0.02f);     // bochecha baixa (sem focinho nem vinco ao lado do nariz)
+    Vec3f pa = arcada(p);
+    d = smin(d, labios(p), 0.0042f);
+    d = smax(d, -fenda(pa), 0.001f);                                                          // linha da boca (rasa)
+    d = smax(d, -elips(p, V(0, 1.6455f, 0.0985f), V(0.003f, 0.0055f, 0.0016f)), 0.003f);   // filtro (suave)
+    d = smin(d, elips(p, V(0, 1.6185f, 0.0755f), V(0.019f, 0.008f, 0.0095f)), 0.006f);    // base do labio inferior (mentual): sulco raso
     // ---- nariz ----
     float nar = coneArred(p, V(0, 1.706f, 0.0895f), V(0, 1.671f, 0.1075f), 0.0068f, 0.0078f);  // dorso
     nar = smin(nar, esfera(p, V(0, 1.6635f, 0.1085f), 0.0086f), 0.006f);                          // ponta
-    nar = smin(nar, elips(q, V(0.0112f, 1.6605f, 0.0975f), V(0.006f, 0.0058f, 0.0074f)), 0.005f);   // asas
+    nar = smin(nar, elips(q, V(0.0102f, 1.6598f, 0.0985f), V(0.0056f, 0.0059f, 0.0085f)), 0.0075f);  // asas (abracam a ponta)
     nar = smin(nar, coneArred(p, V(0, 1.662f, 0.106f), V(0, 1.6555f, 0.0995f), 0.0040f, 0.0034f), 0.003f);   // columela
-    d = smin(d, nar, 0.007f);
-    d = smax(d, -elips(q, V(0.0064f, 1.6568f, 0.0995f), V(0.003f, 0.0013f, 0.004f)), 0.0015f);    // narinas (vistas de baixo)
-    d = smax(d, -elips(q, V(0.0175f, 1.661f, 0.093f), V(0.0022f, 0.0055f, 0.0035f)), 0.003f);     // sulco da asa
+    nar = smin(nar, elips(p, V(0, 1.6578f, 0.1015f), V(0.0122f, 0.0046f, 0.0088f)), 0.005f);            // base do nariz (triangulo de baixo)
+    d = smin(d, nar, 0.009f);
+    d = smax(d, -narina(q), 0.0012f);  // narinas (rasas: o fundo escuro e pintado na pele)
     // ---- olhos: orbita, palpebras ----
     d = smax(d, -elips(q, V(OLHO_X, 1.7045f, 0.095f), V(0.019f, 0.011f, 0.011f)), 0.006f);
     float palp = std::max(esfera(q, V(OLHO_X, OLHO_Y, OLHO_Z), PALP_R), -abertura(q));
@@ -117,8 +143,9 @@ float cabeca(Vec3f p) {
     }
     // ---- pescoco e musculos ----
     d = smin(d, coneArred(p, V(0, 1.49f, -0.004f), V(0, 1.595f, -0.022f), 0.062f, 0.054f), 0.016f);  // pescoco (abaixo da linha da mandibula)
-    d = smin(d, coneArred(q, V(0.056f, 1.655f, -0.028f), V(0.019f, 1.505f, 0.046f), 0.0135f, 0.011f), 0.012f);  // esternocleidomastoideo
-    d = smin(d, elips(p, V(0, 1.566f, 0.043f), V(0.0065f, 0.01f, 0.0065f)), 0.012f);                          // pomo de Adao (discreto)
+    d = smin(d, coneArred(q, V(0.047f, 1.648f, -0.022f), V(0.018f, 1.505f, 0.045f), 0.011f, 0.0095f), 0.018f);  // esternocleidomastoideo
+    d = smin(d, elips(p, V(0, 1.622f, -0.046f), V(0.05f, 0.042f, 0.032f)), 0.026f);                           // nuca (trapezio sobe ate o occipital)
+    d = smin(d, elips(p, V(0, 1.568f, 0.04f), V(0.0075f, 0.012f, 0.006f)), 0.016f);                             // pomo de Adao (discreto)
     // aberto embaixo (o pescoco entra no tronco)
     d = std::max(d, 1.49f - p.y);
     return d;

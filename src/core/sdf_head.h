@@ -12,6 +12,10 @@ namespace sdf {
 // < 0 dentro da cabeca, > 0 fora
 float cabeca(Vec3f p);
 Vec3f gradiente(Vec3f p);  // normalizado (normal da superficie)
+// so os labios (vermelhao): < 0 dentro; usado para pintar a boca exatamente onde ela foi esculpida
+float labios(Vec3f p);
+// narinas (< 0 dentro do corte); simetrica em x
+float narina(Vec3f p);
 
 // centro do globo ocular esquerdo (+x); o direito e espelhado
 constexpr float OLHO_X = 0.0315f, OLHO_Y = 1.703f, OLHO_Z = 0.0785f, OLHO_R = 0.0122f;

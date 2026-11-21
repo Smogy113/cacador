@@ -48,3 +48,15 @@
 - Ruling: barba só no bigode, cavanhaque e faixa embaixo da mandíbula — o usuário pediu "nem existe pelo aí" nas bochechas; teste: nenhum pelo na bochecha.
 - Ruling: sobrancelha com ~8 mm de altura no meio (antes ~5 mm); teste conta pelos acima de 30% (como aparece desenhado), pois os vértices ficam a ~2,5 mm.
 - Ruling: teste do maxilar mede agora na altura do novo ângulo da mandíbula (1,612–1,622 m).
+
+## Correções marcadas pelo usuário (nariz/boca, atrás da orelha, bochecha) e sem barba
+- Ruling: o caçador fica sem barba (`Visual.barba = false` no jogador); a barba continua disponível para moradores e testes.
+- Ruling: linha da boca virou um corte limitado (elipse no plano xz com espessura em y, afinando até a comissura). O elipsoide achatado de 0,6 mm subestimava a distância e o corte "vazava" pela bochecha como um vinco horizontal — era a mancha ao lado da boca.
+- Ruling: lábios curvados pela arcada dentária (cantos ~7 mm atrás do meio), com volume de novo; a cor do vermelhão sai da própria escultura (`sdf::labios`) no meio e de uma faixa que afina e desbota até a comissura nos cantos (onde o lábio some sob a pele). Os furinhos dos cantos saíram (AO escuro demais).
+- Ruling: sob o lábio inferior havia uma cavidade de ~14 mm (sulco do queixo fundo + frente da mandíbula somando misturas); agora o sulco é raso (~2,5 mm atrás da linha lábio–queixo) e a frente da mandíbula recuou para o queixo dominar.
+- Ruling: nariz com base triangular contínua, asas maiores e mais fundidas, sem o sulco duro da asa; narinas em gota inclinada 20°, abertas para baixo e rasas na malha (a grade de 2,6 mm não resolve uma cavidade fina); o fundo escuro é pintado na pele (`sdf::narina`).
+- Ruling: bochecha baixa preenchida e emendas da lateral do rosto e de sob os olhos mais macias — sem o "focinho" em volta da boca e sem vinco ao lado do nariz.
+- Ruling: esternocleidomastoideo nasce dentro da cabeça (sem calombo atrás da orelha) e a nuca ganhou volume do trapézio até o occipital; pomo de Adão mais discreto.
+- Ruling: sombra de perto do personagem com PCF bilinear numa grade 3×3, sem ruído — a sombra do nariz ficava pontilhada (parecia sujeira/barba). Sardas redondas.
+- Ferramenta: visualizador por raymarching da SDF (fora do repositório) com vistas de frente/perfil/baixo e mapa de cavidade para achar vincos — iterar a escultura sem abrir o jogo.
+- Benchmark Baixo: máx. 264 mil triângulos / 113 chamadas.

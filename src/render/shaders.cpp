@@ -243,7 +243,7 @@ void main() {
             nr = relevo(nr, pr, vec3(420.0), 0.045);
             nr = relevo(nr, pr, vec3(1100.0), 0.025);
             albedo *= 0.94 + 0.1 * vnoise(pr * 35.0) + 0.05 * (vnoise(pr * 140.0) - 0.5);
-            if (h3(floor(pr * 520.0)) > 0.993) albedo *= vec3(0.78, 0.7, 0.65);              // sardas
+            if (h3(floor(pr * 520.0)) > 0.993) albedo *= mix(vec3(0.78, 0.7, 0.65), vec3(1.0), smoothstep(0.3, 0.45, length(fract(pr * 520.0) - 0.5)));  // sardas (redondas)
             // barba curta: tracos finos (~1 mm) apontando para baixo, desenhados por pixel na pele
             float pel = cor.a;
             if (pel > 0.01) {
@@ -349,15 +349,20 @@ void main() {
         vec4 pl2 = matLuzPerto * vec4(posMundo + n * 0.004, 1.0);
         vec3 q2 = pl2.xyz / pl2.w * 0.5 + 0.5;
         if (q2.x > 0.0 && q2.x < 1.0 && q2.y > 0.0 && q2.y < 1.0 && q2.z < 1.0) {
-            float giro2 = hash12(posMundo.xz * 91.7) * 6.2831;
+            // PCF bilinear numa grade 3x3 (sem ruido: a penumbra do nariz e do chapeu fica lisa, sem pontilhado)
+            vec2 uvT = q2.xy / texelSombraPerto - 0.5;
+            vec2 fr = fract(uvT);
+            vec2 base = (floor(uvT) + 0.5) * texelSombraPerto;
             float s2 = 0.0;
-            for (int i = 0; i < 10; i++) {
-                float a2 = float(i) * 2.39996 + giro2;
-                float r2 = sqrt((float(i) + 0.5) / 10.0) * 2.2;
-                float d2 = TEX(texSombraPerto, q2.xy + vec2(cos(a2), sin(a2)) * r2 * texelSombraPerto).r;
-                s2 += (q2.z - 0.00004 > d2) ? 0.0 : 1.0;
+            for (int i = 0; i < 9; i++) {
+                vec2 o = (vec2(mod(float(i), 3.0), floor(float(i) / 3.0)) - 1.0) * texelSombraPerto;
+                float a00 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o).r) ? 0.0 : 1.0;
+                float a10 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o + vec2(texelSombraPerto, 0.0)).r) ? 0.0 : 1.0;
+                float a01 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o + vec2(0.0, texelSombraPerto)).r) ? 0.0 : 1.0;
+                float a11 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o + vec2(texelSombraPerto)).r) ? 0.0 : 1.0;
+                s2 += mix(mix(a00, a10, fr.x), mix(a01, a11, fr.x), fr.y);
             }
-            sombra = min(sombra, s2 / 10.0);
+            sombra = min(sombra, s2 / 9.0);
         }
     }
 #endif
