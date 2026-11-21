@@ -44,6 +44,12 @@ Alto). O caçador também tem luz de personagem (contraluz e preenchimento) e ol
 Alto a câmera desfoca de leve o fundo distante (mais forte na mira) e tem granulação de filme e
 aberração cromática sutil nas bordas.
 
+**Paredes (0.19):** no Médio e no Alto, as paredes das casas têm relevo desenhado pixel a pixel
+(tábuas com frestas, pedra com argamassa funda, reboco rachado e descascado mostrando a pedra) e luz
+traçada contra as construções de verdade: escuro sob o beiral e junto ao alicerce e, à noite, a
+janela acesa clareando a parede. No Alto ainda há sombra suave do sol traçada contra casas e
+telhados, sombra de cada tábua e pedra, e a luz que uma parede ensolarada rebate na casa em frente.
+
 **Painel de depuração (F1):** em "Gráficos" dá para ligar e desligar a cabeça por raymarching (com
 o tempo do quadro ao lado, para comparar o custo), a luz de personagem, a profundidade de campo e a
 granulação/aberração.
@@ -73,4 +79,4 @@ scripts/screenshot.sh saida.png --hora 18.5  # tira um print sem abrir janela (X
 Opções úteis para testes: `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidade baixo|medio|alto`,
 `--montado`, `--abrir-quadro`, `--mapa arquivo.txt`, `--recompensa N` (aceita o cartaz N),
 `--tiroteio` (começa perto do bando, já em combate), `--mirar`, `--estudio --retrato 0.5` (só o
-caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`.
+caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`.

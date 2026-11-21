@@ -574,5 +574,41 @@ void Iluminacao::definirHeroi(bool sim) {
     for (Shader sh : personagens()) setF(sh, "heroi", sim && !dbg.semLuzPersonagem ? 1.f : 0.f);
 }
 void Iluminacao::definirFoco(float d) { distFoco_ = d; }
+void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& js, Vec3f foco) {
+#if !defined(PLATFORM_WEB)
+    float a[32 * 4] = {0}, b[32 * 4] = {0}, c[32 * 3] = {0};
+    int n = std::min<int>(32, int(idx.size()));
+    for (int k = 0; k < n; k++) {
+        const FormaCena& f = fs[idx[k]];
+        a[k * 4] = f.centro.x, a[k * 4 + 1] = f.centro.y, a[k * 4 + 2] = f.centro.z, a[k * 4 + 3] = f.rotY;
+        b[k * 4] = f.meia.x, b[k * 4 + 1] = f.meia.y, b[k * 4 + 2] = f.meia.z, b[k * 4 + 3] = float(int(f.tipo));
+        c[k * 3] = f.cor.r, c[k * 3 + 1] = f.cor.g, c[k * 3 + 2] = f.cor.b;
+    }
+    SetShaderValueV(lit_, GetShaderLocation(lit_, "formaA"), a, SHADER_UNIFORM_VEC4, 32);
+    SetShaderValueV(lit_, GetShaderLocation(lit_, "formaB"), b, SHADER_UNIFORM_VEC4, 32);
+    SetShaderValueV(lit_, GetShaderLocation(lit_, "formaCor"), c, SHADER_UNIFORM_VEC3, 32);
+    SetShaderValue(lit_, GetShaderLocation(lit_, "numFormas"), &n, SHADER_UNIFORM_INT);
+    // as 12 janelas mais proximas do foco
+    std::vector<std::pair<float, int>> ord;
+    for (int i = 0; i < int(js.size()); i++) {
+        Vec3f d = js[i].pos - foco;
+        float d2 = dot(d, d);
+        if (d2 < 60.f * 60.f) ord.push_back({d2, i});
+    }
+    int nj = std::min<int>(12, int(ord.size()));
+    std::partial_sort(ord.begin(), ord.begin() + nj, ord.end());
+    float jp[12 * 4] = {0}, jn[12 * 3] = {0};
+    for (int k = 0; k < nj; k++) {
+        const JanelaLuz& j = js[ord[k].second];
+        jp[k * 4] = j.pos.x, jp[k * 4 + 1] = j.pos.y, jp[k * 4 + 2] = j.pos.z;
+        jn[k * 3] = j.normal.x, jn[k * 3 + 1] = j.normal.y, jn[k * 3 + 2] = j.normal.z;
+    }
+    SetShaderValueV(lit_, GetShaderLocation(lit_, "janelaP"), jp, SHADER_UNIFORM_VEC4, 12);
+    SetShaderValueV(lit_, GetShaderLocation(lit_, "janelaN"), jn, SHADER_UNIFORM_VEC3, 12);
+    SetShaderValue(lit_, GetShaderLocation(lit_, "numJanelas"), &nj, SHADER_UNIFORM_INT);
+#else
+    (void)fs, (void)idx, (void)js, (void)foco;
+#endif
+}
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
 void Iluminacao::definirCabelo(Vec3f d) { SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloDesl"), &d, SHADER_UNIFORM_VEC3); }

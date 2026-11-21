@@ -2,6 +2,7 @@
 #include <vector>
 #include "raylib.h"
 #include "core/daytime.h"
+#include "core/formas.h"
 #include "core/quality.h"
 
 struct LuzPontual {
@@ -31,7 +32,9 @@ public:
     float posSolTela_[2] = {-1.f, -1.f};
     void definirCabelo(Vec3f deslocamentoModelo);
     void definirHeroi(bool sim);
-    void definirFoco(float distHeroi);  // camera de cinema: o heroi fica em foco  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
+    void definirFoco(float distHeroi);
+    // construcoes perto da camera (formas exatas) e janelas, para a luz tracada nas paredes
+    void definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& janelas, Vec3f foco);  // camera de cinema: o heroi fica em foco  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
     // painel de depuracao (F1): desliga efeitos do nivel atual e ajusta valores na hora

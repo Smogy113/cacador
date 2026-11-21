@@ -472,6 +472,10 @@ void Jogo::desenhar() {
             luz_.terminarSombraPerto();
         }
     }
+    {   // paredes com luz tracada: as construcoes e janelas mais proximas da camera
+        Vec3f c{cam_.position.x, cam_.position.y, cam_.position.z};
+        luz_.definirFormas(cenario_.formas(), formasPerto(cenario_.formas(), c, 70.f, 32), cenario_.janelas(), c);
+    }
     if (luz_.usaPos()) luz_.comecarPos();
     ClearBackground(BLACK);
     BeginMode3D(cam_);
