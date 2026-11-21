@@ -42,3 +42,9 @@
 - Ruling: barba e sobrancelhas desenhadas na pele por pixel (sobrancelha com traços mais longos para os lados); cílios continuam em cartões; máscaras de barba e cabelo recalibradas para a nova cabeça.
 - Ruling: teste do maxilar trocado de ≥88% para 70–85% da largura das maçãs — as referências do usuário afinam em V e a anatomia real fica entre ~70% e 80%; o limite de 88% era da cabeça antiga.
 - Ruling: teste de sobrancelha verifica a marcação na pele (direção lateral), não mais cartões.
+
+## Rosto menos exagerado ("tá muito chad"), sobrancelha mais grossa, barba sem bochecha
+- Ruling: queixo e mandíbula subiram ~1,2 cm (terço inferior / terço médio de 1,42 para ≤1,25, como num rosto comum), queixo menor e atrás do lábio de baixo, arco da sobrancelha e glabela mais suaves, ângulo da mandíbula suavizado, lábios mais finos, pomo de Adão discreto. Testes novos fixam essas proporções.
+- Ruling: barba só no bigode, cavanhaque e faixa embaixo da mandíbula — o usuário pediu "nem existe pelo aí" nas bochechas; teste: nenhum pelo na bochecha.
+- Ruling: sobrancelha com ~8 mm de altura no meio (antes ~5 mm); teste conta pelos acima de 30% (como aparece desenhado), pois os vértices ficam a ~2,5 mm.
+- Ruling: teste do maxilar mede agora na altura do novo ângulo da mandíbula (1,612–1,622 m).

@@ -96,15 +96,17 @@ float rosto(float x, float y) { return rostoSemCorte(x, y) - corteOlho(x, y); }
 
 // mascara de barba (barba curta "fechada"), em coordenadas do rosto
 float barba(float ax, float y, float f) {
+    // so bigode, cavanhaque no queixo e uma faixa rente na borda de baixo da mandibula (bochechas sem pelo)
     if (f < -0.35f) return 0.f;
-    float bochecha = 1.648f + (std::clamp(ax, 0.028f, 0.075f) - 0.03f) * 0.95f;  // da costeleta (y 1,69) ao canto da boca
-    float b = smoothstep(bochecha + 0.005f, bochecha - 0.011f, y);  // vai ficando rala, sem corte
-    float boca = (ax / 0.03f) * (ax / 0.03f) + ((y - 1.6315f) / 0.0095f) * ((y - 1.6315f) / 0.0095f);
-    b *= smoothstep(0.85f, 1.15f, boca);                                          // labios sem pelos
-    float bigodeAlto = smoothstep(1.6525f, 1.649f, y) + smoothstep(0.03f, 0.05f, ax);  // nao sobe no nariz
-    b *= std::min(1.f, bigodeAlto);
-    b *= smoothstep(-0.35f, -0.1f, f);                                            // nao vai para a nuca
-    if (y < 1.585f) b *= smoothstep(1.536f, 1.552f, y);                          // desce pelo pescoco ate a linha da barba
+    float bigode = smoothstep(1.6525f, 1.649f, y) * smoothstep(1.638f, 1.6405f, y) * smoothstep(0.028f, 0.022f, ax);
+    float queixo = smoothstep(1.6235f, 1.6205f, y) * smoothstep(0.032f, 0.024f, ax);              // abaixo do labio
+    float bordaMand = smoothstep(1.613f, 1.606f, y) * smoothstep(0.066f, 0.058f, ax);             // embaixo do queixo e da mandibula
+    float cantos = smoothstep(1.6405f, 1.636f, y) * smoothstep(1.62f, 1.623f, y) * smoothstep(0.03f, 0.026f, ax) * smoothstep(0.022f, 0.026f, ax);  // liga bigode ao cavanhaque
+    float b = std::max(std::max(bigode, queixo), std::max(bordaMand, cantos));
+    float boca = (ax / 0.027f) * (ax / 0.027f) + ((y - 1.632f) / 0.0078f) * ((y - 1.632f) / 0.0078f);
+    b *= smoothstep(0.9f, 1.1f, boca);                                                             // labios sem pelos
+    b *= smoothstep(-0.35f, -0.1f, f);                                                             // nao vai para a nuca
+    if (y < 1.59f) b *= smoothstep(1.548f, 1.562f, y);                                            // termina no pescoco
     return std::clamp(b, 0.f, 1.f);
 }
 
@@ -112,7 +114,7 @@ float sobrancelha(float ax, float y, float f) {
     if (f < 0.2f) return 0.f;
     float t = (ax - 0.033f) / 0.024f;
     float yc = 1.7165f + 0.0035f * (1.f - t * t) - 0.0015f * std::max(0.f, t);
-    float espessura = 0.0032f * (1.f - 0.45f * std::max(0.f, t));
+    float espessura = 0.0057f * (1.f - 0.3f * std::max(0.f, t));  // sobrancelha grossa (~8 mm no meio)
     float b = smoothstep(espessura, espessura * 0.4f, std::abs(y - yc)) * smoothstep(1.15f, 0.85f, std::abs(t));
     return b * 0.95f;
 }

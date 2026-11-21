@@ -251,7 +251,7 @@ void main() {
                 vec2 uv0 = anp.x > anp.y && anp.x > anp.z ? pr.zy : (anp.z > anp.y ? pr.xy : pr.xz);
                 float tinta = 0.0;
                 // sobrancelha (acima dos olhos): tracos mais longos para os lados; barba: curtos para baixo
-                bool sob = tanRep.z > 0.5 && tanRep.y > 1.708 && tanRep.y < 1.73;
+                bool sob = tanRep.z > 0.5 && tanRep.y > 1.706 && tanRep.y < 1.732;
                 vec2 d0 = sob ? normalize(vec2(tanRep.x > 0.0 ? 1.0 : -1.0, abs(tanRep.x) < 0.019 ? 2.5 : 0.25)) : vec2(0.0, -1.0);
                 for (int gi = 0; gi < 2; gi++) {
                     float esc = (gi == 0 ? 2200.0 : 3000.0) * (sob ? 0.62 : 1.0);

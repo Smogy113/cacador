@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include <algorithm>
 #include "core/body.h"
+#include "core/sdf_head.h"
 
 static Visual semChapeu() {
     Visual v;
@@ -312,7 +313,7 @@ TEST_CASE("rosto masculino: mandíbula com 70% ou mais da largura das maçãs (a
     for (auto& v : m.v) {
         if (v.osso[0] != CABECA || v.material != MAT_PELE || v.pos.z < -0.02f) continue;
         if (v.pos.z < 0.03f) continue;  // so a parte da frente do rosto
-        if (v.pos.y > 1.598f && v.pos.y < 1.61f) mand = std::max(mand, std::abs(v.pos.x));
+        if (v.pos.y > 1.612f && v.pos.y < 1.622f) mand = std::max(mand, std::abs(v.pos.x));  // altura do angulo da mandibula
         if (v.pos.y > 1.678f && v.pos.y < 1.69f) macas = std::max(macas, std::abs(v.pos.x));
     }
     REQUIRE(macas > 0);
@@ -325,4 +326,55 @@ TEST_CASE("barba curta: pelos da barba com no máximo 4,5 mm") {
     auto m = corpoHumanoHD({}, v);
     for (auto& x : m.v)
         if (x.material == MAT_CARTAO && x.pos.y < 1.645f && x.pos.z > 0.03f) CHECK(x.compPelo <= 0.0045f);
+}
+
+TEST_CASE("barba: nada nas bochechas (só bigode, queixo e borda da mandíbula)") {
+    Visual v;
+    v.barba = true;
+    auto m = corpoHumanoHD({}, v);
+    int bochecha = 0, comPelo = 0;
+    for (auto& x : m.v) {
+        if (x.material != MAT_PELE) continue;
+        float ax = std::abs(x.pos.x);
+        if (ax > 0.036f && ax < 0.062f && x.pos.y > 1.638f && x.pos.y < 1.685f && x.pos.z > 0.035f) {
+            bochecha++;
+            if (x.pelos > 0.15f) comPelo++;
+        }
+    }
+    REQUIRE(bochecha > 50);
+    CHECK(comPelo == 0);
+}
+TEST_CASE("sobrancelha grossa: faixa de pelo com 6,5 mm ou mais de altura") {
+    auto m = corpoHumanoHD({}, Visual{});
+    float ymin = 9, ymax = 0;
+    for (auto& x : m.v)
+        if (x.material == MAT_PELE && x.pelos > 0.3f && std::abs(std::abs(x.pos.x) - 0.032f) < 0.003f && x.pos.y > 1.705f && x.pos.z > 0.07f) {
+            ymin = std::min(ymin, x.pos.y);
+            ymax = std::max(ymax, x.pos.y);
+        }
+    REQUIRE(ymax > ymin);
+    CHECK(ymax - ymin >= 0.0065f);
+}
+TEST_CASE("rosto equilibrado (não exagerado): queixo atrás do lábio e terço de baixo proporcional") {
+    auto frenteEm = [](float y) {
+        float z = 0;
+        for (float zz = 0.14f; zz > 0.0f; zz -= 0.0002f)
+            if (sdf::cabeca({0, y, zz}) < 0) { z = zz; break; }
+        return z;
+    };
+    float labioInf = 0;
+    for (float y = 1.622f; y < 1.632f; y += 0.0005f) labioInf = std::max(labioInf, frenteEm(y));
+    float queixo = 0;
+    for (float y = 1.59f; y < 1.61f; y += 0.0005f) queixo = std::max(queixo, frenteEm(y));
+    CHECK(queixo < labioInf - 0.001f);
+    float menton = 1.7f;  // ponto mais baixo do queixo na linha do meio
+    for (float y = 1.62f; y > 1.55f; y -= 0.0005f) {
+        bool tem = false;
+        for (float z = 0.05f; z < 0.1f; z += 0.001f)
+            if (sdf::cabeca({0, y, z}) < 0) tem = true;
+        if (tem) menton = y; else break;
+    }
+    float terco = (1.6555f - menton) / (1.708f - 1.6555f);  // subnasal ao menton / raiz do nariz ao subnasal
+    CHECK(terco <= 1.25f);
+    CHECK(terco >= 0.95f);
 }
