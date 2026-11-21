@@ -387,6 +387,8 @@ float hReboco(vec2 uv, out float caiu, out float id) {
     h -= 0.004 * smoothstep(0.007, 0.0, rach) * smoothstep(0.6, 0.75, vn2(uv * 2.2 + 9.0)) * step(0.6, vn2(uv * 0.9 + 5.0));
     float pc = vn2(uv * 0.8 + 11.0) * 0.7 + vn2(uv * 3.5) * 0.3;
     caiu = smoothstep(0.62, 0.65, pc);                                                    // reboco caido: pedra por baixo
+    id = 0.0;
+    if (caiu <= 0.0) return h;                                                            // reboco inteiro: nao precisa da pedra
     float hp = hPedra(uv, id);
     return mix(h, -0.012 + hp * 0.6, caiu);
 }
@@ -422,6 +424,39 @@ float dForma(int i, vec3 p) {
     float dr = length(q.xz) - h.x, dy = abs(q.y) - h.y;
     return min(max(dr, dy), 0.0) + length(max(vec2(dr, dy), 0.0));
 }
+// lista de formas que podem influir num efeito (as outras ficam longe demais para mudar o resultado)
+int lista[32];
+int nLista = 0;
+void listarPerto(vec3 p, float alcance) {          // formas a menos de "alcance" do ponto
+    nLista = 0;
+    for (int i = 0; i < 32; i++) {
+        if (i >= numFormas) break;
+        if (length(p - formaA[i].xyz) - formaR[i] < alcance) { lista[nLista] = i; nLista++; }
+    }
+}
+void listarSegmento(vec3 a, vec3 b, float folga) {  // formas a menos de "folga" do segmento a-b
+    nLista = 0;
+    vec3 ab = b - a;
+    float l2 = dot(ab, ab);
+    for (int i = 0; i < 32; i++) {
+        if (i >= numFormas) break;
+        vec3 c = formaA[i].xyz;
+        float t = clamp(dot(c - a, ab) / l2, 0.0, 1.0);
+        if (length(a + ab * t - c) - formaR[i] < folga) { lista[nLista] = i; nLista++; }
+    }
+}
+float mapaLista(vec3 p, out int id) {
+    float d = 1e9;
+    id = -1;
+    for (int k = 0; k < 32; k++) {
+        if (k >= nLista) break;
+        int i = lista[k];
+        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
+        float di = dForma(i, p);
+        if (di < d) { d = di; id = i; }
+    }
+    return d;
+}
 float mapaCena(vec3 p, out int id) {
     float d = 1e9;
     id = -1;
@@ -440,8 +475,10 @@ float aoCena = 1.0;
 float sombraCena(vec3 p, vec3 L) {
     float res = 1.0, t = 0.05;
     int id;
+    listarSegmento(p, p + L * 32.5, 8.0);  // passo maximo 2,5 m: o raio nunca passa de 32,5 m
+    if (nLista == 0) return 1.0;
     for (int i = 0; i < 24; i++) {
-        float h = mapaCena(p + L * t, id);
+        float h = mapaLista(p + L * t, id);
         res = min(res, 7.0 * h / t);
         t += clamp(h, 0.05, 2.5);
         if (res < 0.01 || t > 30.0) break;
@@ -452,9 +489,11 @@ float sombraCena(vec3 p, vec3 L) {
 float oclusaoCena(vec3 p, vec3 n) {
     float occ = 0.0, w = 1.0;
     int id;
+    // so contam formas a menos de 0,9 m das amostras (alem disso d - dist <= 0 para todas)
+    listarPerto(p, 1.8);
     for (int k = 1; k <= 5; k++) {
         float d = 0.18 * float(k);
-        occ += (d - mapaCena(p + n * d, id)) * w;
+        occ += (d - min(mapaLista(p + n * d, id), 1e3)) * w;
         w *= 0.7;
     }
     return clamp(1.0 - occ * 1.6, 0.25, 1.0);
@@ -462,6 +501,8 @@ float oclusaoCena(vec3 p, vec3 n) {
 // um rebote: a parede ensolarada em frente devolve luz colorida (5 direcoes fixas, sem ruido)
 vec3 reboteCena(vec3 p, vec3 n, vec3 T) {
     vec3 soma = vec3(0.0);
+    listarPerto(p, 12.6);  // os raios andam no maximo 12 m
+    if (nLista == 0) return soma;
     vec3 dirs[5];
     dirs[0] = n;
     dirs[1] = normalize(n + T * 0.8);
@@ -472,7 +513,7 @@ vec3 reboteCena(vec3 p, vec3 n, vec3 T) {
         float t = 0.15;
         int id = -1;
         for (int i = 0; i < 16; i++) {
-            float h = mapaCena(p + dirs[k] * t, id);
+            float h = mapaLista(p + dirs[k] * t, id);
             if (h < 0.03) break;
             t += h;
             if (t > 12.0) { id = -1; break; }
