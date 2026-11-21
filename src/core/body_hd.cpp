@@ -67,6 +67,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
     const Rgb cinto{0.2f, 0.13f, 0.08f}, metal{0.55f, 0.5f, 0.42f}, madeira{0.4f, 0.27f, 0.15f};
     auto An = [&](Vec3f c, float rx, float rz, int a, int b, float p) { return Anel{c, rx * s * ms, rz * s * ms, uint8_t(a), uint8_t(b), p}; };
     auto L = [](Vec3f a, Vec3f b, float t) { return a + (b - a) * t; };
+    auto Q = [&](int n) { return vis.heroi ? n * 3 / 2 : n; };  // o heroi (perto da camera) ganha mais lados
 
     // ================= tronco, pescoco e cabeca =================
     {
@@ -78,7 +79,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
         }
         auto sv = suavizar(an, 3);
         k.material = MAT_PELE;
-        k.tubo(sv, 36, {0, 0, 1}, true, false,
+        k.tubo(sv, Q(36), {0, 0, 1}, true, false,
                [&](int, float ang, Vec3f& p, Vec3f la, Vec3f fr, float& ao) -> Rgb {
                    float y = p.y / s;
                    if (ang < 0) {
@@ -169,11 +170,25 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             An(om.inicio, .028f, .03f, ab, mo, .5f), An(L(om.inicio, om.fim, 0.35f), .016f, .045f, mo, mo, 1),
             An(L(om.inicio, om.fim, 0.7f), .016f, .043f, mo, mo, 1),
         };
+        {
+            Rgb corOmbro = mangas;
+            std::vector<Anel> om2 = {
+                An({sx * 0.05f * s, 1.495f * s, -0.008f * s}, .04f, .045f, PEITO, PEITO, 1),
+                An({sx * 0.11f * s * lo, 1.475f * s, -0.004f * s}, .05f, .055f, PEITO, PEITO, 1),
+                An({sx * 0.165f * s * lo, 1.452f * s, 0.f}, .06f, .064f, PEITO, b, .7f),
+                An(L(ob.inicio, ob.fim, 0.06f) + Vec3f{sx * 0.004f * s, 0, 0}, .063f, .066f, b, PEITO, .6f),
+                An(L(ob.inicio, ob.fim, 0.3f), .054f, .056f, b, b, 1)};  // termina por dentro da manga (sem anel)
+            k.material = MAT_TECIDO;
+            k.tubo(suavizar(om2, 3), Q(16), {0, 1, 0}, true, true, [&](int i, float, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb {
+                if (i < 2) ao = 0.9f;
+                return corOmbro;
+            }, 0.02f * s, 0.02f * s);
+        }
         size_t nb = br.size();
         auto sv = suavizar(br, 3);
         size_t pulso = (nb - 3) * 3;  // indice (suavizado) do anel do pulso
         k.material = MAT_TECIDO;
-        k.tubo(sv, 16, {0, 0, 1}, true, true,
+        k.tubo(sv, Q(16), {0, 0, 1}, true, true,
                [&, pulso](int i, float ang, Vec3f& p, Vec3f la, Vec3f fr, float& ao) -> Rgb {
                    if (i < 3) ao = 0.78f;
                    if (i >= 8 && i <= 16) {  // rugas do cotovelo
@@ -225,7 +240,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
         };
         float yBota = L(oca.inicio, oca.fim, 0.54f).y;
         k.material = MAT_TECIDO;
-        k.tubo(suavizar(pr2, 3), 16, {0, 0, 1}, true, false, [&](int, float, Vec3f& p, Vec3f, Vec3f, float& ao) -> Rgb {
+        k.tubo(suavizar(pr2, 3), Q(16), {0, 0, 1}, true, false, [&](int, float, Vec3f& p, Vec3f, Vec3f, float& ao) -> Rgb {
             if (p.y > 0.7f * s && (p.x * sx) < 0.09f * s * lq) ao = 0.85f;
             if (p.y <= yBota) { k.materialVert = MAT_COURO; return vis.botas; }
             return vis.calca;
@@ -238,7 +253,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             Anel{{px + sx * 0.008f, 0.036f * s, 0.15f * s}, .044f * s * lq, .024f * s, uint8_t(pe), uint8_t(pe), 1},
         };
         k.material = MAT_COURO;
-        k.tubo(suavizar(pes, 3), 16, {0, 1, 0}, true, true, cor(vis.botas), 0.008f * s, 0.018f * s);
+        k.tubo(suavizar(pes, 3), Q(16), {0, 1, 0}, true, true, cor(vis.botas), 0.008f * s, 0.018f * s);
         // sola e salto
         std::vector<Anel> sola = {Anel{{px, 0.012f * s, -0.06f * s}, .04f * s * lq, .012f * s, uint8_t(pe), uint8_t(pe), 1},
                                   Anel{{px, 0.012f * s, 0.0f}, .046f * s * lq, .012f * s, uint8_t(pe), uint8_t(pe), 1},
@@ -256,7 +271,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             for (auto& q : sb) an2.push_back(Anel{{0, q.y * s, -0.01f * s}, q.rx * s * ms * lq, q.rz * s * ms, uint8_t(coxa), uint8_t(QUADRIL), q.pc});
             size_t ini = m.v.size(), idxIni = m.idx.size();
             k.material = MAT_TECIDO;
-            k.tubo(suavizar(an2, 3), 32, {0, 0, 1}, false, false, [&](int, float ang, Vec3f& p, Vec3f la, Vec3f fr, float& ao) -> Rgb {
+            k.tubo(suavizar(an2, 3), Q(32), {0, 0, 1}, false, false, [&](int, float ang, Vec3f& p, Vec3f la, Vec3f fr, float& ao) -> Rgb {
                 float baixo = clamp01((1.0f * s - p.y) / (0.45f * s));
                 float dobra = std::sin(ang * 9.f + 1.3f) * 0.6f + std::sin(ang * 5.f + 0.4f) * 0.4f;
                 p = p + (la * std::cos(ang) + fr * std::sin(ang)) * (0.008f * s * dobra * baixo);
@@ -319,11 +334,11 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
 
     // ================= chapeu =================
     if (vis.chapeuAba) {
-        float y0 = 1.765f * s;
+        float y0 = 1.744f * s;  // assenta na testa da cabeca esculpida (sem vao)
         // aba com as laterais levantadas
-        std::vector<Anel> aba = {Anel{{0, y0, -0.01f * s}, .195f * s, .205f * s, CABECA, CABECA, 1}, Anel{{0, y0 + 0.012f * s, -0.01f * s}, .195f * s, .205f * s, CABECA, CABECA, 1}};
+        std::vector<Anel> aba = {Anel{{0, y0, -0.012f * s}, .18f * s, .195f * s, CABECA, CABECA, 1}, Anel{{0, y0 + 0.01f * s, -0.012f * s}, .18f * s, .195f * s, CABECA, CABECA, 1}};
         k.material = MAT_FELTRO;
-        k.tubo(aba, 32, {0, 0, 1}, true, true, [&](int, float ang, Vec3f& p, Vec3f, Vec3f, float&) -> Rgb {
+        k.tubo(aba, Q(32), {0, 0, 1}, true, true, [&](int, float ang, Vec3f& p, Vec3f, Vec3f, float&) -> Rgb {
             if (ang >= 0) {
                 float l = std::cos(ang);
                 p.y += 0.028f * s * l * l;  // curva da aba
@@ -331,13 +346,13 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             return vis.chapeu;
         });
         // copa amassada no meio (estilo faroeste)
-        std::vector<Anel> copa = {Anel{{0, y0 + 0.01f * s, -0.01f * s}, .1f * s, .11f * s, CABECA, CABECA, 1},
-                                  Anel{{0, y0 + 0.03f * s, -0.01f * s}, .101f * s, .111f * s, CABECA, CABECA, 1},
-                                  Anel{{0, y0 + 0.075f * s, -0.01f * s}, .096f * s, .106f * s, CABECA, CABECA, 1},
-                                  Anel{{0, y0 + 0.11f * s, -0.012f * s}, .085f * s, .094f * s, CABECA, CABECA, 1},
-                                  Anel{{0, y0 + 0.12f * s, -0.012f * s}, .06f * s, .075f * s, CABECA, CABECA, 1}};
+        std::vector<Anel> copa = {Anel{{0, y0 + 0.004f * s, -0.012f * s}, .08f * s, .103f * s, CABECA, CABECA, 1},
+                                  Anel{{0, y0 + 0.028f * s, -0.012f * s}, .081f * s, .104f * s, CABECA, CABECA, 1},
+                                  Anel{{0, y0 + 0.07f * s, -0.012f * s}, .079f * s, .1f * s, CABECA, CABECA, 1},
+                                  Anel{{0, y0 + 0.1f * s, -0.014f * s}, .071f * s, .09f * s, CABECA, CABECA, 1},
+                                  Anel{{0, y0 + 0.11f * s, -0.014f * s}, .05f * s, .068f * s, CABECA, CABECA, 1}};
         k.material = MAT_FELTRO;
-        k.tubo(copa, 20, {0, 0, 1}, false, true,
+        k.tubo(copa, Q(20), {0, 0, 1}, false, true,
                [&](int i, float ang, Vec3f& p, Vec3f, Vec3f, float&) -> Rgb {
                    if (ang >= 0 && i >= 3) {  // vinco na frente e no meio
                        float f = std::sin(ang), l = std::cos(ang);

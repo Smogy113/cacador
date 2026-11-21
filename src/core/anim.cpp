@@ -53,25 +53,31 @@ Pose poseAndar(const Esqueleto& e, float f, float v) {
     p.rot[COXA_E].x = -s * perna;
     p.rot[COXA_D].x = s * perna;
     // joelho dobra quando a perna passa para a frente (fase de voo)
-    p.rot[CANELA_E].x = (0.08f + (0.55f + 0.7f * amp) * std::max(0.f, std::cos(f - 0.6f))) * andar;
-    p.rot[CANELA_D].x = (0.08f + (0.55f + 0.7f * amp) * std::max(0.f, -std::cos(f - 0.6f))) * andar;
+    p.rot[CANELA_E].x = (0.12f + (0.55f + 0.7f * amp) * std::max(0.f, std::cos(f - 0.6f))) * andar;  // joelho nunca travado
+    p.rot[CANELA_D].x = (0.12f + (0.55f + 0.7f * amp) * std::max(0.f, -std::cos(f - 0.6f))) * andar;
     p.rot[PE_E].x = -0.25f * s * andar;
     p.rot[PE_D].x = 0.25f * s * andar;
     // bracos opostos as pernas
     float braco = (0.32f + 0.45f * amp) * andar;
     p.rot[BRACO_E].x = s * braco;
     p.rot[BRACO_D].x = -s * braco;
-    p.rot[BRACO_E].z = -0.06f;
-    p.rot[BRACO_D].z = 0.06f;
-    p.rot[ANTEBRACO_E].x = -(0.2f + 0.9f * amp) - std::max(0.f, -s) * 0.3f * amp;
-    p.rot[ANTEBRACO_D].x = -(0.2f + 0.9f * amp) - std::max(0.f, s) * 0.3f * amp;
+    p.rot[BRACO_E].z = -0.08f - 0.03f * std::abs(s);
+    p.rot[BRACO_D].z = 0.08f + 0.03f * std::abs(s);
+    // antebraco atrasado em relacao ao braco (balanco solto, nao duro)
+    p.rot[ANTEBRACO_E].x = -(0.24f + 0.85f * amp) - std::max(0.f, std::sin(f + 0.5f)) * (0.14f + 0.12f * amp) * andar;
+    p.rot[ANTEBRACO_D].x = -(0.24f + 0.85f * amp) - std::max(0.f, -std::sin(f + 0.5f)) * (0.14f + 0.12f * amp) * andar;
+    p.rot[MAO_E].x = -0.1f * andar;
+    p.rot[MAO_D].x = -0.1f * andar;
     // tronco: gira contra o quadril e inclina ao correr
-    p.rot[QUADRIL].y = s * 0.1f * andar;
+    p.rot[QUADRIL].y = s * 0.14f * andar;
     p.rot[COLUNA].y = -s * 0.12f * andar;
-    p.rot[COLUNA].x = 0.08f * amp;
+    p.rot[PEITO].y = -s * 0.1f * andar;   // ombros giram contra o quadril
+    p.rot[CABECA].y = s * 0.12f * andar;  // a cabeca compensa e olha para a frente
+    p.rot[COLUNA].x = 0.04f * andar + 0.08f * amp;
     p.rot[PEITO].x = 0.04f * amp;
-    p.rot[CABECA].x = -0.1f * amp;
-    p.rot[QUADRIL].z = c * 0.04f * andar;
+    p.rot[CABECA].x = -0.04f * andar - 0.1f * amp;
+    p.rot[QUADRIL].z = c * 0.07f * andar;   // quadril cai para o lado do pe no ar
+    p.rot[COLUNA].z = -c * 0.05f * andar;
     apoiarNoChao(e, p);
     return p;
 }
