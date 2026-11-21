@@ -17,10 +17,14 @@ public:
     // Segmento a->b nao atravessa nenhuma caixa?
     bool raioLivre(Vec3f a, Vec3f b) const;
     size_t tamanho() const { return caixas_.size(); }
+    // Pisos andaveis (tabuleiro de ponte): o topo da caixa vira chao.
+    void adicionarPiso(AABB p);
+    // Topo do piso mais alto em (x,z) que esteja no maximo 0.7 m acima de yAtual; senao -1e9.
+    float alturaPiso(float x, float z, float yAtual) const;
 
 private:
     static constexpr float CEL = 32.f;
     long chave(int i, int j) const { return (long)i * 100003L + j; }
-    std::vector<AABB> caixas_;
+    std::vector<AABB> caixas_, pisos_;
     std::unordered_map<long, std::vector<int>> grade_;
 };

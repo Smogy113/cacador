@@ -61,6 +61,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     setRgb(lit_, "ambChao", paleta_.ambienteChao);
     float luaAcima = smoothstep(-0.05f, 0.15f, lua_.y);
     setRgb(lit_, "corLua", Rgb{0.10f, 0.13f, 0.22f} * (luaAcima * noite_));
+    setF(lit_, "noite", noite_);
 
     // as 8 luzes mais proximas do foco
     std::vector<const LuzPontual*> ord;

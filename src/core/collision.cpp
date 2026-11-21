@@ -76,3 +76,12 @@ bool MundoColisao::raioLivre(Vec3f a, Vec3f b) const {
         }
     return true;
 }
+
+void MundoColisao::adicionarPiso(AABB p) { pisos_.push_back(p); }
+
+float MundoColisao::alturaPiso(float x, float z, float y) const {
+    float melhor = -1e9f;
+    for (auto& p : pisos_)
+        if (x >= p.min.x && x <= p.max.x && z >= p.min.z && z <= p.max.z && p.max.y <= y + 0.7f) melhor = std::max(melhor, p.max.y);
+    return melhor;
+}

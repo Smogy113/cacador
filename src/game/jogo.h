@@ -12,6 +12,7 @@
 #include "core/quality.h"
 #include "core/terrain.h"
 #include "render/lighting.h"
+#include "render/props.h"
 #include "render/terrain_mesh.h"
 
 struct OpcoesJogo {
@@ -40,6 +41,7 @@ private:
     Mapa mapa_;
     std::unique_ptr<Terreno> terreno_;
     std::unique_ptr<TerrenoRender> terrenoR_;
+    Cenario cenario_;
     Iluminacao luz_;
     DayClock relogio_;
     Camera3D cam_{};

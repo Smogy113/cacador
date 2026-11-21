@@ -1,0 +1,57 @@
+#pragma once
+#include <cstdint>
+#include <string>
+#include <vector>
+#include "core/collision.h"
+#include "core/places.h"
+#include "core/terrain.h"
+#include "raylib.h"
+#include "render/lighting.h"
+
+struct Quadro {
+    Vec3f pos;
+    float yaw;
+    std::string lugar;
+};
+
+struct ArvoreInst {
+    Vec3f pos;
+    float escala, rot;
+    uint8_t tipo;  // 0 pinheiro, 1 carvalho, 2 arbusto, 3 pedra
+    float tom;     // variacao de cor 0..1
+};
+
+// Tudo que fica parado no mundo: construcoes, arvores, tochas.
+// Agrupado em pedacos de 64 m (uma malha por pedaco) para gastar poucas chamadas de desenho.
+class Cenario {
+public:
+    static constexpr float TAM = 64.f;
+    void construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, uint32_t semente);
+    void atualizar(Vec3f foco, float tempo, int maxConstrucoes = 4);
+    void desenhar(const Camera3D& cam, float distMax, Material& mat);
+    void descarregar();
+
+    std::vector<LuzPontual> luzes;
+    std::vector<Quadro> quadros;
+    std::vector<std::vector<Vec3f>> rotasNPC;  // pontos de passeio, um grupo por lugar
+    std::vector<Vec3f> cavalos;                // onde os cavalos comecam (estabulos)
+    size_t triangulos() const { return tris_; }
+    int chamadas() const { return chamadas_; }
+    size_t totalArvores() const;
+
+private:
+    struct Pedaco {
+        Vec3f centro{};
+        float raio = 0;
+        Mesh construcoes{}, arvPerto{}, arvLonge{};
+        bool temConstr = false, temPerto = false, temLonge = false;
+        float usoPerto = 0;
+        std::vector<ArvoreInst> arvores;
+    };
+    void construirPerto(Pedaco& p);
+    std::vector<Pedaco> p_;
+    int n_ = 0;
+    float tempo_ = 0;
+    size_t tris_ = 0;
+    int chamadas_ = 0;
+};

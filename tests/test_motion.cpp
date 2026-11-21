@@ -109,3 +109,20 @@ TEST_CASE("pitch limitado") {
     r.atualizar({0, plano().altura(0, 0), 0}, 0, -100000.f, plano(), col, 0.016f);
     CHECK(r.pitch >= RigCamera::PITCH_MIN - 1e-5f);
 }
+
+TEST_CASE("anda sobre a ponte (piso) em vez de afundar no rio") {
+    MundoColisao col;
+    float h = plano().altura(0, 0);
+    col.adicionarPiso({{-2, h, 0}, {2, h + 0.5f, 40}});  // tabuleiro meio metro acima do chao
+    Corpo c{{0, h, -3}, 0, 0};
+    Entrada e; e.frente = 1;
+    moverAPe(c, e, 0, 3.f, plano(), col);  // sobe no tabuleiro
+    CHECK(c.pos.z > 0.5f);
+    CHECK(c.pos.y == doctest::Approx(h + 0.5f));
+}
+TEST_CASE("piso alto demais não teletransporta para cima") {
+    MundoColisao col;
+    float h = plano().altura(0, 0);
+    col.adicionarPiso({{-2, h, 0}, {2, h + 5.0f, 40}});  // telhado, nao e degrau
+    CHECK(col.alturaPiso(0, 5, h) < h + 1.f);
+}

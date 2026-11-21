@@ -1,4 +1,5 @@
 #include "core/motion.h"
+#include <algorithm>
 #include <cmath>
 #include "core/terrain.h"
 
@@ -20,19 +21,20 @@ void moverAPe(Corpo& c, const Entrada& e, float yawCamera, float dt, const Terre
     if (l < 0.01f) {
         c.vel = 0;
         c.pos = col.resolver(c.pos, RAIO_PESSOA);
-        c.pos.y = t.altura(c.pos.x, c.pos.z);
+        c.pos.y = std::max(t.altura(c.pos.x, c.pos.z), col.alturaPiso(c.pos.x, c.pos.z, c.pos.y));
         return;
     }
     m = m * (1.f / std::max(l, 1.f));
     float vel = e.correr ? VEL_CORRER : VEL_ANDAR;
-    if (t.altura(c.pos.x, c.pos.z) < t.nivelAgua() - 0.6f) vel *= 0.45f;  // dentro do rio
+    float chao = std::max(t.altura(c.pos.x, c.pos.z), col.alturaPiso(c.pos.x, c.pos.z, std::max(c.pos.y, t.altura(c.pos.x, c.pos.z))));
+    if (chao < t.nivelAgua() - 0.6f) vel *= 0.45f;  // dentro do rio  // dentro do rio
     float total = vel * len(m) * dt;
     int passos = std::max(1, int(std::ceil(total / 0.25f)));
     Vec3f mn = normalizar(m);
     for (int i = 0; i < passos; i++) {
         c.pos = c.pos + mn * (total / passos);
         c.pos = col.resolver(c.pos, RAIO_PESSOA);
-        c.pos.y = t.altura(c.pos.x, c.pos.z);
+        c.pos.y = std::max(t.altura(c.pos.x, c.pos.z), col.alturaPiso(c.pos.x, c.pos.z, c.pos.y));
     }
     c.vel = vel * len(m);
     float alvo = std::atan2(mn.x, mn.z);

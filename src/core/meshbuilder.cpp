@@ -15,9 +15,9 @@ Vec3f girarY(Vec3f p, float a) {
 
 void MeshBuilder::triangulo(Vec3f a, Vec3f b, Vec3f c, Rgb cor) {
     Vec3f n = normalizar(cross(b - a, c - a));
-    v_.push_back({a, n, cor, 1.f});
-    v_.push_back({b, n, cor, 1.f});
-    v_.push_back({c, n, cor, 1.f});
+    v_.push_back({a, n, cor, 1.f, tipoAtual_});
+    v_.push_back({b, n, cor, 1.f, tipoAtual_});
+    v_.push_back({c, n, cor, 1.f, tipoAtual_});
     dono_.insert(dono_.end(), 3, donoAtual_);
 }
 
@@ -166,4 +166,13 @@ void MeshBuilder::calcularAO(const Terreno* t, int amostras) {
         float livre = 1.f - bloqueados / float(amostras);
         v.ao = 0.25f + 0.75f * livre;
     }
+}
+
+void MeshBuilder::aoVertical(float y0, float y1) {
+    for (auto& v : v_) v.ao = 0.45f + 0.55f * smoothstep(y0, y1, v.pos.y);
+}
+
+void MeshBuilder::anexar(const MeshBuilder& o) {
+    v_.insert(v_.end(), o.v_.begin(), o.v_.end());
+    dono_.insert(dono_.end(), o.v_.size(), -1);
 }

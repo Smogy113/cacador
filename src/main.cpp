@@ -53,7 +53,13 @@ int main(int argc, char** argv) {
     InitWindow(1280, 720, "Caçador");
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);  // Esc pausa; sair pelo menu de pausa
+    BeginDrawing();
+    ClearBackground({18, 16, 14, 255});
+    DrawText("Carregando o mundo...", 40, GetScreenHeight() - 70, 28, {220, 200, 160, 255});
+    EndDrawing();
+    double t0 = GetTime();
     g_jogo = new Jogo(g_op.jogo);
+    std::printf("carregamento=%.2fs\n", GetTime() - t0);
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(quadro, 0, 1);
 #else

@@ -66,7 +66,7 @@ const char* FS_LIT = R"(
 VARY vec3 posMundo;
 VARY vec3 normalMundo;
 VARY vec4 cor;
-VARY vec2 extra;   // x = oclusao de ambiente, y = 1 para agua
+VARY vec2 extra;   // x = oclusao de ambiente, y = tipo (1 agua, 2 chama, 3 janela)
 uniform vec3 posCamera;
 uniform vec3 ambCeu;
 uniform vec3 ambChao;
@@ -75,6 +75,7 @@ uniform vec3 corLua;
 uniform vec4 luzPos[8];   // xyz + raio
 uniform vec3 luzCor[8];
 uniform int numLuzes;
+uniform float noite;
 uniform float descartarPerto; // > 0: horizonte, some onde o terreno detalhado ja desenha
 
 void main() {
@@ -104,8 +105,16 @@ void main() {
         luz += luzCor[i] * at * lamb * mix(1.0, ao, 0.5);
     }
     vec3 c = albedo * luz;
+    if (extra.y > 2.5) {
+        // janela: vidro escuro de dia, luz quente a noite
+        vec3 vidro = vec3(0.03, 0.035, 0.045) * luz + vec3(0.02);
+        c = mix(vidro, albedo * 3.2, noite);
+    } else if (extra.y > 1.5) {
+        if (noite < 0.05) discard;  // tochas apagadas de dia
+        c = albedo * 6.0 * noite;  // chama
+    }
 
-    if (extra.y > 0.5) {
+    if (extra.y > 0.5 && extra.y < 1.5) {
         // agua: reflete o ceu (fresnel) + brilho do sol
         vec3 r = reflect(-v, n);
         float fres = pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.8 + 0.1;

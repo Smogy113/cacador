@@ -22,3 +22,9 @@ inline Rgb lerp(Rgb a, Rgb b, float t) { return a * (1 - t) + b * t; }
 inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
 inline float clamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
 inline float smoothstep(float e0, float e1, float x) { float t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); }
+
+// Gira em torno do eixo Y (mesma convencao do yaw: 0 = +z, positivo gira +z para +x).
+inline Vec3f rotY(Vec3f p, float a) {
+    float c = std::cos(a), s = std::sin(a);
+    return {p.x * c + p.z * s, p.y, -p.x * s + p.z * c};
+}

@@ -5,6 +5,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     mapa_ = carregarMapa(op.arquivoMapa);
     terreno_ = std::make_unique<Terreno>(mapa_, 1337);
     terrenoR_ = std::make_unique<TerrenoRender>(*terreno_);
+    cenario_.construir(mapa_, *terreno_, col_, 1337);
     luz_.carregar(op.nivel);
 
     // comeca na entrada de Pedrabranca, olhando para a ponte
@@ -28,6 +29,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     for (int i = 0; i < 40; i++) rig_.atualizar(jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
     atualizarCamera(0, Entrada{});
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, 0, 100000);
+    cenario_.atualizar(jogador_.pos, 0, 100000);
     if (!op.semEntrada) DisableCursor();
 }
 
@@ -62,6 +64,7 @@ void Jogo::desenharInterface() {
 }
 
 Jogo::~Jogo() {
+    cenario_.descarregar();
     modeloJogador_.descarregar();
     sombra_.descarregar();
     terrenoR_.reset();
@@ -90,10 +93,16 @@ void Jogo::atualizar(float dt) {
     passada_ += dt * jogador_.vel * 3.2f;
     atualizarCamera(dt, e);
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_);
+    cenario_.atualizar(jogador_.pos, tempo_);
 
     luzes_.clear();
-    // lanterna do jogador (acende com o anoitecer)
     float noite = relogio_.intensidadeTochas();
+    if (noite > 0.01f)
+        for (auto l : cenario_.luzes) {
+            l.cor = l.cor * noite;
+            luzes_.push_back(l);
+        }
+    // lanterna do jogador (acende com o anoitecer)
     if (noite > 0.01f) {
         Vec3f dir{-std::cos(jogador_.yaw), 0, std::sin(jogador_.yaw)};
         Vec3f p = jogador_.pos + Vec3f{0, 1.25f, 0} + dir * 0.35f + frenteDe(jogador_.yaw) * 0.2f;
@@ -111,10 +120,11 @@ void Jogo::desenhar() {
     terrenoR_->desenharHorizonte(luz_.material());
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.material());
+    cenario_.desenhar(cam_, dv, luz_.material());
     float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
     modeloJogador_.desenhar(luz_.material(), jogador_.pos, jogador_.yaw, passada_, amp);
     sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     EndMode3D();
-    tris_ = terrenoR_->triangulosDesenhados();
-    chamadas_ = terrenoR_->chamadasDesenho();
+    tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos();
+    chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas();
 }
