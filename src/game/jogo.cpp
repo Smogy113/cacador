@@ -15,6 +15,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     cenario_.construir(mapa_, *terreno_, col_, 1337);
     luz_.carregar(op.nivel);
     luz_.dbg.semCabecaRaio = op.semCabecaRaio;
+    luz_.dbg.semLuzPersonagem = op.semLuzPersonagem;
     estilo::carregar();
     grama_.iniciar(*terreno_, col_);
     nav_ = std::make_unique<Navegador>(*terreno_, &mapa_);
@@ -356,6 +357,7 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         Vec3f d = jogador_.pos + Vec3f{0, 1.7f, 0} - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z};
         if (dot(d, d) < 15.f * 15.f) matCabeca = &luz_.materialCabeca();
     }
+    luz_.definirHeroi(true);
     if (montadoEm_ >= 0) {
         const Cavalo& c = cavalos_[montadoEm_];
         Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_ + float(montadoEm_) * 3.7f);
@@ -363,11 +365,13 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         luz_.definirCabelo(rotY(cabeloX_, -c.corpo.yaw));
         modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd, matCabeca);
         luz_.definirCabelo({});
+        luz_.definirHeroi(false);
         return;
     }
     luz_.definirCabelo(rotY(cabeloX_, -jogador_.yaw));
     modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd, matCabeca);
     luz_.definirCabelo({});
+    luz_.definirHeroi(false);
 }
 
 void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax) {

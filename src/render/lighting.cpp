@@ -511,5 +511,8 @@ std::vector<Shader> Iluminacao::sombreados() const {
     return v;
 }
 bool Iluminacao::usaCabecaRaio() const { return cabecaOk_ && nivel_ != Nivel::Baixo && !dbg.semCabecaRaio; }
+void Iluminacao::definirHeroi(bool sim) {
+    for (Shader sh : personagens()) setF(sh, "heroi", sim && !dbg.semLuzPersonagem ? 1.f : 0.f);
+}
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
 void Iluminacao::definirCabelo(Vec3f d) { SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloDesl"), &d, SHADER_UNIFORM_VEC3); }

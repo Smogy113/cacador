@@ -29,13 +29,15 @@ public:
     Nivel nivel() const { return nivel_; }
     void definirRaioGrama(float r);
     float posSolTela_[2] = {-1.f, -1.f};
-    void definirCabelo(Vec3f deslocamentoModelo);  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
+    void definirCabelo(Vec3f deslocamentoModelo);
+    void definirHeroi(bool sim);  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().
     // painel de depuracao (F1): desliga efeitos do nivel atual e ajusta valores na hora
     struct Depuracao {
         bool semSombras = false, semSSAO = false, semBloom = false, semRaios = false, semNuvens = false, semNeblina = false;
-        bool semCabecaRaio = false;  // cabeca do heroi de triangulos (comparar com o raymarching)
+        bool semCabecaRaio = false;
+        bool semLuzPersonagem = false;  // contraluz/preenchimento e olhos de cinema no heroi  // cabeca do heroi de triangulos (comparar com o raymarching)
         float passosNuvem = -1;   // -1 = do nivel
         float exposicao = 1.f;    // multiplica a exposicao da paleta
     } dbg;

@@ -114,6 +114,7 @@ uniform vec3 corChao;       // cor media do chao (luz rebatida)
 
 #ifdef PERSONAGEM
 uniform float argila;
+uniform float heroi;  // 1 = o cacador (luz de personagem, olhos de cinema)
 uniform sampler2D texSombraPerto;
 uniform mat4 matLuzPerto;
 uniform float usarSombraPerto;
@@ -359,6 +360,7 @@ void main() {
     // parametros de material (mundo: tudo zero)
     float brilho = 0.0, aspereza = 1.0, sss = 0.0, veludo = 0.0, metalico = 0.0;
     float kk = 0.0;               // cabelo (Kajiya-Kay)
+    float olhoHeroi = 0.0;        // brilho de cinema no olho do heroi
     vec3 Tcab = vec3(0.0, 1.0, 0.0);
     if (extra.y > 3.5 && extra.y < 4.5) {  // grama: some aos poucos na borda do campo desenhado
         float dg = length(posMundo.xz - posCamera.xz);
@@ -512,6 +514,12 @@ void main() {
             albedo = mix(esclera, irisCor, naIris);
             albedo = mix(albedo, vec3(0.01), smoothstep(0.175, 0.15, rr) * frente);                       // pupila
             albedo *= mix(1.0, 0.45, smoothstep(0.15, 0.55, nr.y));                                       // sombra da palpebra
+            if (heroi > 0.5) {
+                albedo *= mix(1.0, 0.55, smoothstep(0.05, 0.3, nr.y));                                     // palpebra de cima mais funda
+                float umida = smoothstep(-0.25, -0.3, nr.y) * smoothstep(-0.38, -0.33, nr.y) * frente;      // linha umida embaixo
+                albedo = mix(albedo, vec3(0.85, 0.78, 0.76), umida * 0.55);
+                olhoHeroi = frente;
+            }
             brilho = 2.2; aspereza = 0.04;
         } else {                 // feltro do chapeu
             nr = relevo(nr, pr, vec3(500.0), 0.08);
@@ -588,6 +596,17 @@ void main() {
         float lamb = max(dot(n, d / max(dd, 0.001)), 0.0) * 0.8 + 0.2;
         luz += luzCor[i] * at * lamb * mix(1.0, ao, 0.5);
     }
+#ifdef PERSONAGEM
+    if (heroi > 0.5) {
+        // luz de personagem (cinema): contraluz na borda, mais forte e da cor do sol quando ele esta
+        // atras; e um preenchimento suave vindo da camera que abre as sombras do rosto
+        float nv = max(dot(n, v), 0.0);
+        float atrasSol = max(dot(-v, dirSol), 0.0) * smoothstep(-0.05, 0.1, dirSol.y);
+        vec3 corBorda = mix(ambCeu * 1.3, corSol * 0.8, atrasSol);
+        luz += corBorda * pow(1.0 - nv, 3.0) * (0.3 + 0.7 * atrasSol) * 0.55 * ao;
+        luz += (ambCeu * 0.7 + vec3(0.015)) * nv * nv * 0.22 * ao;
+    }
+#endif
     vec3 c = albedo * luz * (1.0 - metalico * 0.6);
     if (brilho > 0.0) {
         vec3 h = normalize(dirSol + v);
@@ -618,6 +637,11 @@ void main() {
         float TH2 = TH + 0.14;
         float s2 = pow(sqrt(max(1.0 - TH2 * TH2, 0.0)), 32.0);
         c += corSol * sombra * smoothstep(-0.2, 0.3, ndl) * (vec3(s1 * 0.05) + albedo * s2 * 0.22);
+    }
+    if (olhoHeroi > 0.5) {
+        // reflexo da luz de preenchimento (um ponto de luz no olho, como nas cenas de cinema) e do ceu
+        vec3 hc = normalize(v + vec3(0.0, 0.25, 0.0) + dirSol * 0.15);
+        c += (ambCeu * 2.0 + corSol * 0.3 + vec3(0.25)) * pow(max(dot(n, hc), 0.0), 1400.0) * 0.9;
     }
     if (veludo > 0.0) c += (ambCeu * 0.5 + corSol * max(ndl, 0.0) * sombra * 0.15) * albedo * veludo * pow(1.0 - max(dot(n, v), 0.0), 2.0);
     if (sss > 0.0) c += corSol * sombra * vec3(0.55, 0.14, 0.07) * albedo * sss * (1.0 - abs(ndl)) * 0.45;
