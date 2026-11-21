@@ -65,7 +65,10 @@ void CabecaRaio::desenhar(Material& mat, const std::vector<Mat4>& ossos, Matrix 
     SetShaderValue(s, GetShaderLocation(s, "volInfo"), info_, SHADER_UNIFORM_VEC4);
     SetShaderValue(s, GetShaderLocation(s, "atlasTam"), tam_, SHADER_UNIFORM_VEC4);
     SetShaderValueMatrix(s, GetShaderLocation(s, "invModelo"), MatrixInvert(modelo));
-    SetShaderValueMatrix(s, GetShaderLocation(s, "matVP"), MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection()));
+    Matrix proj = rlGetMatrixProjection();
+    SetShaderValueMatrix(s, GetShaderLocation(s, "matVP"), MatrixMultiply(rlGetMatrixModelview(), proj));
+    float tamPixel = 2.f / (proj.m5 * float(GetRenderHeight() > 0 ? GetRenderHeight() : 720));  // m5 = 1 / tan(fov / 2)
+    SetShaderValue(s, GetShaderLocation(s, "tamPixel"), &tamPixel, SHADER_UNIFORM_FLOAT);
     rlSetCullFace(RL_CULL_FACE_FRONT);  // faces de tras: funciona tambem com a camera dentro da caixa
     caixa_.desenhar(mat, ossos, modelo);
     rlDrawRenderBatchActive();

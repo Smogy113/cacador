@@ -215,6 +215,7 @@ uniform vec4 volInfo;    // h, hCor, colunas (dist), colunas (cor)
 uniform vec4 atlasTam;   // largura e altura dos dois atlas
 uniform vec3 escalaRep;  // escultura -> modelo
 uniform float passosMax;
+uniform float tamPixel;   // tamanho de um pixel a 1 m da camera (m)
 uniform float economico;  // Medio: sem sombra propria e sem translucidez
 mat4 Mc, Mp, iC, iP;
 mat3 mnG;   // repouso -> mundo (normais)
@@ -281,11 +282,11 @@ void marchar() {
     for (int i = 0; i < 96; i++) {
         if (float(i) >= passosMax) break;
         d = distVol(paraRep(ro + rd * t) / escalaRep) * esc;
-        if (d < 0.00008 + t * 0.00035) { achou = true; break; }
+        if (d < 0.00005 + t * tamPixel * 0.3) { achou = true; break; }
         t += d * 0.85;
         if (t > tFim + 0.01) { saiu = true; break; }
     }
-    if (!achou && (saiu || d > 0.003)) discard;
+    if (!achou && (saiu || d > t * tamPixel * 2.0)) discard;  // passou rente: so fica se a pele esta a menos de ~2 pixels
     for (int k = 0; k < 2; k++) t += distVol(paraRep(ro + rd * t) / escalaRep) * esc;  // refino
     vec3 p = ro + rd * t;
     vec3 r = paraRep(p);
