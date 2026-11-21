@@ -18,3 +18,7 @@
 - Ruling: fios das cascas desenhados com duas grades giradas (escalas 1150 e 1530/m, 30° e 93°) no plano da pele (eixo dominante da normal), inclinados para baixo — uma grade regular fazia moiré nas laterais.
 - Ruling: segundo mapa de sombra só do jogador (1024², 3 m → 3 mm por texel, Médio/Alto); no personagem, o mapa grande ignora bloqueadores a menos de 0,8 m (o próprio corpo, mal resolvido a 8 cm/texel) — eram as manchas do rosto.
 - Ruling: a cabeça HD desce até 1,53 m por dentro do pescoço do tronco (o tronco HD termina em 1,54) — acabou o degrau no pescoço; a pele só escurece sob pelo denso.
+- Ruling: um material por triângulo (separarMateriais duplica vértices de borda) — o código do material era interpolado dentro do triângulo e a borda crina/pelo (14→16) passava por 15 (olho) e ficava branca; cópias das cascas separadas por número de camadas. Teste: nenhum triângulo com materiais diferentes.
+- Ruling: cavalo com malha suavizada (~4,3 mil triângulos), pelo curto aveludado, crina e cauda com cascas de fios, olhos escuros úmidos, cascos e sela de couro, estribos de metal; teste do cavalo sobe para ≤9 mil.
+- Ruling: caçador completo (barba + equipamento) ~33 mil triângulos (teste ≤36 mil); só ele usa sempre o HD; benchmark Baixo segue no orçamento.
+- Ruling: brilho especular de cabelo/crina reduzido (0,4 → 0,15) — fazia uma faixa clara na crista lisa da crina.

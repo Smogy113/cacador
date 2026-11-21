@@ -413,6 +413,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
     }
 
     normaisSuaves(m);
+    separarMateriais(m);
     cascasDePelo(m, vis.cabelo);
     return m;
 }

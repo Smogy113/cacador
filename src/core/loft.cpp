@@ -61,4 +61,28 @@ void normaisSuaves(MalhaPele& m) {
     for (size_t i = 0; i < m.v.size(); i++) m.v[i].normal = normalizar(acc[i]);
 }
 
+void separarMateriais(MalhaPele& m) {
+    std::map<std::pair<uint16_t, int>, uint16_t> copias;
+    for (size_t t = 0; t + 2 < m.idx.size(); t += 3) {
+        float a = m.v[m.idx[t]].material, b = m.v[m.idx[t + 1]].material, c = m.v[m.idx[t + 2]].material;
+        if (a == b && b == c) continue;
+        // material do triangulo: o que aparece mais (empate: o do primeiro vertice)
+        float mt = (b == c) ? b : a;
+        for (int j = 0; j < 3; j++) {
+            uint16_t vi = m.idx[t + j];
+            if (m.v[vi].material == mt) continue;
+            auto chave = std::make_pair(vi, int(mt * 10));
+            auto it = copias.find(chave);
+            if (it == copias.end()) {
+                VertPele nv = m.v[vi];
+                nv.material = mt;
+                if (mt < MAT_PELO) nv.pelos = std::min(nv.pelos, m.v[vi].pelos);
+                it = copias.emplace(chave, uint16_t(m.v.size())).first;
+                m.v.push_back(nv);
+            }
+            m.idx[t + j] = it->second;
+        }
+    }
+}
+
 }  // namespace loft

@@ -212,7 +212,7 @@ void main() {
             if (cobertura < 0.5) discard;
             albedo *= (0.55 + 0.6 * h) * (0.8 + 0.4 * h3(cel + 3.0));
             nr = relevo(nr, pr, vec3(1500.0, 120.0, 1500.0), 0.3);
-            brilho = 0.35; aspereza = 0.4;
+            brilho = 0.18; aspereza = 0.58;
             ao *= 0.6 + 0.4 * h;
         } else if (m > 17.5 && m < 18.5) {  // labios: marcas verticais, umidos
             nr = relevo(nr, pr, vec3(120.0, 900.0, 120.0), 0.07);
@@ -241,7 +241,7 @@ void main() {
         } else if (m < 14.5) {   // cabelo e barba: fios
             nr = relevo(nr, pr, vec3(900.0, 120.0, 900.0), 0.18);
             albedo *= 0.8 + 0.4 * vnoise(pr * vec3(900.0, 90.0, 900.0));
-            brilho = 0.4; aspereza = 0.35;
+            brilho = 0.15; aspereza = 0.6;
         } else if (m < 15.5) {   // olho: esclera, iris com fibras, pupila; cornea molhada
             vec2 e = nr.xy;
             float rr = length(e);

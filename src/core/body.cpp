@@ -258,7 +258,8 @@ MalhaPele corpoCavalo(const VisualCavalo& vc) {
                                               {0.68f, 1.40f, .24f, .33f},   {0.82f, 1.48f, .17f, .26f}};
     std::vector<Anel> corpo;
     for (auto& t : tr) corpo.push_back(A({0, t.y, t.z}, t.rx, t.rz, C_CORPO, C_CORPO, 1));
-    k.tubo(corpo, 16, {0, 1, 0}, true, true,
+    k.material = MAT_FELTRO;  // pelo curto: brilho aveludado
+    k.tubo(suavizar(corpo, 2), 24, {0, 1, 0}, true, true,
            [&](int, float ang, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb {
                float cima = ang < 0 ? 0.f : std::sin(ang);
                if (cima < -0.6f) ao = 0.75f;  // barriga
@@ -269,31 +270,58 @@ MalhaPele corpoCavalo(const VisualCavalo& vc) {
     // pescoco
     std::vector<Anel> pes = {A({0, 1.45f, 0.6f}, .16f, .27f, C_CORPO, C_PESCOCO, .5f), A({0, 1.68f, 0.82f}, .13f, .25f, C_PESCOCO, C_PESCOCO, 1),
                              A({0, 1.88f, 0.98f}, .11f, .19f, C_PESCOCO, C_PESCOCO, 1), A({0, 2.03f, 1.1f}, .09f, .13f, C_PESCOCO, C_CABECA, .5f)};
-    k.tubo(pes, 12, {0, 0, 1}, false, false, [&](int, float ang, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
-        return std::sin(ang) < -0.75f ? vc.crina : pelo;  // crina no alto do pescoco
+    k.tubo(suavizar(pes, 2), 18, {0, 0, 1}, false, false, [&](int, float ang, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
+        if (std::sin(ang) < -0.6f) {  // crina no alto do pescoco: fios de 6 mm
+            k.materialVert = MAT_CABELO;
+            k.pelosVert = 1.f;
+            k.compVert = 0.006f;
+            return vc.crina;
+        }
+        return pelo;
     });
     // cabeca (da nuca ao focinho)
     std::vector<Anel> cab = {A({0, 2.07f, 1.08f}, .085f, .1f, C_CABECA, C_CABECA, 1), A({0, 1.98f, 1.24f}, .095f, .13f, C_CABECA, C_CABECA, 1),
                              A({0, 1.86f, 1.42f}, .078f, .1f, C_CABECA, C_CABECA, 1), A({0, 1.76f, 1.56f}, .07f, .085f, C_CABECA, C_CABECA, 1)};
-    k.tubo(cab, 10, {0, 1, 0}, true, true,
-           [&](int i, float ang, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
+    k.tubo(suavizar(cab, 2), 16, {0, 1, 0}, true, true,
+           [&](int i, float ang, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb {
                if (ang < 0) return i == 0 ? vc.crina : escuro;
                float cima = std::sin(ang), lado = std::abs(std::cos(ang));
-               if (i == 1 && lado > 0.7f && cima > 0.2f) return Rgb{0.05f, 0.04f, 0.03f};  // olhos
-               if (i == 0 && cima > 0.6f) return vc.crina;                                // topete
-               if (i == 3) return escuro;                                                 // focinho
+               if (i <= 1 && cima > 0.6f) { k.materialVert = MAT_CABELO; return vc.crina; }  // topete
+               if (i >= 6) {                                                                    // focinho e narinas
+                   if (i == 6 && lado > 0.55f && cima < 0.1f && cima > -0.6f) { ao = 0.4f; return Rgb{0.03f, 0.025f, 0.02f}; }
+                   return escuro;
+               }
                return pelo;
            },
            0.02f, 0.04f);
     // orelhas
     for (float sx : {1.f, -1.f}) {
         std::vector<Anel> o = {A({sx * 0.05f, 2.09f, 1.07f}, .028f, .022f, C_CABECA, C_CABECA, 1), A({sx * 0.06f, 2.2f, 1.06f}, .012f, .01f, C_CABECA, C_CABECA, 1)};
-        k.tubo(o, 5, {0, 0, 1}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return pelo; }, 0, 0.02f);
+        k.tubo(o, 6, {0, 0, 1}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return pelo; }, 0, 0.02f);
+    }
+    // olhos: globos escuros e umidos, dos lados da cabeca
+    for (float sx : {1.f, -1.f}) {
+        Vec3f c{sx * 0.082f, 1.99f, 1.255f};
+        float r = 0.021f;
+        std::vector<Anel> ol;
+        for (int i = 0; i <= 6; i++) {
+            float th = 3.14159f * (1.f - i / 6.f) * 0.96f + 0.02f;
+            ol.push_back(A(c + Vec3f{sx * std::cos(th) * r, 0, 0}, std::sin(th) * r, std::sin(th) * r * 0.85f, C_CABECA, C_CABECA, 1));
+        }
+        k.material = MAT_COURO;
+        k.tubo(ol, 12, {0, 1, 0}, true, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return Rgb{0.05f, 0.035f, 0.028f}; }, 0, 0.002f);
+        k.material = MAT_FELTRO;
     }
     // cauda
     std::vector<Anel> ca = {A({0, 1.48f, -0.95f}, .05f, .05f, C_CORPO, C_CAUDA, .5f), A({0, 1.3f, -1.03f}, .09f, .08f, C_CAUDA, C_CAUDA, 1),
                             A({0, 1.05f, -1.08f}, .1f, .08f, C_CAUDA, C_CAUDA, 1), A({0, 0.85f, -1.09f}, .07f, .06f, C_CAUDA, C_CAUDA, 1)};
-    k.tubo(ca, 7, {0, 0, 1}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return vc.crina; }, 0, 0.05f);
+    k.material = MAT_CABELO;
+    k.tubo(suavizar(ca, 2), 10, {0, 0, 1}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
+        k.pelosVert = 1.f;
+        k.compVert = 0.006f;
+        return vc.crina;
+    }, 0, 0.05f);
+    k.material = MAT_FELTRO;
 
     // pernas
     for (int perna = 0; perna < 4; perna++) {
@@ -315,12 +343,14 @@ MalhaPele corpoCavalo(const VisualCavalo& vc) {
         an.push_back(A(o2.inicio + Vec3f{0, -0.03f, 0.015f}, .04f, .044f, b0 + 1, b0 + 2, .4f));
         an.push_back(A({o2.inicio.x, 0.06f, o2.fim.z}, .055f, .06f, b0 + 2, b0 + 2, 1));
         an.push_back(A({o2.inicio.x, 0.0f, o2.fim.z}, .06f, .066f, b0 + 2, b0 + 2, 1));
-        size_t n = an.size();
-        k.tubo(an, 8, {0, 0, 1}, false, true,
+        auto sv = suavizar(an, 2);
+        int n = int(sv.size());
+        k.material = MAT_FELTRO;
+        k.tubo(sv, 12, {0, 0, 1}, false, true,
                [&](int i, float, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb {
                    if (i == 0) ao = 0.8f;
-                   if (i >= int(n) - 2 || i < 0) return casco;
-                   if (i >= int(n) - 4) return vc.meias ? Rgb{0.85f, 0.83f, 0.78f} : escuro;
+                   if (i >= n - 3 || i < 0) { k.materialVert = MAT_COURO; return casco; }  // casco brilhante
+                   if (i >= n - 7) return vc.meias ? Rgb{0.85f, 0.83f, 0.78f} : escuro;
                    return pelo;
                },
                0, 0);
@@ -331,23 +361,24 @@ MalhaPele corpoCavalo(const VisualCavalo& vc) {
         Rgb couro{0.3f, 0.19f, 0.11f}, manta{0.55f, 0.14f, 0.11f};
         std::vector<Anel> mt = {A({0, 1.69f, -0.42f}, .30f, .035f, C_CORPO, C_CORPO, 1), A({0, 1.71f, -0.1f}, .33f, .04f, C_CORPO, C_CORPO, 1),
                                 A({0, 1.71f, 0.3f}, .31f, .035f, C_CORPO, C_CORPO, 1)};
-        k.tubo(mt, 12, {0, 1, 0}, true, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return manta; });
+        k.material = MAT_TECIDO;
+        k.tubo(mt, 16, {0, 1, 0}, true, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return manta; });
         std::vector<Anel> se = {A({0, 1.79f, -0.36f}, .16f, .07f, C_CORPO, C_CORPO, 1), A({0, 1.74f, -0.2f}, .2f, .05f, C_CORPO, C_CORPO, 1),
                                 A({0, 1.74f, 0.08f}, .2f, .05f, C_CORPO, C_CORPO, 1), A({0, 1.81f, 0.22f}, .1f, .07f, C_CORPO, C_CORPO, 1)};
-        k.tubo(se, 10, {0, 1, 0}, true, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return couro; });
+        k.material = MAT_COURO;
+        k.tubo(suavizar(se, 2), 16, {0, 1, 0}, true, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return couro; });
         for (float sx : {1.f, -1.f}) {
             std::vector<Anel> es = {A({sx * 0.31f, 1.72f, -0.05f}, .02f, .012f, C_CORPO, C_CORPO, 1), A({sx * 0.33f, 1.22f, -0.05f}, .02f, .012f, C_CORPO, C_CORPO, 1),
                                     A({sx * 0.33f, 1.14f, -0.05f}, .05f, .03f, C_CORPO, C_CORPO, 1)};
-            k.tubo(es, 4, {0, 0, 1}, false, true, [&](int i, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb { return i == 2 ? Rgb{0.3f, 0.3f, 0.32f} : couro; }, 0, 0.01f);
+            k.tubo(es, 6, {0, 0, 1}, false, true, [&](int i, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
+                if (i == 2) { k.materialVert = MAT_METAL; return Rgb{0.45f, 0.44f, 0.42f}; }
+                return couro;
+            }, 0, 0.01f);
         }
     }
 
-    std::vector<Vec3f> acc(m.v.size());
-    for (size_t t = 0; t < m.idx.size(); t += 3) {
-        Vec3f a = m.v[m.idx[t]].pos, b = m.v[m.idx[t + 1]].pos, c = m.v[m.idx[t + 2]].pos;
-        Vec3f nn = cross(b - a, c - a);
-        for (int j = 0; j < 3; j++) acc[m.idx[t + j]] = acc[m.idx[t + j]] + nn;
-    }
-    for (size_t i = 0; i < m.v.size(); i++) m.v[i].normal = normalizar(acc[i]);
+    normaisSuaves(m);
+    separarMateriais(m);
+    cascasDePelo(m, vc.crina);
     return m;
 }

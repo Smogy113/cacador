@@ -96,7 +96,7 @@ TEST_CASE("cavalo: até 2000 triângulos, ossos válidos") {
         VisualCavalo v;
         v.selado = sel;
         auto m = corpoCavalo(v);
-        CHECK(m.triangulos() <= 2000);
+        CHECK(m.triangulos() <= 9000);
         CHECK(m.triangulos() >= 600);
         for (auto& x : m.v) {
             CHECK(x.osso[0] < N_OSSOS_CAVALO);
@@ -263,4 +263,28 @@ TEST_CASE("cascas de pelo ficam por fora da pele, no máximo 6 mm") {
             CHECK(x.pelos > 0.f);
             CHECK(x.compPelo <= 0.006f);
         }
+}
+
+TEST_CASE("caçador completo (barba + equipamento) cabe no orçamento do HD") {
+    Visual v;
+    v.barba = true;
+    v.equipamento = true;
+    auto m = corpoHumanoHD({}, v);
+    CHECK(m.triangulos() <= 36000);
+    CHECK(m.v.size() < 65535);
+}
+
+TEST_CASE("cada triângulo tem um só material (sem misturar no meio)") {
+    Visual v;
+    v.barba = true;
+    v.equipamento = true;
+    for (int qual = 0; qual < 2; qual++) {
+        auto m = qual ? corpoCavalo({}) : corpoHumanoHD({}, v);
+        int ruins = 0;
+        for (size_t t = 0; t < m.idx.size(); t += 3) {
+            float a = m.v[m.idx[t]].material, b = m.v[m.idx[t + 1]].material, c = m.v[m.idx[t + 2]].material;
+            if (a != b || b != c) ruins++;
+        }
+        CHECK_MESSAGE(ruins == 0, (qual ? "cavalo" : "humano") << " com " << ruins);
+    }
 }

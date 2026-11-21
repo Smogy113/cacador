@@ -334,9 +334,10 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
 void cascasDePelo(MalhaPele& m, Rgb corPelo) {
     // camadas: barba (5 mm) 4 cascas; sobrancelha, cabelo e cilios 2 cascas
     size_t nTri = m.idx.size();
-    std::vector<int> mapa;
+    std::vector<int> mapa2, mapa4;  // copias por numero de camadas (a altura da casca muda)
     for (int camada = 0; camada < 4; camada++) {
-        mapa.assign(m.v.size(), -1);
+        mapa2.assign(m.v.size(), -1);
+        mapa4.assign(m.v.size(), -1);
         for (size_t t = 0; t < nTri; t += 3) {
             uint16_t ia = m.idx[t], ib = m.idx[t + 1], ic = m.idx[t + 2];
             const VertPele &a = m.v[ia], &b = m.v[ib], &c = m.v[ic];
@@ -348,7 +349,7 @@ void cascasDePelo(MalhaPele& m, Rgb corPelo) {
             uint16_t novo[3];
             uint16_t orig[3] = {ia, ib, ic};
             for (int j = 0; j < 3; j++) {
-                int& slot = mapa[orig[j]];
+                int& slot = (nCam == 4 ? mapa4 : mapa2)[orig[j]];
                 if (slot < 0) {
                     VertPele v = m.v[orig[j]];
                     float cp = std::max(v.compPelo, 0.0015f);
