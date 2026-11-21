@@ -346,6 +346,128 @@ float finura(vec3 q) {
 }
 #endif
 
+
+#if !defined(PERSONAGEM) && !defined(GL_ES)
+// ---- paredes das casas: relevo desenhado pixel a pixel (o raio entra num campo de alturas por
+// material) com sombra propria do relevo; coordenadas = posicao no plano da face (sem UV) ----
+uniform float paredes;  // 0 desligado, 1 Medio, 2 Alto
+float sombraRelevo = 1.0;
+float vn2(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+// alturas em metros, de -0,03 (fundo) a 0 (face da parede); "id" sorteia tom por peca
+float hTabua(vec2 uv, out float id) {
+    float alt = 0.2, row = floor(uv.y / alt), fy = fract(uv.y / alt);
+    float x = uv.x + hash12(vec2(row, 7.0)) * 3.0;
+    float seg = floor(x / 2.4), fx = fract(x / 2.4);
+    id = hash12(vec2(row, seg + 31.0));
+    float face = smoothstep(0.0, 0.04, fy) * smoothstep(1.0, 0.96, fy) * smoothstep(0.0, 0.004, fx) * smoothstep(1.0, 0.996, fx);
+    float topo = -0.005 + 0.0035 * sin(fy * 3.1416) - 0.003 * id + 0.0012 * vn2(vec2(x * 2.0, uv.y * 70.0 + id * 9.0));
+    return mix(-0.026, topo, face);
+}
+float hPedra(vec2 uv, out float id) {
+    vec2 tam = vec2(0.42, 0.27);
+    float row = floor(uv.y / tam.y);
+    vec2 s = vec2(uv.x / tam.x + hash12(vec2(row, 3.0)) * 0.9 + row * 0.5, uv.y / tam.y);
+    vec2 c = floor(s), f = fract(s);
+    id = hash12(c + 17.0);
+    vec2 e = min(f, 1.0 - f) * tam;
+    float borda = min(e.x, e.y) + (vn2(uv * 9.0) - 0.5) * 0.014;
+    float m = smoothstep(0.003, 0.018, borda);
+    float face = -0.014 + 0.011 * smoothstep(0.0, 0.07, borda) - 0.004 * vn2(uv * 7.0 + id * 13.0) - 0.0015 * vn2(uv * 30.0);
+    return mix(-0.029, face, m);
+}
+float hReboco(vec2 uv, out float caiu, out float id) {
+    float h = -0.0025 * vn2(uv * 1.7) - 0.0009 * vn2(uv * 14.0);
+    float rach = abs(vn2(uv * 3.3) + 0.5 * vn2(uv * 7.1 + 3.0) - 0.75);
+    // rachaduras finas: tracos interrompidos (nao contornos fechados), so em algumas regioes
+    h -= 0.004 * smoothstep(0.007, 0.0, rach) * smoothstep(0.6, 0.75, vn2(uv * 2.2 + 9.0)) * step(0.6, vn2(uv * 0.9 + 5.0));
+    float pc = vn2(uv * 0.8 + 11.0) * 0.7 + vn2(uv * 3.5) * 0.3;
+    caiu = smoothstep(0.62, 0.65, pc);                                                    // reboco caido: pedra por baixo
+    float hp = hPedra(uv, id);
+    return mix(h, -0.012 + hp * 0.6, caiu);
+}
+float hParede(vec2 uv, float mat) {
+    float id, caiu;
+    if (mat < 5.5) return hReboco(uv, caiu, id);
+    if (mat < 6.5) return hTabua(uv, id);
+    return hPedra(uv, id);
+}
+// aplica o relevo: muda uv, normal, albedo e oclusao; guarda a sombra do relevo
+void relevoParede(inout vec3 n, inout vec3 albedo, inout float ao, vec3 v, float dist, float mat) {
+    vec3 T = normalize(cross(vec3(0.0, 1.0, 0.0), n));
+    vec3 B = vec3(0.0, 1.0, 0.0);
+    vec3 N0 = n;
+    vec2 uv = vec2(dot(posMundo, T), posMundo.y);
+    float prof = 1.0 - smoothstep(18.0, 25.0, dist);    // relevo ate 25 m; depois so a normal
+    float d = 0.0;                                       // profundidade achada (m, positiva)
+    if (prof > 0.01) {
+        vec3 vt = vec3(dot(v, T), dot(v, B), dot(v, N0));
+        prof *= smoothstep(0.05, 0.25, vt.z);            // olhando rente: relevo raso (sem estourar)
+        float alto = paredes > 1.5 ? 1.0 : 0.0;
+        float nPassos = mix(12.0, 24.0, alto);
+        float dz = 0.03 / nPassos;
+        vec2 passo = -vt.xy / max(vt.z, 0.25) * dz * prof;
+        vec2 uvA = uv;
+        float camA = 0.0, cam = 0.0;
+        for (int i = 0; i < 24; i++) {
+            if (float(i) >= nPassos) break;
+            if (cam >= -hParede(uv, mat) * prof) break;
+            uvA = uv; camA = cam;
+            uv += passo; cam += dz;
+        }
+        for (int k = 0; k < 4; k++) {  // bissecao entre o ultimo ponto fora e o primeiro dentro
+            vec2 um = (uvA + uv) * 0.5;
+            float cm = (camA + cam) * 0.5;
+            if (cm >= -hParede(um, mat) * prof) { uv = um; cam = cm; } else { uvA = um; camA = cm; }
+        }
+        d = cam;
+        // sombra do proprio relevo (tabua sobre tabua, pedra sobre argamassa): so no Alto
+        vec3 Lt = vec3(dot(dirSombra, T), dot(dirSombra, B), dot(dirSombra, N0));
+        if (alto > 0.5 && Lt.z > 0.05 && prof > 0.05) {
+            float sh = 1.0;
+            for (int k = 1; k <= 10; k++) {
+                float s2 = float(k) * 0.0035;
+                if (s2 > d) break;
+                vec2 uk = uv + Lt.xy / Lt.z * s2;
+                float acima = (d - s2) - (-hParede(uk, mat) * prof);  // > 0: o relevo esta acima do raio
+                sh = min(sh, clamp(1.0 - acima * 160.0, 0.0, 1.0) * 0.5 + 0.5 * step(acima, 0.0));
+            }
+            sombraRelevo = sh;
+        }
+    }
+    // normal pelo campo de alturas (ate 45 m)
+    float kn = 1.0 - smoothstep(35.0, 45.0, dist);
+    float e = 0.004;
+    float h0 = hParede(uv, mat), hx = hParede(uv + vec2(e, 0.0), mat), hy = hParede(uv + vec2(0.0, e), mat);
+    vec3 nt = normalize(vec3(-(hx - h0) / e * kn, -(hy - h0) / e * kn, 1.0));
+    n = normalize(T * nt.x + B * nt.y + N0 * nt.z);
+    // cor e oclusao das cavidades
+    float id, caiu;
+    vec3 corPedra = vec3(0.46, 0.44, 0.41);
+    if (mat < 5.5) {
+        hReboco(uv, caiu, id);
+        albedo *= 0.86 + 0.2 * vn2(uv * 0.5) - 0.1 * vn2(uv * 2.3) + 0.06 * vn2(uv * 9.0);  // manchas em varias escalas
+        albedo = mix(albedo, albedo * vec3(0.93, 0.92, 0.88), smoothstep(0.4, 0.8, vn2(uv * 0.25 + 40.0)));  // pintura gasta
+        albedo *= 1.0 - 0.14 * smoothstep(0.55, 0.9, vn2(vec2(uv.x * 7.0, uv.y * 0.35)));   // escorridos da chuva
+        float tomP = 0.8 + 0.4 * id;
+        vec3 pedraVista = mix(corPedra * 1.25, corPedra * tomP, smoothstep(-0.026, -0.018, h0 + 0.012));
+        albedo = mix(albedo, pedraVista, caiu);
+    } else if (mat < 6.5) {
+        hTabua(uv, id);
+        float lumM = dot(albedo, vec3(0.3, 0.59, 0.11));
+        albedo = mix(albedo, vec3(lumM) * vec3(1.08, 0.95, 0.82), 0.45);   // madeira envelhecida: menos saturada
+        albedo *= (0.72 + 0.5 * id) * (0.8 + 0.32 * vn2(vec2(uv.x * 2.0, uv.y * 60.0 + id * 7.0)));
+    } else {
+        hPedra(uv, id);
+        float arg = smoothstep(-0.02, -0.026, h0);                    // argamassa
+        albedo = mix(albedo * (0.72 + 0.5 * id) * (0.9 + 0.2 * vn2(uv * 11.0)), vec3(0.42, 0.39, 0.34) * 0.75, arg);
+    }
+    ao *= mix(0.45, 1.0, smoothstep(-0.03, -0.004, h0));             // fundo das frestas escuro
+}
+#endif
 void main() {
 #ifdef RAYMARCH
     marchar();
@@ -369,6 +491,10 @@ void main() {
         if (dg > raioGrama - 9.0 * hg) discard;
         gGrama = 1.0;
     }
+#if !defined(PERSONAGEM) && !defined(GL_ES)
+    if (paredes > 0.5 && extra.y > 4.5 && extra.y < 7.5 && abs(n.y) < 0.3 && dist < 45.0)
+        relevoParede(n, albedo, ao, v, dist, floor(extra.y + 0.5));
+#endif
 #ifdef PERSONAGEM
     float m = extra.y;
     if (argila > 0.5 && m > 23.5) discard;  // argila: sem fios
@@ -571,6 +697,9 @@ void main() {
 #ifdef RAYMARCH
     vec3 Lq = paraEscultura(dirSol);
     if (economico < 0.5 && sombra > 0.01) sombra = min(sombra, mix(0.22, 1.0, sombraPropria(qHit, Lq)));  // a luz rebatida na pele nao deixa a sombra preta
+#endif
+#if !defined(PERSONAGEM) && !defined(GL_ES)
+    sombra *= sombraRelevo;
 #endif
     float ndl = dot(n, dirSol);
     float difSol = mix(max(ndl, 0.0), clamp((ndl + 0.45) / 1.45, 0.0, 1.0), sss);

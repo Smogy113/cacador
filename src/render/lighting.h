@@ -39,7 +39,8 @@ public:
         bool semSombras = false, semSSAO = false, semBloom = false, semRaios = false, semNuvens = false, semNeblina = false;
         bool semCabecaRaio = false;
         bool semLuzPersonagem = false;  // contraluz/preenchimento e olhos de cinema no heroi
-        bool semFoco = false, semGrao = false;  // profundidade de campo; granulacao e aberracao (Alto)  // cabeca do heroi de triangulos (comparar com o raymarching)
+        bool semFoco = false, semGrao = false;
+        bool semParedes = false;  // relevo e luz tracada nas paredes das casas  // profundidade de campo; granulacao e aberracao (Alto)  // cabeca do heroi de triangulos (comparar com o raymarching)
         float passosNuvem = -1;   // -1 = do nivel
         float exposicao = 1.f;    // multiplica a exposicao da paleta
     } dbg;

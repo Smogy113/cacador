@@ -295,6 +295,9 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
         SetShaderValueV(sh, GetShaderLocation(sh, "luzCor"), cor, SHADER_UNIFORM_VEC3, MAX_LUZES);
         SetShaderValue(sh, GetShaderLocation(sh, "numLuzes"), &ni, SHADER_UNIFORM_INT);
     }
+#if !defined(PLATFORM_WEB)
+    setF(lit_, "paredes", dbg.semParedes || nivel_ == Nivel::Baixo ? 0.f : (nivel_ == Nivel::Alto ? 2.f : 1.f));
+#endif
     uniformesComuns(ceu_, paleta_, sol_, noite_);
     setRgb(ceu_, "ceuTopo", paleta_.ceuTopo);
     setRgb(ceu_, "ceuHorizonte", paleta_.ceuHorizonte);

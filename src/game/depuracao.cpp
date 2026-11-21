@@ -135,6 +135,9 @@ void Jogo::desenharDepuracao() {
     if (caixa(luz_.nivel() == Nivel::Baixo ? "Cabeça por raymarching (Médio/Alto)" : b, raio)) d.semCabecaRaio = !raio;
     bool lp = !d.semLuzPersonagem;
     if (caixa("Luz de personagem", lp)) d.semLuzPersonagem = !lp;
+    bool pa = !d.semParedes;
+    std::snprintf(b, sizeof b, "Paredes com raytracing (%.1f ms)", dbg_.msQuadro);
+    if (caixa(luz_.nivel() == Nivel::Baixo ? "Paredes com raytracing (Médio/Alto)" : b, pa)) d.semParedes = !pa;
     bool fo = !d.semFoco, gr = !d.semGrao;
     bool alto = luz_.nivel() == Nivel::Alto;
     if (caixa(alto ? "Profundidade de campo" : "Profundidade de campo (Alto)", fo)) d.semFoco = !fo;

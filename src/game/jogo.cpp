@@ -17,6 +17,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     luz_.dbg.semCabecaRaio = op.semCabecaRaio;
     luz_.dbg.semLuzPersonagem = op.semLuzPersonagem;
     luz_.dbg.semFoco = op.semFoco;
+    luz_.dbg.semParedes = op.semParedes;
     estilo::carregar();
     grama_.iniciar(*terreno_, col_);
     nav_ = std::make_unique<Navegador>(*terreno_, &mapa_);
