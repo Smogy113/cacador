@@ -30,6 +30,10 @@ public:
     bool usaSombras() const { return ef_.sombras && sombraOk_; }
     void comecarSombra(Vec3f centro);
     void terminarSombra();
+    // Sombra de perto (3 m, alta resolucao) so para o personagem: chapeu no rosto, braco no corpo.
+    bool usaSombraPerto() const { return sombraPertoOk_; }
+    void comecarSombraPerto(Vec3f centro);
+    void terminarSombraPerto();
     Material& materialSombra() { return matProf_; }
     // personagens com esqueleto
     Material& materialPele() { return matPele_; }
@@ -47,6 +51,10 @@ private:
     Shader pele_{}, profPele_{};
     Material mat_{}, matProf_{}, matPele_{}, matProfPele_{};
     Model esfera_{};
+    RenderTexture2D sombraPertoRT_{};
+    Matrix luzVPPerto_{};
+    bool sombraPertoOk_ = false;
+    Vec3f dirSombra_{0, 1, 0};
     RenderTexture2D sombraRT_{}, cena_{}, meiaA_{}, meiaB_{}, raiosRT_{}, aoA_{}, aoB_{};
     bool cenaComProfundidade_ = false;
     Matrix luzVP_{};

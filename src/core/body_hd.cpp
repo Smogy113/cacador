@@ -72,7 +72,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
     {
         std::vector<Anel> an;
         for (auto& t : TRONCO) {
-            if (t.y > 1.595f) break;  // a cabeca e feita a parte (head_hd.cpp)
+            if (t.y > 1.545f) break;  // a cabeca (head_hd.cpp) desce ate 1,53 e encaixa por dentro do pescoco
             float largura = t.y < 1.0f ? lq : (t.y > 1.25f && t.y < 1.52f ? lo : 1.f);
             an.push_back(Anel{{0, t.y * s, t.z * s}, t.rx * largura * s * ms, t.rz * s * ms, uint8_t(t.a), uint8_t(t.b), t.p});
         }

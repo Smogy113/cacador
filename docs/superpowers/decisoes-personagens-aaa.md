@@ -13,3 +13,8 @@
 - Ruling: olhos com pálpebras de verdade (faixas de pele sobre o globo, com borda arredondada e vinco), cílios superiores e inferiores, e íris desenhada por pixel a partir da normal do globo (fibras radiais, colarete, anel limbar, pupila, veias e sombra da pálpebra na esclera).
 - Ruling: barba, sobrancelhas, cílios e cabelo por cascas de pelo (4 cascas na barba de 5 mm, 2 no resto), recortadas em fios no shader; máscara de barba "fechada" curta (linha da bochecha, bigode, queixo, pescoço) sem cobrir os lábios; cabelo escondido pelo chapéu não gera cascas.
 - Ruling: teste de triângulos do HD subiu para ≤24 mil (cabeça + cascas); benchmark Baixo máx. 207 mil / 113 chamadas.
+
+## Ajustes depois da revisão visual (moiré, manchas, pescoço)
+- Ruling: fios das cascas desenhados com duas grades giradas (escalas 1150 e 1530/m, 30° e 93°) no plano da pele (eixo dominante da normal), inclinados para baixo — uma grade regular fazia moiré nas laterais.
+- Ruling: segundo mapa de sombra só do jogador (1024², 3 m → 3 mm por texel, Médio/Alto); no personagem, o mapa grande ignora bloqueadores a menos de 0,8 m (o próprio corpo, mal resolvido a 8 cm/texel) — eram as manchas do rosto.
+- Ruling: a cabeça HD desce até 1,53 m por dentro do pescoço do tronco (o tronco HD termina em 1,54) — acabou o degrau no pescoço; a pele só escurece sob pelo denso.

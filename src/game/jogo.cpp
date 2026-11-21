@@ -252,6 +252,19 @@ bool Jogo::atrasDaCamera(Vec3f p) const {
     return dot(d, f) < dist * 0.35f;  // ~70 graus para cada lado (a tela tem ~53)
 }
 
+void Jogo::desenharJogador(Material& matPele, bool hd) {
+    const Esqueleto& ej = modeloJogador_.esqueleto();
+    if (montadoEm_ >= 0) {
+        const Cavalo& c = cavalos_[montadoEm_];
+        Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_ + float(montadoEm_) * 3.7f);
+        Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc);
+        modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd);
+        return;
+    }
+    Pose pj = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseParado(ej, tempo_);
+    modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, pj, hd);
+}
+
 void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax) {
     for (auto& n : populacao_.npcs()) {
         if (!n.ativo) continue;
@@ -276,18 +289,10 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         modelosCavalo_[i].desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc);
         trisAtores_ += modelosCavalo_[i].triangulos();
         chamadasAtores_++;
-        if (int(i) == montadoEm_) {
-            Vec3f q = modelosCavalo_[i].assento(c.corpo.pos, c.corpo.yaw, pc);
-            float quadril = modeloJogador_.esqueleto().ossos[QUADRIL].inicio.y;
-            modeloJogador_.desenhar(matPele, q - Vec3f{0, quadril, 0}, c.corpo.yaw, poseMontado(modeloJogador_.esqueleto(), c.passada, int(c.andadura)), passePrincipal_);
-        }
+        if (int(i) == montadoEm_) desenharJogador(matPele, passePrincipal_);
     }
     if (montadoEm_ < 0) {
-        float amp = std::min(1.f, jogador_.vel / VEL_CORRER + (jogador_.vel > 0 ? 0.35f : 0.f));
-        (void)amp;
-        const Esqueleto& ej = modeloJogador_.esqueleto();
-        Pose pj = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseParado(ej, tempo_);
-        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, pj, passePrincipal_);
+        desenharJogador(matPele, passePrincipal_);
         trisAtores_ += modeloJogador_.triangulos(passePrincipal_);
         chamadasAtores_++;
         if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
@@ -330,6 +335,12 @@ void Jogo::desenhar() {
         desenharAtores(luz_.materialSombra(), luz_.materialSombraPele(), false, a);
         luz_.terminarSombra();
         passePrincipal_ = true;
+        if (luz_.usaSombraPerto()) {  // o caçador em alta definicao, so ele, num mapa de 3 m
+            Vec3f centro = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 1.9f : 1.0f, 0};
+            luz_.comecarSombraPerto(centro);
+            desenharJogador(luz_.materialSombraPele(), true);
+            luz_.terminarSombraPerto();
+        }
     }
     if (luz_.usaPos()) luz_.comecarPos();
     ClearBackground(BLACK);

@@ -62,6 +62,16 @@ static RenderTexture2D criarCenaComProfundidade(int w, int h) {
 }
 
 void Iluminacao::liberarEfeitos() {
+    if (sombraPertoOk_) {
+        rlUnloadTexture(sombraPertoRT_.depth.id);
+        rlUnloadFramebuffer(sombraPertoRT_.id);
+        sombraPertoOk_ = false;
+    }
+    matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
+    {
+        float zero = 0;
+        SetShaderValue(pele_, GetShaderLocation(pele_, "usarSombraPerto"), &zero, SHADER_UNIFORM_FLOAT);
+    }
     if (sombraOk_) {
         rlUnloadTexture(sombraRT_.depth.id);
         rlUnloadFramebuffer(sombraRT_.id);
@@ -118,6 +128,7 @@ void Iluminacao::carregar(Nivel nivel) {
     pele_ = carregarShaderDef(VS_PELE, FS_LIT, "#define PERSONAGEM\n");
     pele_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(pele_, "matModel");
     pele_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(pele_, "texSombra");
+    pele_.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(pele_, "texSombraPerto");
     matPele_ = LoadMaterialDefault();
     matPele_.shader = pele_;
     profPele_ = carregarShader(VS_PROF_PELE, FS_PROF);
@@ -129,6 +140,13 @@ void Iluminacao::carregar(Nivel nivel) {
     if (ef_.sombras) {
         sombraRT_ = criarMapaSombra(ef_.resolucaoSombra);
         sombraOk_ = sombraRT_.id > 0;
+        sombraPertoRT_ = criarMapaSombra(1024);
+        sombraPertoOk_ = sombraPertoRT_.id > 0;
+        if (sombraPertoOk_) {
+            matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = sombraPertoRT_.depth;
+            float t = 1.f / 1024.f;
+            setF(pele_, "texelSombraPerto", t);
+        }
         if (sombraOk_) {
             mat_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
             matPele_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
@@ -258,6 +276,7 @@ void Iluminacao::comecarSombra(Vec3f centro) {
     cl.up = {0, 1, 0};
     cl.fovy = 2 * AREA_SOMBRA;
     cl.projection = CAMERA_ORTHOGRAPHIC;
+    dirSombra_ = dir;
     setV3(lit_, "dirSombra", dir);
     setV3(pele_, "dirSombra", dir);
     BeginTextureMode(sombraRT_);
@@ -371,4 +390,28 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     if (ao) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texAO"), aoA_.texture);
     desenharTela(cena_, GetScreenWidth(), GetScreenHeight());
     EndShaderMode();
+}
+
+void Iluminacao::comecarSombraPerto(Vec3f centro) {
+    Vec3f dir = dirSombra_;
+    Camera3D cl{};
+    cl.position = {centro.x + dir.x * 20.f, centro.y + dir.y * 20.f, centro.z + dir.z * 20.f};
+    cl.target = {centro.x, centro.y, centro.z};
+    cl.up = {0, 1, 0};
+    if (std::abs(dir.y) > 0.98f) cl.up = {0, 0, 1};
+    cl.fovy = 3.0f;
+    cl.projection = CAMERA_ORTHOGRAPHIC;
+    BeginTextureMode(sombraPertoRT_);
+    ClearBackground(WHITE);
+    rlClearScreenBuffers();
+    BeginMode3D(cl);
+    luzVPPerto_ = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
+}
+
+void Iluminacao::terminarSombraPerto() {
+    EndMode3D();
+    EndTextureMode();
+    SetShaderValueMatrix(pele_, GetShaderLocation(pele_, "matLuzPerto"), luzVPPerto_);
+    float um = 1;
+    SetShaderValue(pele_, GetShaderLocation(pele_, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
 }

@@ -97,6 +97,14 @@ uniform vec3 dirSombra;
 uniform float texelMetros;  // tamanho de um texel do mapa de sombras, em metros
 uniform vec3 corChao;       // cor media do chao (luz rebatida)
 
+#ifdef PERSONAGEM
+uniform sampler2D texSombraPerto;
+uniform mat4 matLuzPerto;
+uniform float usarSombraPerto;
+uniform float texelSombraPerto;
+#else
+const float usarSombraPerto = 0.0;
+#endif
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
     p3 += dot(p3, p3.yzx + 33.33);
@@ -123,6 +131,9 @@ float sombraEm(vec3 p, vec3 n) {
     }
     if (cont < 0.5) return 1.0;
     float distBloq = (q.z - soma / cont) * 1000.0;
+#ifdef PERSONAGEM
+    if (usarSombraPerto > 0.5 && distBloq < 0.8) return 1.0;  // o proprio corpo: fica com o mapa de perto
+#endif
     float raio = clamp(distBloq * 0.045 / texelMetros, 0.8, 7.0);
     float s = 0.0;
     for (int i = 0; i < 12; i++) {
@@ -182,11 +193,23 @@ void main() {
         vec3 pr = posRep;
         if (m > 19.5) {          // casca de pelo (barba, sobrancelha, cabelo, cilios): recorta em fios
             float h = (m - 20.0) / 3.0;                    // altura da casca: 0..1
-            vec3 q = pr * vec3(1500.0, 650.0, 1500.0);     // fio ~0,7 mm de largura
-            vec3 cel = floor(q);
-            float r = h3(cel);
-            vec2 dentro = fract(q.xz) - 0.5 + (vec2(h3(cel + 7.0), h3(cel + 13.0)) - 0.5) * 0.3;
-            if (r > cor.a * 0.95 || length(dentro) > 0.42 * (1.0 - h * 0.65)) discard;
+            // fios espalhados: duas grades giradas (angulos e escalas diferentes) no plano da pele,
+            // sem regularidade -> sem moire
+            vec3 an = abs(nr);
+            vec2 uv0 = an.x > an.y && an.x > an.z ? pr.zy : (an.z > an.y ? pr.xy : pr.xz);
+            float cobertura = 0.0;
+            vec3 cel = vec3(0.0);
+            for (int gi = 0; gi < 2; gi++) {
+                float rot = gi == 0 ? 0.52 : 1.63;
+                float esc = gi == 0 ? 1150.0 : 1530.0;
+                vec2 uv = mat2(cos(rot), sin(rot), -sin(rot), cos(rot)) * uv0 * esc;
+                uv.y += h * 0.6;  // fios inclinados
+                vec3 c3 = vec3(floor(uv), float(gi) * 17.0);
+                vec2 dd = fract(uv) - 0.5 + (vec2(h3(c3 + 7.0), h3(c3 + 13.0)) - 0.5) * 0.5;
+                float tem = step(h3(c3), cor.a * 0.75) * step(length(dd), 0.4 * (1.0 - h * 0.65));
+                if (tem > cobertura) { cobertura = tem; cel = c3; }
+            }
+            if (cobertura < 0.5) discard;
             albedo *= (0.55 + 0.6 * h) * (0.8 + 0.4 * h3(cel + 3.0));
             nr = relevo(nr, pr, vec3(1500.0, 120.0, 1500.0), 0.3);
             brilho = 0.35; aspereza = 0.4;
@@ -250,6 +273,23 @@ void main() {
     vec3 luz = mix(ambChao, ambCeu, hemi) * ao;
     // sol e lua (com sombra)
     float sombra = sombraEm(posMundo, n);
+#ifdef PERSONAGEM
+    if (usarSombraPerto > 0.5) {  // sombra de perto: 3 mm por texel (chapeu no rosto, braco no corpo)
+        vec4 pl2 = matLuzPerto * vec4(posMundo + n * 0.004, 1.0);
+        vec3 q2 = pl2.xyz / pl2.w * 0.5 + 0.5;
+        if (q2.x > 0.0 && q2.x < 1.0 && q2.y > 0.0 && q2.y < 1.0 && q2.z < 1.0) {
+            float giro2 = hash12(posMundo.xz * 91.7) * 6.2831;
+            float s2 = 0.0;
+            for (int i = 0; i < 10; i++) {
+                float a2 = float(i) * 2.39996 + giro2;
+                float r2 = sqrt((float(i) + 0.5) / 10.0) * 2.2;
+                float d2 = TEX(texSombraPerto, q2.xy + vec2(cos(a2), sin(a2)) * r2 * texelSombraPerto).r;
+                s2 += (q2.z - 0.00004 > d2) ? 0.0 : 1.0;
+            }
+            sombra = min(sombra, s2 / 10.0);
+        }
+    }
+#endif
     float ndl = dot(n, dirSol);
     float difSol = mix(max(ndl, 0.0), clamp((ndl + 0.45) / 1.45, 0.0, 1.0), sss);
     luz += corSol * difSol * mix(sombra, max(sombra, 0.35), sss * 0.5);

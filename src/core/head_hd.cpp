@@ -44,11 +44,11 @@ const Pt CURVA[] = {{1.555f, 25}, {1.585f, 22}, {1.612f, 18}, {1.632f, 14}, {1.6
 // largura do nariz
 const Pt NARIZ_L[] = {{1.650f, .012f}, {1.656f, .015f}, {1.662f, .017f}, {1.668f, .0145f}, {1.678f, .011f}, {1.690f, .0085f}, {1.709f, .0065f}};
 // cranio: raios lateral e frontal e centro em z
-const Pt CR_X[] = {{1.555f, .066f}, {1.575f, .064f}, {1.59f, .062f}, {1.61f, .064f}, {1.63f, .066f}, {1.66f, .070f}, {1.69f, .074f},
+const Pt CR_X[] = {{1.53f, .07f}, {1.555f, .066f}, {1.575f, .064f}, {1.59f, .062f}, {1.61f, .064f}, {1.63f, .066f}, {1.66f, .070f}, {1.69f, .074f},
                    {1.72f, .076f}, {1.745f, .075f}, {1.77f, .066f}, {1.79f, .045f}, {1.80f, .02f}};
-const Pt CR_Z[] = {{1.555f, .066f}, {1.575f, .068f}, {1.59f, .075f}, {1.61f, .082f}, {1.63f, .088f}, {1.66f, .094f}, {1.69f, .098f},
+const Pt CR_Z[] = {{1.53f, .066f}, {1.555f, .066f}, {1.575f, .068f}, {1.59f, .075f}, {1.61f, .082f}, {1.63f, .088f}, {1.66f, .094f}, {1.69f, .098f},
                    {1.72f, .100f}, {1.745f, .098f}, {1.77f, .086f}, {1.79f, .060f}, {1.80f, .03f}};
-const Pt CR_C[] = {{1.555f, .005f}, {1.575f, .0f}, {1.59f, -.005f}, {1.61f, -.01f}, {1.63f, -.012f}, {1.72f, -.012f}, {1.745f, -.014f}, {1.80f, -.016f}};
+const Pt CR_C[] = {{1.53f, .006f}, {1.555f, .005f}, {1.575f, .0f}, {1.59f, -.005f}, {1.61f, -.01f}, {1.63f, -.012f}, {1.72f, -.012f}, {1.745f, -.014f}, {1.80f, -.016f}};
 
 constexpr float OLHO_X = 0.0315f, OLHO_Y = 1.701f, OLHO_R = 0.0122f;
 constexpr float ALM_W = 0.0148f, ALM_H = 0.0058f;  // meia abertura do olho
@@ -138,7 +138,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
         if (y < 1.585f) {
             v.osso[0] = CABECA;
             v.osso[1] = PESCOCO;
-            v.peso = smoothstep(1.555f, 1.585f, y);
+            v.peso = smoothstep(1.53f, 1.585f, y);
         } else {
             v.osso[0] = v.osso[1] = CABECA;
             v.peso = 1;
@@ -148,7 +148,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
 
     // ---- aneis em y: denso no rosto (2,2 mm), ralo em cima e no pescoco ----
     std::vector<float> ys;
-    for (float y = 1.555f; y < 1.612f; y += 0.0055f) ys.push_back(y);
+    for (float y = 1.53f; y < 1.612f; y += 0.0055f) ys.push_back(y);
     for (float y = 1.612f; y < 1.732f; y += 0.0027f) ys.push_back(y);
     for (float y = 1.732f; y < 1.797f; y += 0.0055f) ys.push_back(y);
     ys.push_back(1.797f);
@@ -191,7 +191,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
             c = lerp(c, Rgb{c.r * 1.03f, c.g * 0.86f, c.b * 0.84f}, 0.6f * g(y, 1.667f, 0.008f) * g(x, 0, 0.012f) * (f > 0));  // ponta do nariz rosada
             c = lerp(c, Rgb{c.r * 1.02f, c.g * 0.88f, c.b * 0.86f}, 0.4f * g(y, 1.678f, 0.014f) * g(ax, 0.052f, 0.016f) * (f > 0));  // bochechas
             float corte = corteOlho(x, y) * b;
-            v.ao = 1.f - std::min(0.45f, corte * 30.f) - 0.15f * g(y, 1.655f, 0.003f) * g(ax, 0.009f, 0.006f);
+            v.ao = 1.f - std::min(0.15f, corte * 10.f) - 0.12f * g(y, 1.655f, 0.003f) * g(ax, 0.009f, 0.006f);
             float lab = (ax / 0.0265f) * (ax / 0.0265f) + ((y - 1.6315f) / 0.0072f) * ((y - 1.6315f) / 0.0072f);
             if (lab < 1.f && f > 0.3f) {
                 v.material = MAT_LABIO;
@@ -207,7 +207,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
             if (pel > 0.02f) {
                 v.pelos = pel;
                 v.compPelo = pb >= std::max(ps, pc) ? 0.005f : (ps >= pc ? 0.0025f : 0.004f);
-                c = lerp(c, vis.cabelo, 0.3f * pel);  // pele por baixo escurece (raiz dos pelos)
+                c = lerp(c, vis.cabelo, 0.3f * smoothstep(0.35f, 0.9f, pel));  // so onde o pelo e denso (sem manchas nas bordas)
             }
             v.cor = c;
             m.v.push_back(v);
