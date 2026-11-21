@@ -22,3 +22,10 @@
 - Ruling: cavalo com malha suavizada (~4,3 mil triângulos), pelo curto aveludado, crina e cauda com cascas de fios, olhos escuros úmidos, cascos e sela de couro, estribos de metal; teste do cavalo sobe para ≤9 mil.
 - Ruling: caçador completo (barba + equipamento) ~33 mil triângulos (teste ≤36 mil); só ele usa sempre o HD; benchmark Baixo segue no orçamento.
 - Ruling: brilho especular de cabelo/crina reduzido (0,4 → 0,15) — fazia uma faixa clara na crista lisa da crina.
+
+## Barba real (pedido: "essa barba tá horrível")
+- Ruling: cascas trocadas por cartões de pelo (hair cards, como em jogos AAA): fitas de ~3–6 mm com 9 fios desenhados no shader (afinam na ponta, raiz escura, ondulação, alguns grisalhos), nascendo de raízes espalhadas por ÁREA (densidade por m², cobertura ~2,6× na barba e 1,3× no cabelo) — por vértice formava colunas. Direção de crescimento por região (barba para baixo, bigode para baixo e para fora, sob o queixo para trás, sobrancelha para os lados, cabelo para trás); fios quase deitados e quase paralelos (barba penteada).
+- Ruling: luz de cabelo Kajiya-Kay (difusa e brilho ao longo do fio, com segundo brilho tingido); cartões não projetam sombra (seriam quadrados).
+- Ruling: rugas por pixel nas coordenadas do rosto (3 linhas na testa, pés de galinha, bolsas sob os olhos), poros maiores no nariz, folículos azulados sob a barba; abertura do olho reduzida para ~10 mm; barba desce pelo pescoço e vai ficando rala na bochecha.
+- Ruling: caçador completo agora ~26,8 mil triângulos; cavalo ~7,7 mil (crina e cauda em cartões longos). Proteção contra passar de 65 mil vértices (índices de 16 bits).
+- Bug corrigido: ponteiros para vértices invalidados quando a lista crescia (cartoesDePelo copia os 3 vértices do triângulo).

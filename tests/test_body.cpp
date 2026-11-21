@@ -178,17 +178,17 @@ TEST_CASE("HD AAA: materiais válidos e de todos os tipos") {
     v.equipamento = true;
     v.barba = true;
     auto m = corpoHumanoHD({}, v);
-    int cont[24] = {0};
+    int cont[25] = {0};
     for (auto& x : m.v) {
         int id = int(x.material + 0.5f);
         REQUIRE(id >= 10);
-        REQUIRE(id <= 23);
+        REQUIRE(id <= 24);
         REQUIRE(id != 17);
         REQUIRE(id != 19);
         cont[id]++;
     }
     for (float mt : {MAT_PELE, MAT_TECIDO, MAT_COURO, MAT_METAL, MAT_OLHO, MAT_FELTRO, MAT_LABIO}) CHECK_MESSAGE(cont[int(mt)] > 0, "material " << mt);
-    CHECK(cont[21] + cont[22] + cont[23] > 0);  // cascas de pelo
+    CHECK(cont[24] > 0);  // cartoes de pelo
 }
 TEST_CASE("HD AAA: dois globos oculares na frente do rosto") {
     auto m = corpoHumanoHD({}, Visual{});
@@ -241,30 +241,45 @@ TEST_CASE("rosto real: boca com 45-60 mm de largura") {
     CHECK(2 * xmax > 0.045f);
     CHECK(2 * xmax < 0.060f);
 }
-TEST_CASE("barba de verdade: cascas de pelo só com barba") {
+TEST_CASE("barba de verdade: cartões de pelo só com barba") {
     Visual com, sem;
     com.barba = true;
     sem.barba = false;
     auto contar = [](const MalhaPele& m) {
         int n = 0;
-        for (auto& v : m.v) if (v.material >= MAT_PELO && v.pos.y < 1.66f) n++;
+        for (auto& v : m.v) if (v.material == MAT_CARTAO && v.pos.y < 1.66f && v.pos.z > 0.0f) n++;
         return n;
     };
     int a = contar(corpoHumanoHD({}, com)), b = contar(corpoHumanoHD({}, sem));
-    CHECK(a > 400);
-    CHECK(b < a / 4);
+    CHECK(a > 1500);
+    CHECK(b < a / 6);
 }
-TEST_CASE("cascas de pelo ficam por fora da pele, no máximo 6 mm") {
+TEST_CASE("cartões: barba cresce para baixo, sobrancelha para os lados") {
+    Visual v;
+    v.barba = true;
+    auto m = corpoHumanoHD({}, v);
+    int barba = 0, barbaBaixo = 0, sob = 0, sobLado = 0;
+    for (auto& x : m.v) {
+        if (x.material != MAT_CARTAO) continue;
+        CHECK(len(x.tang) == doctest::Approx(1).epsilon(0.02));
+        CHECK(x.tv >= 0.f);
+        CHECK(x.tv <= 1.f);
+        CHECK((x.pelos == 0.f || x.pelos == 1.f));
+        if (x.pos.y < 1.63f && x.pos.z > 0.05f) { barba++; if (x.tang.y < -0.3f) barbaBaixo++; }
+        if (x.pos.y > 1.71f && x.pos.y < 1.725f && x.pos.z > 0.07f && std::abs(x.pos.x) > 0.025f) { sob++; if (std::abs(x.tang.x) > std::abs(x.tang.y)) sobLado++; }
+    }
+    REQUIRE(barba > 100);
+    REQUIRE(sob > 20);
+    CHECK(barbaBaixo > barba * 0.8f);
+    CHECK(sobLado > sob * 0.7f);
+}
+TEST_CASE("cartões saem da pele, no máximo 15 mm") {
     Visual v;
     v.barba = true;
     auto m = corpoHumanoHD({}, v);
     for (auto& x : m.v)
-        if (x.material >= MAT_PELO) {
-            CHECK(x.pelos > 0.f);
-            CHECK(x.compPelo <= 0.006f);
-        }
+        if (x.material == MAT_CARTAO) CHECK(x.compPelo <= 0.015f);
 }
-
 TEST_CASE("caçador completo (barba + equipamento) cabe no orçamento do HD") {
     Visual v;
     v.barba = true;

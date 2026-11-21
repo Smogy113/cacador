@@ -149,6 +149,8 @@ float sombraEm(vec3 p, vec3 n) {
 
 
 #ifdef PERSONAGEM
+VARY vec4 tanRep;   // cartao: direcao do fio + v; pele do rosto: coordenadas do rosto
+VARY vec3 tanMundo;
 VARY vec3 posRep;   // posicao de repouso (o detalhe acompanha o corpo)
 VARY vec3 nRep;
 VARY vec3 mc0;      // colunas da matriz que leva normais do repouso para o mundo
@@ -186,12 +188,30 @@ void main() {
 
     // parametros de material (mundo: tudo zero)
     float brilho = 0.0, aspereza = 1.0, sss = 0.0, veludo = 0.0, metalico = 0.0;
+    float kk = 0.0;               // cabelo (Kajiya-Kay)
+    vec3 Tcab = vec3(0.0, 1.0, 0.0);
 #ifdef PERSONAGEM
     float m = extra.y;
     if (m > 9.5) {
         vec3 nr = normalize(nRep);
         vec3 pr = posRep;
-        if (m > 19.5) {          // casca de pelo (barba, sobrancelha, cabelo, cilios): recorta em fios
+        if (m > 23.5) {          // cartao de pelo: ~7 fios por fita, finos na ponta, raiz escura
+            float u = cor.a, vv = tanRep.w;
+            float N = 9.0;
+            float fio = floor(u * N);
+            float dentro = fract(u * N);
+            vec3 sem = floor(posRep * 350.0);
+            float r = h3(sem + fio * 1.7);
+            float compr = 0.7 + 0.3 * r;
+            float onda = sin(vv * 7.0 + r * 6.2831) * 0.1;
+            float larg = 0.44 * (1.0 - 0.8 * smoothstep(0.0, compr, vv));
+            if (vv > compr || abs(dentro - 0.5 + onda) > larg) discard;
+            albedo *= mix(0.6, 0.95, vv / compr) * (0.8 + 0.35 * h3(sem + fio * 3.1));
+            if (h3(sem + fio * 5.3) > 0.988) albedo = mix(albedo, vec3(0.45, 0.43, 0.4), 0.6);  // fio grisalho
+            ao *= mix(0.55, 1.0, vv);
+            kk = 1.0;
+            Tcab = normalize(tanMundo);
+        } else if (m > 19.5) {   // casca de pelo (barba, sobrancelha, cabelo, cilios): recorta em fios
             float h = (m - 20.0) / 3.0;                    // altura da casca: 0..1
             // fios espalhados: duas grades giradas (angulos e escalas diferentes) no plano da pele,
             // sem regularidade -> sem moire
@@ -216,15 +236,35 @@ void main() {
             ao *= 0.6 + 0.4 * h;
         } else if (m > 17.5 && m < 18.5) {  // labios: marcas verticais, umidos
             nr = relevo(nr, pr, vec3(120.0, 900.0, 120.0), 0.07);
-            brilho = 0.45; aspereza = 0.34; sss = 1.0;
+            brilho = 0.3; aspereza = 0.4; sss = 1.0;
         } else if (m < 10.5) {   // pele: poros, sardas, manchas, barba por fazer, luz que atravessa
-            nr = relevo(nr, pr, vec3(420.0), 0.05);
-            nr = relevo(nr, pr, vec3(1100.0), 0.025);
+            nr = relevo(nr, pr, vec3(420.0), 0.08);
+            nr = relevo(nr, pr, vec3(1100.0), 0.04);
             albedo *= 0.94 + 0.1 * vnoise(pr * 35.0) + 0.05 * (vnoise(pr * 140.0) - 0.5);
             if (h3(floor(pr * 520.0)) > 0.993) albedo *= vec3(0.78, 0.7, 0.65);              // sardas
-            float barbaRala = step(0.5, h3(floor(pr * 2600.0))) * cor.a;
-            albedo *= 1.0 - 0.45 * barbaRala;                                                // pontinhos da barba
-            brilho = 0.32; aspereza = 0.45; sss = 1.0;
+            float folic = step(0.42, h3(floor(pr * 2400.0))) * cor.a;
+            albedo = mix(albedo, albedo * vec3(0.55, 0.55, 0.6), folic * 0.6);              // foliculos da barba (raiz azulada)
+            if (tanRep.z > 0.5) {
+                // rugas finas por pixel (coordenadas do rosto, em metros)
+                float fx = tanRep.x, fy = tanRep.y, ax = abs(fx);
+                float ry = 0.0;
+                for (int k = 0; k < 3; k++) {  // linhas da testa
+                    float d = fy - (1.729 + float(k) * 0.0082 + 0.002 * sin(fx * 90.0 + float(k)));
+                    ry += -d / 0.0009 * exp(-(d / 0.0009) * (d / 0.0009)) * smoothstep(0.05, 0.028, ax) * 0.5;
+                }
+                float dxo = ax - 0.047, dyo = fy - 1.7025;  // pes de galinha no canto do olho
+                float ro = sqrt(dxo * dxo + dyo * dyo);
+                float ango = atan(dyo, max(dxo, 0.0001));
+                float pg = sin(ango * 9.0) * smoothstep(0.003, 0.006, ro) * smoothstep(0.018, 0.01, ro) * step(0.0, dxo);
+                ry += pg * 0.35;
+                float db = fy - (1.6935 - 5.0 * (ax - 0.0315) * (ax - 0.0315));  // bolsa sob o olho
+                ry += -db / 0.0012 * exp(-(db / 0.0012) * (db / 0.0012)) * smoothstep(0.018, 0.008, abs(ax - 0.0315)) * 0.4;
+                nr = normalize(nr + vec3(0.0, ry * 0.18, 0.0));
+                float nariz = smoothstep(0.018, 0.008, ax) * smoothstep(1.65, 1.66, fy) * smoothstep(1.71, 1.70, fy);
+                nr = relevo(nr, pr, vec3(700.0), 0.05 * nariz);                              // poros abertos no nariz
+                albedo *= 1.0 + 0.05 * (vnoise(pr * 60.0) - 0.5);
+            }
+            brilho = 0.26; aspereza = 0.5; sss = 1.0;
         } else if (m < 11.5) {   // tecido: trama + fiapos
             nr = relevo(nr, pr, vec3(220.0), 0.12);
             float trama = sin(pr.x * 700.0 + pr.z * 700.0) * sin(pr.y * 700.0);
@@ -292,6 +332,10 @@ void main() {
 #endif
     float ndl = dot(n, dirSol);
     float difSol = mix(max(ndl, 0.0), clamp((ndl + 0.45) / 1.45, 0.0, 1.0), sss);
+    if (kk > 0.5) {  // cabelo: a luz depende da direcao do fio, nao da normal
+        float TL = dot(Tcab, dirSol);
+        difSol = mix(sqrt(max(1.0 - TL * TL, 0.0)) * 0.55, max(ndl, 0.0), 0.45) * smoothstep(-0.35, 0.2, ndl);
+    }
     luz += corSol * difSol * mix(sombra, max(sombra, 0.35), sss * 0.5);
     luz += corLua * max(dot(n, dirLua), 0.0) * sombra;
     // luz rebatida: o chao iluminado pelo sol devolve luz colorida para cima
@@ -333,6 +377,14 @@ void main() {
             float at = clamp(1.0 - (dd * dd) / (luzPos[i].w * luzPos[i].w), 0.0, 1.0);
             c += luzCor[i] * at * at * pow(max(dot(n, hl), 0.0), expo) * brilho * 0.15;
         }
+    }
+    if (kk > 0.5) {
+        vec3 Hk = normalize(dirSol + v);
+        float TH = dot(Tcab, Hk);
+        float s1 = pow(sqrt(max(1.0 - TH * TH, 0.0)), 110.0);
+        float TH2 = TH + 0.14;
+        float s2 = pow(sqrt(max(1.0 - TH2 * TH2, 0.0)), 32.0);
+        c += corSol * sombra * smoothstep(-0.2, 0.3, ndl) * (vec3(s1 * 0.05) + albedo * s2 * 0.22);
     }
     if (veludo > 0.0) c += (ambCeu * 0.5 + corSol * max(ndl, 0.0) * sombra * 0.15) * albedo * veludo * pow(1.0 - max(dot(n, v), 0.0), 2.0);
     if (sss > 0.0) c += corSol * sombra * vec3(0.55, 0.14, 0.07) * albedo * sss * (1.0 - abs(ndl)) * 0.45;
@@ -417,7 +469,7 @@ void main() {
 const char* FS_PROF = R"(
 VARY float tipo;
 void main() {
-    if (tipo > 1.5 && tipo < 2.5) discard;  // chamas nao fazem sombra
+    if ((tipo > 1.5 && tipo < 2.5) || tipo > 23.5) discard;  // chamas e cartoes de pelo nao fazem sombra
     FRAG = vec4(1.0);
 }
 )";
@@ -489,6 +541,7 @@ ATTR vec2 vertexTexCoord;
 ATTR vec2 vertexTexCoord2;
 ATTR vec3 vertexNormal;
 ATTR vec4 vertexColor;
+ATTR vec4 vertexTangent;
 uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 ossos[17];
@@ -502,6 +555,8 @@ mat4 matrizPele() {
 )"
 
 const char* VS_PELE = CORPO_SKIN R"(
+VARY vec4 tanRep;
+VARY vec3 tanMundo;
 VARY vec3 posRep;
 VARY vec3 nRep;
 VARY vec3 mc0;
@@ -522,6 +577,8 @@ void main() {
     extra = vertexTexCoord;
     posRep = vertexPosition;
     nRep = vertexNormal;
+    tanRep = vertexTangent;
+    tanMundo = mn * vertexTangent.xyz;
     mc0 = mn[0];
     mc1 = mn[1];
     mc2 = mn[2];
@@ -532,7 +589,7 @@ void main() {
 const char* VS_PROF_PELE = CORPO_SKIN R"(
 VARY float tipo;
 void main() {
-    tipo = 0.0;
+    tipo = vertexTexCoord.y;
     gl_Position = mvp * (matrizPele() * vec4(vertexPosition, 1.0));
 }
 )";

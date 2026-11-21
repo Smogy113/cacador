@@ -24,7 +24,8 @@ struct Visual {
 // Materiais dos personagens (vao para o shader; 0 = sem material especial)
 constexpr float MAT_PELE = 10, MAT_TECIDO = 11, MAT_COURO = 12, MAT_METAL = 13, MAT_CABELO = 14, MAT_OLHO = 15, MAT_FELTRO = 16;
 constexpr float MAT_LABIO = 18;
-constexpr float MAT_PELO = 20;  // 20..23: cascas de pelo (camada 0..3) de barba, sobrancelha e cabelo
+constexpr float MAT_PELO = 20;  // (antigo) cascas de pelo
+constexpr float MAT_CARTAO = 24;  // cartao de pelo: fita com fios (barba, sobrancelha, cabelo, crina)
 
 // Vertice com ate 2 ossos: osso[0] com "peso", osso[1] com 1 - peso.
 struct VertPele {
@@ -34,8 +35,11 @@ struct VertPele {
     uint8_t osso[2] = {0, 0};
     float peso = 1.f;
     float material = 0;  // MAT_*
-    float pelos = 0;      // densidade de pelos (barba, sobrancelha, cabelo) 0..1
+    float pelos = 0;      // densidade de pelos (barba, sobrancelha, cabelo) 0..1; no cartao: u (0 ou 1, atravessa a fita)
     float compPelo = 0;   // comprimento dos pelos (m)
+    Vec3f dirPelo{};      // direcao em que o pelo cresce (repouso); zero = sem pelo
+    Vec3f tang{};         // cartao: direcao do fio; pele do rosto: coordenadas do rosto (x, y, 1)
+    float tv = 0;         // cartao: v (0 na raiz, 1 na ponta)
 };
 
 struct MalhaPele {

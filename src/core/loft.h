@@ -25,7 +25,8 @@ struct Construtor {
     MalhaPele& m;
     float material = 0;       // material padrao do proximo tubo
     float materialVert = -1;  // o pintor pode trocar o material de um vertice (volta a -1 sozinho)
-    float pelosVert = 0, compVert = 0;  // o pintor pode marcar pelos (cascas) num vertice
+    float pelosVert = 0, compVert = 0;  // o pintor pode marcar pelos num vertice
+    Vec3f dirVert{};                     // e a direcao em que crescem
 
     // Liga uma sequencia de aneis. tampaIni/tampaFim fecham as pontas.
     void tubo(const std::vector<Anel>& an, int n, Vec3f refFrente, bool tampaIni, bool tampaFim, const Pintor& pintar,
@@ -56,10 +57,12 @@ struct Construtor {
                 v.ao = 1.f;
                 materialVert = -1;
                 pelosVert = compVert = 0;
+                dirVert = {};
                 v.cor = pintar(int(i), ang, p, la, fr, v.ao);
                 v.material = materialVert >= 0 ? materialVert : material;
                 v.pelos = pelosVert;
                 v.compPelo = compVert;
+                v.dirPelo = dirVert;
                 v.pos = p;
                 v.osso[0] = an[i].a;
                 v.osso[1] = an[i].b;
@@ -113,6 +116,8 @@ std::vector<Anel> suavizar(const std::vector<Anel>& an, int sub);
 void cabecaHD(Construtor& k, float s, float ms, const Visual& vis);
 // Cascas de pelo para todo vertice com pelos > 0 (chamar depois das normais)
 void cascasDePelo(MalhaPele& m, Rgb corPelo);
+// Cartoes de pelo (fitas com fios) para todo vertice com pelos e direcao de crescimento
+void cartoesDePelo(MalhaPele& m, Rgb corPelo);
 void normaisSuaves(MalhaPele& m);
 // Um material por triangulo: duplica vertices de borda (o shader nao pode interpolar o codigo do material).
 void separarMateriais(MalhaPele& m);

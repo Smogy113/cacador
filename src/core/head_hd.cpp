@@ -7,6 +7,7 @@
 #include <cmath>
 #include "core/body.h"
 #include "core/loft.h"
+#include "core/noise.h"
 
 namespace loft {
 namespace {
@@ -51,7 +52,7 @@ const Pt CR_Z[] = {{1.53f, .066f}, {1.555f, .066f}, {1.575f, .068f}, {1.59f, .07
 const Pt CR_C[] = {{1.53f, .006f}, {1.555f, .005f}, {1.575f, .0f}, {1.59f, -.005f}, {1.61f, -.01f}, {1.63f, -.012f}, {1.72f, -.012f}, {1.745f, -.014f}, {1.80f, -.016f}};
 
 constexpr float OLHO_X = 0.0315f, OLHO_Y = 1.701f, OLHO_R = 0.0122f;
-constexpr float ALM_W = 0.0148f, ALM_H = 0.0058f;  // meia abertura do olho
+constexpr float ALM_W = 0.0145f, ALM_H = 0.0049f;  // meia abertura do olho (abertura real ~10 mm)
 
 float distSeg2D(float x, float y, float ax, float ay, float bx, float by) {
     float vx = bx - ax, vy = by - ay;
@@ -93,13 +94,13 @@ float rosto(float x, float y) { return rostoSemCorte(x, y) - corteOlho(x, y); }
 float barba(float ax, float y, float f) {
     if (f < -0.35f) return 0.f;
     float bochecha = 1.700f - (0.072f - std::clamp(ax, 0.028f, 0.072f)) * 0.95f;  // linha alta da bochecha
-    float b = smoothstep(bochecha + 0.002f, bochecha - 0.004f, y);
+    float b = smoothstep(bochecha + 0.005f, bochecha - 0.011f, y);  // vai ficando rala, sem corte
     float boca = (ax / 0.03f) * (ax / 0.03f) + ((y - 1.6315f) / 0.0095f) * ((y - 1.6315f) / 0.0095f);
     b *= smoothstep(0.85f, 1.15f, boca);                                          // labios sem pelos
     float bigodeAlto = smoothstep(1.6525f, 1.649f, y) + smoothstep(0.03f, 0.05f, ax);  // nao sobe no nariz
     b *= std::min(1.f, bigodeAlto);
     b *= smoothstep(-0.35f, -0.1f, f);                                            // nao vai para a nuca
-    if (y < 1.585f) b *= smoothstep(1.555f, 1.575f, y);                          // termina no pescoco
+    if (y < 1.585f) b *= smoothstep(1.536f, 1.552f, y);                          // desce pelo pescoco ate a linha da barba
     return std::clamp(b, 0.f, 1.f);
 }
 
@@ -144,7 +145,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
             v.peso = 1;
         }
     };
-    Rgb labio{vis.pele.r * 0.86f, vis.pele.g * 0.7f, vis.pele.b * 0.68f};
+    Rgb labio{vis.pele.r * 0.84f, vis.pele.g * 0.69f, vis.pele.b * 0.67f};
 
     // ---- aneis em y: denso no rosto (2,2 mm), ralo em cima e no pescoco ----
     std::vector<float> ys;
@@ -185,6 +186,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
             VertPele v;
             v.pos = W({x, y, z});
             v.material = MAT_PELE;
+            v.tang = {x, y, 1.f};  // coordenadas do rosto: o shader desenha rugas e poros por pixel
             ossos(y, v);
             // ---- cor, pelos e oclusao ----
             Rgb c = vis.pele;
@@ -206,8 +208,19 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
             float pel = std::max(pb, std::max(ps, pc));
             if (pel > 0.02f) {
                 v.pelos = pel;
-                v.compPelo = pb >= std::max(ps, pc) ? 0.005f : (ps >= pc ? 0.0025f : 0.004f);
-                c = lerp(c, vis.cabelo, 0.3f * smoothstep(0.35f, 0.9f, pel));  // so onde o pelo e denso (sem manchas nas bordas)
+                float sx = x >= 0 ? 1.f : -1.f;
+                if (pb >= std::max(ps, pc)) {  // barba: cresce para baixo; bigode para baixo e para fora; embaixo do queixo para tras
+                    v.compPelo = (y > 1.642f && ax < 0.032f) ? 0.0095f : 0.0085f;
+                    v.dirPelo = (y > 1.642f && ax < 0.032f) ? normalizar({sx * 0.7f, -1.f, 0.15f})
+                              : (y < 1.592f ? normalizar({0, -0.35f, -1.f}) : normalizar({sx * 0.08f, -1.f, 0.2f}));
+                } else if (ps >= pc) {  // sobrancelha: para os lados (o comeco, perto do nariz, para cima)
+                    v.compPelo = 0.0065f;
+                    v.dirPelo = ax < 0.019f ? normalizar({sx * 0.3f, 1.f, 0.15f}) : normalizar({sx * 1.f, 0.22f, 0.1f});
+                } else {  // cabelo: para tras e para baixo
+                    v.compPelo = 0.0075f;
+                    v.dirPelo = normalizar({sx * 0.15f, -0.5f, -1.f});
+                }
+                c = lerp(c, vis.cabelo * 0.8f, 0.7f * smoothstep(0.3f, 0.85f, pel));  // raiz escura sob pelo denso
             }
             v.cor = c;
             m.v.push_back(v);
@@ -307,8 +320,17 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
         }
         faixa(cima, MAT_PELE, vis.pele * 0.97f, 0, 0, 0.7f);
         faixa(baixo, MAT_PELE, vis.pele * 0.97f, 0, 0, 0.75f);
-        faixa(cil, MAT_PELO + 3.f, vis.cabelo * 0.6f, 1.f, 0.0015f, 0.8f);
-        faixa(cilB, MAT_PELO + 3.f, vis.cabelo * 0.6f, 0.7f, 0.0015f, 0.8f);
+        size_t c0 = m.v.size();
+        faixa(cil, MAT_CARTAO, vis.cabelo * 0.45f, 1.f, 0.006f, 0.8f);
+        faixa(cilB, MAT_CARTAO, vis.cabelo * 0.45f, 1.f, 0.003f, 0.8f);
+        // cilios: u ao longo da palpebra (muitos fios), v da raiz a ponta
+        for (size_t q = c0; q < m.v.size(); q++) {
+            size_t local = (q - c0) % size_t(2 * (M + 1));
+            int linha = int(local / (M + 1)), col = int(local % (M + 1));
+            m.v[q].pelos = (col % 2) ? 1.f : 0.f;
+            m.v[q].tv = float(linha);
+            m.v[q].tang = {0, (q - c0) < size_t(2 * (M + 1)) ? 1.f : -1.f, 0};
+        }
     }
 
     // ---- orelhas: aba (helix) em volta de uma concha ----
@@ -328,6 +350,77 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
         std::vector<Anel> concha = {Anel{W({sx * xr, yc - 0.001f, zc0}), 0.016f * s, 0.026f * s, CABECA, CABECA, 1},
                                     Anel{W({sx * (xr + 0.0075f), yc, zc0 - 0.002f}), 0.012f * s, 0.021f * s, CABECA, CABECA, 1}};
         k.tubo(concha, 12, {0, 1, 0}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float& ao) -> Rgb { ao = 0.7f; return vis.pele * 0.92f; }, 0.f, 0.f);
+    }
+}
+
+void cartoesDePelo(MalhaPele& m, Rgb corPelo) {
+    // Raizes espalhadas por AREA (nao por vertice): em cada triangulo com pelo sorteia pontos com
+    // densidade suficiente para cobrir a pele ~3x. Cada raiz vira uma fita com ~9 fios (desenhados no shader),
+    // inclinada no sentido do crescimento, quase deitada sobre a pele.
+    size_t nTri = m.idx.size();
+    uint32_t h = 12345u;
+    auto r01 = [&]() { h = hash32(h + 0x9e3779b9u); return (h & 0xffffff) / 16777215.f; };
+    for (size_t t = 0; t < nTri; t += 3) {
+        // copias (m.v cresce dentro do laco e realoca: ponteiros ficariam invalidos)
+        const VertPele tv0 = m.v[m.idx[t]], tv1 = m.v[m.idx[t + 1]], tv2 = m.v[m.idx[t + 2]];
+        const VertPele* tv[3] = {&tv0, &tv1, &tv2};
+        bool ok = true;
+        float pel = 0;
+        for (auto* q : tv) {
+            if (q->material >= MAT_PELO || len(q->dirPelo) < 0.5f) ok = false;
+            pel += q->pelos / 3.f;
+        }
+        if (!ok || pel < 0.05f) continue;
+        float area = 0.5f * len(cross(tv[1]->pos - tv[0]->pos, tv[2]->pos - tv[0]->pos));
+        float L0 = (tv[0]->compPelo + tv[1]->compPelo + tv[2]->compPelo) / 3.f;
+        float w0 = std::clamp(L0 * 0.6f, 0.0025f, 0.006f);
+        bool cabelo = tv[0]->dirPelo.z < -0.6f;           // cabelo (cresce para tras): cobertura menor
+        float esperado = area * pel * (cabelo ? 1.3f : 2.6f) / (w0 * L0);
+        int n = int(esperado);
+        if (r01() < esperado - n) n++;
+        for (int k = 0; k < n; k++) {
+            if (m.v.size() + 4 >= 65000) return;  // limite dos indices de 16 bits
+            float a = r01(), b = r01();
+            if (a + b > 1) { a = 1 - a; b = 1 - b; }
+            float bc[3] = {1 - a - b, a, b};
+            int maior = bc[0] > bc[1] ? (bc[0] > bc[2] ? 0 : 2) : (bc[1] > bc[2] ? 1 : 2);
+            VertPele raiz = *tv[maior];
+            raiz.pos = tv[0]->pos * bc[0] + tv[1]->pos * bc[1] + tv[2]->pos * bc[2];
+            Vec3f n3 = normalizar(tv[0]->normal * bc[0] + tv[1]->normal * bc[1] + tv[2]->normal * bc[2]);
+            Vec3f dir = tv[0]->dirPelo * bc[0] + tv[1]->dirPelo * bc[1] + tv[2]->dirPelo * bc[2];
+            float L = (tv[0]->compPelo * bc[0] + tv[1]->compPelo * bc[1] + tv[2]->compPelo * bc[2]) * (0.75f + 0.5f * r01());
+            Vec3f d = dir - n3 * dot(dir, n3);
+            if (len(d) < 1e-4f) continue;
+            d = normalizar(d);
+            float giro = (r01() - 0.5f) * 0.32f;  // fios quase paralelos (barba penteada)
+            Vec3f lado0 = normalizar(cross(n3, d));
+            Vec3f dd = normalizar(d * std::cos(giro) + lado0 * std::sin(giro));
+            Vec3f lado = normalizar(cross(n3, dd));
+            float w = std::clamp(L * 0.6f, 0.0025f, 0.006f);
+            float incl = 0.12f + 0.2f * r01();  // quanto o fio levanta da pele (quase deitado)
+            Vec3f eixo = normalizar(dd * std::cos(incl) + n3 * std::sin(incl));
+            Vec3f base = raiz.pos + n3 * 0.0002f;
+            Vec3f ponta = base + eixo * L;
+            const Vec3f pos[4] = {base - lado * (w * 0.5f), base + lado * (w * 0.5f), ponta + lado * (w * 0.4f), ponta - lado * (w * 0.4f)};
+            const float us[4] = {0, 1, 1, 0}, vs[4] = {0, 0, 1, 1};
+            uint16_t id0 = uint16_t(m.v.size());
+            for (int q = 0; q < 4; q++) {
+                VertPele c = raiz;
+                c.pos = pos[q];
+                c.normal = n3;  // luz como a da pele de baixo (truque padrao de cartoes de cabelo)
+                c.material = MAT_CARTAO;
+                c.cor = corPelo;
+                c.pelos = us[q];
+                c.tv = vs[q];
+                c.tang = eixo;
+                c.compPelo = L;
+                c.dirPelo = {};
+                m.v.push_back(c);
+            }
+            Vec3f gn = cross(pos[1] - pos[0], pos[2] - pos[0]);
+            if (dot(gn, n3) >= 0) m.idx.insert(m.idx.end(), {id0, uint16_t(id0 + 1), uint16_t(id0 + 2), id0, uint16_t(id0 + 2), uint16_t(id0 + 3)});
+            else m.idx.insert(m.idx.end(), {id0, uint16_t(id0 + 2), uint16_t(id0 + 1), id0, uint16_t(id0 + 3), uint16_t(id0 + 2)});
+        }
     }
 }
 

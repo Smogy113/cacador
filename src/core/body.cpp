@@ -274,7 +274,8 @@ MalhaPele corpoCavalo(const VisualCavalo& vc) {
         if (std::sin(ang) < -0.6f) {  // crina no alto do pescoco: fios de 6 mm
             k.materialVert = MAT_CABELO;
             k.pelosVert = 1.f;
-            k.compVert = 0.006f;
+            k.compVert = 0.08f;  // crina: fios longos caindo pelos lados do pescoco
+            k.dirVert = normalizar({std::cos(ang) >= 0 ? 0.6f : -0.6f, -1.f, 0.1f});
             return vc.crina;
         }
         return pelo;
@@ -318,7 +319,8 @@ MalhaPele corpoCavalo(const VisualCavalo& vc) {
     k.material = MAT_CABELO;
     k.tubo(suavizar(ca, 2), 10, {0, 0, 1}, false, true, [&](int, float, Vec3f&, Vec3f, Vec3f, float&) -> Rgb {
         k.pelosVert = 1.f;
-        k.compVert = 0.006f;
+        k.compVert = 0.14f;  // cauda
+        k.dirVert = normalizar({0, -1.f, -0.35f});
         return vc.crina;
     }, 0, 0.05f);
     k.material = MAT_FELTRO;
@@ -379,6 +381,6 @@ MalhaPele corpoCavalo(const VisualCavalo& vc) {
 
     normaisSuaves(m);
     separarMateriais(m);
-    cascasDePelo(m, vc.crina);
+    cartoesDePelo(m, vc.crina);
     return m;
 }
