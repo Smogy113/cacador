@@ -51,6 +51,7 @@ void MeshBuilder::addOclusor(Vec3f mn, Vec3f mx) {
 
 void MeshBuilder::caixa(Vec3f centro, Vec3f t, float rotY, Rgb cor) {
     Vec3f h = t * 0.5f;
+    if (formas_) formas_->push_back({TipoForma::Caixa, centro, h, rotY, cor});
     Vec3f mn{1e9f, 1e9f, 1e9f}, mx{-1e9f, -1e9f, -1e9f};
     for (int k = 0; k < 8; k++) {
         Vec3f p = centro + girarY({(k & 1) ? h.x : -h.x, (k & 2) ? h.y : -h.y, (k & 4) ? h.z : -h.z}, rotY);
@@ -71,6 +72,7 @@ void MeshBuilder::caixa(Vec3f centro, Vec3f t, float rotY, Rgb cor) {
 }
 
 void MeshBuilder::cilindro(Vec3f base, float r, float alt, int lados, Rgb cor) {
+    if (formas_) formas_->push_back({TipoForma::Cilindro, base + Vec3f{0, alt * 0.5f, 0}, {r, alt * 0.5f, r}, 0.f, cor});
     addOclusor({base.x - r * .7f, base.y, base.z - r * .7f}, {base.x + r * .7f, base.y + alt, base.z + r * .7f});
     Vec3f topo = base + Vec3f{0, alt, 0};
     for (int i = 0; i < lados; i++) {
@@ -97,6 +99,7 @@ void MeshBuilder::cone(Vec3f base, float r, float alt, int lados, Rgb cor) {
 
 void MeshBuilder::prisma(Vec3f centro, Vec3f t, float rotY, Rgb cor) {
     Vec3f h = t * 0.5f;
+    if (formas_) formas_->push_back({TipoForma::Prisma, centro, h, rotY, cor});
     auto W = [&](Vec3f p) { return centro + girarY(p, rotY); };
     addOclusor(centro - Vec3f{std::max(h.x, h.z), h.y, std::max(h.x, h.z)} * 0.8f, centro + Vec3f{std::max(h.x, h.z) * .8f, 0, std::max(h.x, h.z) * .8f});
     Vec3f r0{-h.x, h.y, 0}, r1{h.x, h.y, 0};

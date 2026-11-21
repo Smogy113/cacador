@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <vector>
+#include "core/formas.h"
 #include "core/math.h"
 
 class Terreno;
@@ -28,6 +29,8 @@ public:
     // AO barata: escurece de baixo (y0) para cima (y1). Usada em arvores.
     void aoVertical(float y0, float y1);
     void tipo(float t) { tipoAtual_ = t; }
+    // passa a anexar em "destino" a forma exata de cada caixa/prisma/cilindro (null = nao registra)
+    void registrar(std::vector<FormaCena>* destino) { formas_ = destino; }
     void anexar(const MeshBuilder& outro);
     void limpar() { v_.clear(); dono_.clear(); oclusores_.clear(); donoAtual_ = -1; }
     const std::vector<Vert>& verts() const { return v_; }
@@ -44,6 +47,7 @@ private:
     std::vector<Vert> v_;
     int donoAtual_ = -1;
     float tipoAtual_ = TIPO_NORMAL;
+    std::vector<FormaCena>* formas_ = nullptr;
     std::vector<int> dono_;  // oclusor que gerou cada vertice (nao se auto-oclui)
     std::vector<Caixa> oclusores_;
 };
