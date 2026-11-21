@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include "game/ui.h"
+#include "render/estilo.h"
+#include "versao.h"
 #include "rlgl.h"
 #include "core/anim.h"
 #include "core/bussola.h"
@@ -12,6 +14,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     terrenoR_ = std::make_unique<TerrenoRender>(*terreno_);
     cenario_.construir(mapa_, *terreno_, col_, 1337);
     luz_.carregar(op.nivel);
+    estilo::carregar();
     grama_.iniciar(*terreno_, col_);
     nav_ = std::make_unique<Navegador>(*terreno_, &mapa_);
     mapaTela_.carregar(*terreno_, mapa_);
@@ -147,7 +150,7 @@ void Jogo::desenharInterface() {
     desenharAvisos(mapa_.erros, tempoTotal_);
     if (quadroAberto_ >= 0) {
         int aceito = cacada_.ativa() && cacada_.quadro() == quadroAberto_ ? cacada_.indiceCartaz() : -1;
-        desenharQuadro(cartazes_[quadroAberto_], cartazSel_, semAcentos(nomeLegivel(cenario_.quadros[quadroAberto_].lugar)), aceito);
+        desenharQuadro(cartazes_[quadroAberto_], cartazSel_, nomeLegivel(cenario_.quadros[quadroAberto_].lugar), aceito);
         return;
     }
     if (morteT_ >= 0) {
@@ -163,7 +166,7 @@ void Jogo::desenharInterface() {
         } else {
             desenharBussola(rig_.yaw, false, 0, 0);
         }
-        desenharHud(vida_.fracao(), arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_);
+        desenharHud(vida_.fracao(), arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_, MapaTela::centroMini(), MapaTela::RAIO_MINI);
         desenharMensagem(mensagem_, mensagemT_);
         if (!mapaAberto_)
             mapaTela_.desenharMini(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rig_.yaw, rota_,
@@ -171,34 +174,20 @@ void Jogo::desenharInterface() {
         else
             mapaTela_.desenharCheio(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rota_, cacada_.ativa(),
                                     objetivoRota_);
-        if (cacada_.podeAmarrar(jogador_.pos)) desenharDica(amarrarT_ > 0 ? "Amarrando..." : "Segure E  -  Amarrar");
-        else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E  -  Entregar ao xerife");
-        else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E  -  Puxar pela corda");
-        else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos)) desenharDica("Traga um cavalo: monte perto do corpo para levar");
-        else if (quadroPerto_ >= 0) desenharDica("E  -  Ver recompensas");
-        else if (cavaloPerto_ >= 0) desenharDica("E  -  Montar");
+        if (cacada_.podeAmarrar(jogador_.pos)) desenharDica(amarrarT_ > 0 ? "" : "Segure E", amarrarT_ > 0 ? "Amarrando..." : "amarrar");
+        else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E", "entregar ao xerife");
+        else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E", "puxar pela corda");
+        else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos)) desenharDica("", "Traga um cavalo: monte perto do corpo para levar");
+        else if (quadroPerto_ >= 0) desenharDica("E", "ver recompensas");
+        else if (cavaloPerto_ >= 0) desenharDica("E", "montar");
         return;
     }
-    int w = GetScreenWidth(), h = GetScreenHeight();
-    DrawRectangle(0, 0, w, h, {0, 0, 0, 140});
-    const char* t1 = "PAUSADO";
-    const char* t2 = "Clique para continuar   -   Q para sair";
-    DrawText(t1, w / 2 - MeasureText(t1, 48) / 2, h / 2 - 50, 48, {235, 220, 190, 255});
-    DrawText(t2, w / 2 - MeasureText(t2, 22) / 2, h / 2 + 10, 22, {220, 210, 190, 255});
-    const char* nomes[] = {"1 - Baixo", "2 - Medio", "3 - Alto"};
-    const char* t3 = "Qualidade grafica:";
-    DrawText(t3, w / 2 - MeasureText(t3, 22) / 2, h / 2 + 70, 22, {220, 210, 190, 255});
-    for (int k = 0; k < 3; k++) {
-        bool atual = int(luz_.nivel()) == k;
-        Color c = atual ? Color{255, 200, 110, 255} : Color{190, 180, 165, 255};
-        int x = w / 2 - 210 + k * 150;
-        if (atual) DrawRectangleLines(x - 8, h / 2 + 104, 136, 34, c);
-        DrawText(nomes[k], x, h / 2 + 110, 22, c);
-    }
+    desenharPausa(int(luz_.nivel()), VERSAO_JOGO);
 }
 
 Jogo::~Jogo() {
     descarregarCombate();
+    estilo::descarregar();
     mapaTela_.descarregar();
     grama_.descarregar();
     sons_.descarregar();

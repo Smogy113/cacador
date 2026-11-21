@@ -4,6 +4,7 @@
 #include "core/bussola.h"
 #include "core/noise.h"
 #include "raylib.h"
+#include "render/estilo.h"
 
 std::string semAcentos(const std::string& s) {
     static const struct { const char* de; const char* para; } T[] = {
@@ -19,10 +20,9 @@ std::string semAcentos(const std::string& s) {
     return r;
 }
 
-static void textoCentro(const std::string& t, int cx, int y, int tam, Color c) {
-    std::string s = semAcentos(t);
-    DrawText(s.c_str(), cx - MeasureText(s.c_str(), tam) / 2, y, tam, c);
-}
+using namespace estilo;
+
+static void textoCentro(const std::string& t, int cx, int y, int tam, Color c) { texto(Fonte::Texto, t, float(cx), float(y), float(tam), c, CENTRO, false); }
 
 static void retrato(uint32_t semente, int x, int y, int w, int h) {
     uint32_t r = semente;
@@ -59,160 +59,174 @@ static void retrato(uint32_t semente, int x, int y, int w, int h) {
 
 void desenharQuadro(const std::vector<Cartaz>& cs, int sel, const std::string& lugar, int aceito) {
     int W = GetScreenWidth(), H = GetScreenHeight();
-    DrawRectangle(0, 0, W, H, {0, 0, 0, 150});
-    int pw = std::min(W - 40, 1100), ph = std::min(H - 40, 600);
-    int px = (W - pw) / 2, py = (H - ph) / 2;
-    DrawRectangle(px, py, pw, ph, {92, 64, 40, 255});            // madeira do quadro
-    DrawRectangleLinesEx({float(px), float(py), float(pw), float(ph)}, 8, {60, 40, 25, 255});
-    textoCentro("PROCURADOS  -  " + std::string("Xerife de ") + lugar, W / 2, py + 22, 30, {245, 225, 185, 255});
+    DrawRectangleGradientV(0, 0, W, H, Color{10, 7, 5, 200}, Color{10, 7, 5, 235});
+    float cx = W * 0.5f;
+    texto(Fonte::Titulo, "Procurados", cx, H * 0.06f, 46, MARFIM, CENTRO);
+    texto(Fonte::Texto, "Xerife de " + lugar, cx, H * 0.06f + 50, 24, MARFIM_ESC, CENTRO);
+    linha(cx, H * 0.06f + 84, 520, OURO);
     if (cs.empty()) return;
     int n = int(cs.size());
-    int cw = (pw - 80) / 3, ch = ph - 150;
+    float cw = std::min(330.f, W * 0.26f), ch = std::min(H * 0.66f, 520.f), y0 = H * 0.06f + 104;
     for (int k = -1; k <= 1; k++) {
         int idx = ((sel + k) % n + n) % n;
         const Cartaz& c = cs[idx];
-        int cx = px + 40 + (k + 1) * cw + 10, cy = py + 70 + (k == 0 ? 0 : 14);
-        int w = cw - 20, h = ch - (k == 0 ? 0 : 28);
-        Color papel = k == 0 ? Color{236, 222, 184, 255} : Color{200, 186, 150, 255};
-        DrawRectangle(cx + 6, cy + 6, w, h, {0, 0, 0, 90});
-        DrawRectangle(cx, cy, w, h, papel);
-        DrawCircle(cx + w / 2, cy + 8, 5, {90, 90, 95, 255});  // prego
-        Color tinta{70, 45, 28, 255};
-        int mx = cx + w / 2;
-        textoCentro("PROCURADO", mx, cy + 18, 30, {130, 30, 22, 255});
-        int rw = std::min(w - 60, 170), rh = int(rw * 0.95f);
-        retrato(c.rosto, mx - rw / 2, cy + 56, rw, rh);
-        DrawRectangleLines(mx - rw / 2, cy + 56, rw, rh, tinta);
-        int y = cy + 64 + rh;
-        textoCentro(c.nome, mx, y, 22, tinta);
-        textoCentro("\"" + c.apelido + "\"", mx, y + 26, 18, tinta);
-        textoCentro(c.crime, mx, y + 52, 18, {110, 40, 30, 255});
+        float escala = k == 0 ? 1.f : 0.86f;
+        float w = cw * escala, h = ch * escala;
+        float x = cx + k * (cw + 26) - w / 2, y = y0 + (k == 0 ? 0 : ch * 0.07f);
+        // papel envelhecido com borda escura e sombra
+        DrawRectangle(int(x + 8), int(y + 10), int(w), int(h), Color{0, 0, 0, 110});
+        Color papel = k == 0 ? Color{228, 210, 168, 255} : Color{176, 160, 124, 255};
+        DrawRectangle(int(x), int(y), int(w), int(h), papel);
+        DrawRectangleGradientV(int(x), int(y), int(w), int(h * 0.25f), Color{120, 90, 50, 60}, Color{120, 90, 50, 0});
+        DrawRectangleGradientV(int(x), int(y + h * 0.75f), int(w), int(h * 0.25f), Color{120, 90, 50, 0}, Color{120, 90, 50, 70});
+        DrawRectangleLinesEx({x + 6, y + 6, w - 12, h - 12}, 1.5f, comAlfa(TINTA, 0.6f));
+        DrawCircle(int(x + w / 2), int(y + 10), 4.5f * escala, Color{70, 70, 74, 255});  // prego
+        float mx = x + w / 2, e = escala;
+        texto(Fonte::Titulo, "PROCURADO", mx, y + 20 * e, 34 * e, SANGUE, CENTRO, false);
+        texto(Fonte::Forte, "vivo ou morto", mx, y + 58 * e, 17 * e, comAlfa(TINTA, 0.8f), CENTRO, false);
+        float rw = std::min(w - 70, 170.f * e), rh = rw * 0.95f;
+        retrato(c.rosto, int(mx - rw / 2), int(y + 84 * e), int(rw), int(rh));
+        DrawRectangleLinesEx({mx - rw / 2, y + 84 * e, rw, rh}, 2, TINTA);
+        float ty = y + 92 * e + rh;
+        texto(Fonte::Forte, c.nome, mx, ty, 25 * e, TINTA, CENTRO, false);
+        texto(Fonte::Texto, "\"" + c.apelido + "\"", mx, ty + 28 * e, 20 * e, comAlfa(TINTA, 0.85f), CENTRO, false);
+        texto(Fonte::Texto, c.crime, mx, ty + 54 * e, 19 * e, Color{120, 34, 24, 255}, CENTRO, false);
         char buf[64];
-        std::snprintf(buf, sizeof buf, "VIVO: %d pratas", c.recompensaVivo);
-        textoCentro(buf, mx, y + 84, 20, {40, 90, 40, 255});
-        std::snprintf(buf, sizeof buf, "MORTO: %d pratas", c.recompensaMorto);
-        textoCentro(buf, mx, y + 108, 18, {110, 40, 30, 255});
-        textoCentro("Visto por ultimo: " + c.ultimoVisto, mx, y + 136, 16, tinta);
-        textoCentro(c.pista, mx, y + 158, 16, {110, 40, 30, 255});
-        if (idx == aceito) {  // carimbo
-            DrawRectangleLinesEx({float(mx - 80), float(cy + 120), 160.f, 44.f}, 4, {150, 30, 25, 220});
-            textoCentro("ACEITO", mx, cy + 128, 30, {150, 30, 25, 230});
+        std::snprintf(buf, sizeof buf, "%d pratas vivo", c.recompensaVivo);
+        texto(Fonte::Titulo, buf, mx, ty + 84 * e, 22 * e, Color{40, 70, 36, 255}, CENTRO, false);
+        std::snprintf(buf, sizeof buf, "%d pratas morto", c.recompensaMorto);
+        texto(Fonte::Texto, buf, mx, ty + 112 * e, 18 * e, Color{110, 36, 26, 255}, CENTRO, false);
+        texto(Fonte::Texto, "Visto por último: " + c.ultimoVisto, mx, ty + 138 * e, 17 * e, comAlfa(TINTA, 0.85f), CENTRO, false);
+        texto(Fonte::Texto, c.pista, mx, ty + 160 * e, 16 * e, comAlfa(SANGUE, 0.9f), CENTRO, false);
+        if (idx == aceito) {  // carimbo torto
+            Rectangle r{mx - 80, y + h * 0.38f, 160, 46};
+            DrawRectangleLinesEx(r, 3, comAlfa(SANGUE, 0.85f));
+            texto(Fonte::Titulo, "ACEITO", mx, r.y + 7, 30, comAlfa(SANGUE, 0.9f), CENTRO, false);
         }
     }
-    char buf[96];
-    std::snprintf(buf, sizeof buf, "<  %d / %d  >      Setas: trocar      Enter: aceitar      E: fechar", sel + 1, n);
-    textoCentro(buf, W / 2, py + ph - 42, 20, {240, 220, 180, 255});
+    // rodape: teclas
+    float fy = y0 + ch + 24, x = cx - 300;
+    char cont[32];
+    std::snprintf(cont, sizeof cont, "%d de %d", sel + 1, n);
+    x += tecla("<  >", x, fy, 24) + 10;
+    texto(Fonte::Texto, "trocar", x, fy - 1, 24, MARFIM);
+    x += largura(Fonte::Texto, "trocar", 24) + 34;
+    x += tecla("Enter", x, fy, 24) + 10;
+    texto(Fonte::Texto, "aceitar", x, fy - 1, 24, MARFIM);
+    x += largura(Fonte::Texto, "aceitar", 24) + 34;
+    x += tecla("E", x, fy, 24) + 10;
+    texto(Fonte::Texto, "fechar", x, fy - 1, 24, MARFIM);
+    texto(Fonte::Texto, cont, cx + 300, fy - 1, 22, MARFIM_ESC, DIR);
 }
 
 void desenharAvisos(const std::vector<ErroMapa>& erros, float t) {
     if (erros.empty() || t > 10.f) return;
-    int y = 40;
-    DrawRectangle(10, y - 6, 760, 30 + 22 * int(std::min<size_t>(erros.size(), 6)), {90, 20, 15, 200});
-    DrawText("Problemas no arquivo do mapa (o jogo continua sem essas linhas):", 20, y, 18, {255, 225, 200, 255});
+    float y = 40;
+    faixa(400, y - 8, 900, 34 + 24 * float(std::min<size_t>(erros.size(), 6)), 1.f);
+    texto(Fonte::Forte, "Problemas no arquivo do mapa (o jogo continua sem essas linhas):", 30, y, 20, Color{255, 210, 180, 255});
     for (size_t k = 0; k < erros.size() && k < 6; k++) {
         char buf[300];
-        std::snprintf(buf, sizeof buf, "linha %d: %s", erros[k].linha, semAcentos(erros[k].msg).c_str());
-        DrawText(buf, 30, y + 24 + int(k) * 22, 18, {255, 235, 215, 255});
+        std::snprintf(buf, sizeof buf, "linha %d: %s", erros[k].linha, erros[k].msg.c_str());
+        texto(Fonte::Texto, buf, 40, y + 26 + float(k) * 24, 19, MARFIM);
     }
 }
 
-void desenharDica(const char* t) {
-    int w = GetScreenWidth(), h = GetScreenHeight();
-    int tw = MeasureText(t, 22);
-    DrawRectangle(w / 2 - tw / 2 - 14, h - 92, tw + 28, 38, {20, 16, 12, 170});
-    DrawText(t, w / 2 - tw / 2, h - 84, 22, {240, 225, 195, 255});
+void desenharDica(const char* t, const std::string& acao) {
+    float W = float(GetScreenWidth()), H = float(GetScreenHeight()), tam = 24;
+    float wt = (t && *t) ? std::max(tam * 1.1f, largura(Fonte::Forte, t, tam * 0.8f) + tam * 0.6f) + 12 : 0;
+    float w = wt + largura(Fonte::Texto, acao, tam), x = W / 2 - w / 2, y = H - 92;
+    faixa(W / 2, y - 10, w + 220, 50, 0.8f);
+    if (wt > 0) tecla(t, x, y, tam);
+    texto(Fonte::Texto, acao, x + wt, y - 1, tam, MARFIM);
 }
 
 // ---------------- HUD do tiroteio ----------------
-void desenharHud(float vida01, int balas, bool recarregando, int dinheiro, bool mirando, float marca, bool matou) {
-    int H = GetScreenHeight(), W = GetScreenWidth();
-    int x = 24, y = H - 92;
-    DrawRectangle(x - 10, y - 10, 270, 82, {0, 0, 0, 110});
-    // vida
-    DrawRectangle(x, y, 240, 14, {40, 20, 18, 220});
-    Color cv = vida01 < 0.35f ? Color{220, 60, 45, 255} : Color{200, 70, 55, 255};
-    DrawRectangle(x, y, int(240 * std::clamp(vida01, 0.f, 1.f)), 14, cv);
-    DrawRectangleLines(x, y, 240, 14, {235, 215, 180, 200});
-    // balas
+void desenharHud(float vida01, int balas, bool recarregando, int dinheiro, bool mirando, float marca, bool matou, Vector2 mini, float raio) {
+    int W = GetScreenWidth(), H = GetScreenHeight();
+    // vida: arco no lado esquerdo do minimapa
+    float ini = 120.f, fim = 240.f, r0 = raio + 9, r1 = raio + 15;
+    DrawRing(mini, r0, r1, ini, fim, 48, Color{20, 14, 10, 170});
+    Color cv = vida01 < 0.35f ? SANGUE : MARFIM;
+    DrawRing(mini, r0 + 1, r1 - 1, fim - (fim - ini) * std::clamp(vida01, 0.f, 1.f), fim, 48, cv);
+    // balas: cartuchos acima do minimapa
+    float bx = mini.x - raio + 6, by = mini.y - raio - 40;
     for (int k = 0; k < 6; k++) {
-        Color c = k < balas ? Color{220, 190, 110, 255} : Color{90, 80, 65, 160};
-        DrawRectangle(x + k * 16, y + 24, 9, 20, c);
-        DrawCircle(x + k * 16 + 4, y + 24, 4.5f, c);
+        Color c = k < balas ? OURO : Color{60, 50, 40, 180};
+        Rectangle cart{bx + k * 14.f, by, 8, 22};
+        DrawRectangleRounded({cart.x, cart.y + 7, cart.width, 15}, 0.2f, 4, c);
+        DrawRectangleRounded({cart.x + 1, cart.y, cart.width - 2, 9}, 0.9f, 6, k < balas ? Color{176, 132, 80, 255} : Color{50, 42, 34, 180});
     }
-    if (recarregando) DrawText("recarregando", x + 104, y + 28, 16, {235, 215, 180, 230});
+    if (recarregando) texto(Fonte::Texto, "recarregando", bx + 6 * 14.f + 8, by, 19, MARFIM_ESC);
     char buf[48];
     std::snprintf(buf, sizeof buf, "%d pratas", dinheiro);
-    DrawText(buf, x, y + 52, 18, {235, 215, 160, 255});
-    // mira
-    int cx = W / 2, cy = H / 2;
+    texto(Fonte::Forte, buf, mini.x + raio, by - 34, 26, MARFIM, DIR);
+    // mira: ponto com quatro tracinhos finos
+    float cx = W * 0.5f, cy = H * 0.5f;
     if (mirando) {
-        Color c{245, 240, 230, 220};
-        DrawRectangle(cx - 1, cy - 9, 2, 6, c);
-        DrawRectangle(cx - 1, cy + 3, 2, 6, c);
-        DrawRectangle(cx - 9, cy - 1, 6, 2, c);
-        DrawRectangle(cx + 3, cy - 1, 6, 2, c);
-    }
-    if (marca > 0) {  // marca de acerto
-        Color c = matou ? Color{230, 50, 40, 255} : Color{250, 245, 235, 255};
-        for (int s : {-1, 1}) {
-            DrawLineEx({float(cx + 5 * s), float(cy + 5)}, {float(cx + 12 * s), float(cy + 12)}, 2, c);
-            DrawLineEx({float(cx + 5 * s), float(cy - 5)}, {float(cx + 12 * s), float(cy - 12)}, 2, c);
+        Color c = comAlfa(MARFIM, 0.9f);
+        DrawCircleV({cx, cy}, 1.6f, c);
+        for (int k = 0; k < 4; k++) {
+            float ax = k == 0 ? 1.f : (k == 1 ? -1.f : 0.f), ay = k == 2 ? 1.f : (k == 3 ? -1.f : 0.f);
+            DrawLineEx({cx + ax * 6, cy + ay * 6}, {cx + ax * 13, cy + ay * 13}, 1.5f, c);
         }
+    }
+    if (marca > 0) {
+        Color c = matou ? SANGUE : MARFIM;
+        for (int s = -1; s <= 1; s += 2)
+            for (int t = -1; t <= 1; t += 2) DrawLineEx({cx + 6.f * s, cy + 6.f * t}, {cx + 13.f * s, cy + 13.f * t}, 2.2f, c);
     }
 }
 
 void desenharBussola(float yaw, bool temObj, float pos, float dist) {
-    int W = GetScreenWidth();
-    const int largura = 460, alt = 30, x0 = W / 2 - largura / 2, y0 = 14;
+    float W = float(GetScreenWidth()), largura_ = 460, cx = W / 2, y = 34;
     const float campo = 1.6f;
-    DrawRectangle(x0, y0, largura, alt, {0, 0, 0, 110});
-    DrawRectangleLines(x0, y0, largura, alt, {235, 215, 180, 120});
+    faixa(cx, y - 14, largura_ + 120, 44, 0.3f);
+    linha(cx, y + 8, largura_, comAlfa(MARFIM, 0.7f));
+    for (int k = -16; k <= 16; k++) {  // riscos a cada 11,25 graus, mais fracos nas pontas
+        float f = 0.5f + anguloRelativo(yaw, float(k) * 0.19635f) / campo;
+        if (f < 0.02f || f > 0.98f || k % 8 == 0) continue;
+        float a = 1.f - std::abs(f - 0.5f) * 2.f;
+        float x = cx - largura_ / 2 + f * largura_;
+        DrawLineEx({x, y + 3}, {x, y + (k % 2 ? 6.f : 8.f)}, 1.f, comAlfa(MARFIM, 0.6f * a));
+    }
     const struct { const char* t; float rumo; } P[] = {{"N", 3.14159265f}, {"L", 1.5707963f}, {"S", 0.f}, {"O", -1.5707963f}};
     for (auto& p : P) {
         float f = 0.5f + anguloRelativo(yaw, p.rumo) / campo;
         if (f < 0.03f || f > 0.97f) continue;
-        int px = x0 + int(f * largura);
-        Color c = p.t[0] == 'N' ? Color{240, 120, 90, 255} : Color{235, 215, 180, 255};
-        DrawText(p.t, px - MeasureText(p.t, 20) / 2, y0 + 5, 20, c);
-    }
-    for (int k = -8; k <= 8; k++) {  // riscos a cada 22,5 graus
-        float f = 0.5f + anguloRelativo(yaw, float(k) * 0.3927f) / campo;
-        if (f < 0.02f || f > 0.98f || k % 4 == 0) continue;
-        int px = x0 + int(f * largura);
-        DrawLine(px, y0 + 22, px, y0 + 28, {235, 215, 180, 140});
+        float a = 1.f - std::abs(f - 0.5f) * 1.6f;
+        Color c = p.t[0] == 'N' ? Color{214, 80, 58, 255} : MARFIM;
+        texto(Fonte::Forte, p.t, cx - largura_ / 2 + f * largura_, y - 22, 24, comAlfa(c, a), CENTRO);
     }
     if (!temObj) return;
-    float f = std::clamp(pos, 0.f, 1.f);
-    int px = x0 + int(f * largura);
-    Color c{250, 200, 80, 255};
-    if (pos < 0 || pos > 1) {  // fora: seta na borda
-        int s = pos < 0 ? -1 : 1;
-        DrawTriangle({float(px - 8 * s), float(y0 + 8)}, {float(px - 8 * s), float(y0 + 22)}, {float(px + 2 * s), float(y0 + 15)}, c);
-        DrawTriangle({float(px - 8 * s), float(y0 + 8)}, {float(px + 2 * s), float(y0 + 15)}, {float(px - 8 * s), float(y0 + 22)}, c);
+    float f = std::clamp(pos, 0.f, 1.f), x = cx - largura_ / 2 + f * largura_;
+    if (pos < 0 || pos > 1) {
+        float s = pos < 0 ? -1.f : 1.f;
+        DrawTriangle({x + 6 * s, y + 8}, {x - 4 * s, y + 1}, {x - 4 * s, y + 15}, OURO);
+        DrawTriangle({x + 6 * s, y + 8}, {x - 4 * s, y + 15}, {x - 4 * s, y + 1}, OURO);
     } else {
-        DrawPoly({float(px), float(y0 + alt + 8)}, 4, 7, 0, c);
+        DrawPoly({x, y + 8}, 4, 6, 45, OURO);
     }
     char buf[32];
     std::snprintf(buf, sizeof buf, "%d m", int(dist));
-    DrawText(buf, px - MeasureText(buf, 18) / 2, y0 + alt + 18, 18, c);
+    texto(Fonte::Texto, buf, x, y + 16, 20, comAlfa(OURO, 0.95f), CENTRO);
 }
 
-void desenharMensagem(const std::string& texto, float t) {
-    if (t <= 0 || texto.empty()) return;
-    int W = GetScreenWidth(), H = GetScreenHeight();
-    unsigned char a = (unsigned char)(255 * std::clamp(t / 0.5f, 0.f, 1.f));
-    std::string s = semAcentos(texto);
-    int tw = MeasureText(s.c_str(), 24);
-    DrawRectangle(W / 2 - tw / 2 - 16, H / 4 - 10, tw + 32, 44, {0, 0, 0, (unsigned char)(a * 0.55f)});
-    DrawText(s.c_str(), W / 2 - tw / 2, H / 4, 24, {245, 230, 200, a});
+void desenharMensagem(const std::string& t, float tempo) {
+    if (tempo <= 0 || t.empty()) return;
+    float W = float(GetScreenWidth()), H = float(GetScreenHeight()), a = std::clamp(tempo / 0.5f, 0.f, 1.f);
+    float w = largura(Fonte::Texto, t, 28), y = H * 0.2f;
+    faixa(W / 2, y - 12, w + 260, 56, a);
+    linha(W / 2, y - 12, w + 120, comAlfa(OURO, 0.8f * a));
+    linha(W / 2, y + 43, w + 120, comAlfa(OURO, 0.8f * a));
+    texto(Fonte::Texto, t, W / 2, y, 28, comAlfa(MARFIM, a), CENTRO);
 }
 
 void desenharBordaDano(float vida01) {
     if (vida01 >= 0.35f) return;
     int W = GetScreenWidth(), H = GetScreenHeight();
     unsigned char a = (unsigned char)(170 * (1.f - vida01 / 0.35f));
-    Color c{150, 10, 5, a}, z{150, 10, 5, 0};
-    int e = H / 5;
+    Color c{120, 8, 4, a}, z{120, 8, 4, 0};
+    int e = H / 4;
     DrawRectangleGradientV(0, 0, W, e, c, z);
     DrawRectangleGradientV(0, H - e, W, e, z, c);
     DrawRectangleGradientH(0, 0, e, H, c, z);
@@ -222,5 +236,36 @@ void desenharBordaDano(float vida01) {
 void desenharTelaMorte(float t) {
     int W = GetScreenWidth(), H = GetScreenHeight();
     DrawRectangle(0, 0, W, H, {0, 0, 0, (unsigned char)(255 * std::clamp(t / 1.5f, 0.f, 1.f))});
-    if (t > 0.8f) textoCentro("Voce apagou...", W / 2, H / 2 - 20, 36, {200, 60, 45, 255});
+    if (t > 0.8f) {
+        float a = std::clamp((t - 0.8f) / 0.6f, 0.f, 1.f);
+        texto(Fonte::Titulo, "Você apagou", W * 0.5f, H * 0.5f - 40, 54, comAlfa(SANGUE, a), CENTRO);
+        texto(Fonte::Texto, "e acorda na cidade mais próxima...", W * 0.5f, H * 0.5f + 24, 26, comAlfa(MARFIM_ESC, a), CENTRO);
+    }
+}
+
+void desenharPausa(int nivel, const char* versao) {
+    int W = GetScreenWidth(), H = GetScreenHeight();
+    DrawRectangleGradientV(0, 0, W, H, Color{8, 6, 4, 150}, Color{8, 6, 4, 230});
+    float cx = W * 0.5f, cy = H * 0.5f;
+    texto(Fonte::Titulo, "Pausado", cx, cy - 120, 64, MARFIM, CENTRO);
+    linha(cx, cy - 40, 460, OURO);
+    texto(Fonte::Texto, "Qualidade gráfica", cx, cy - 18, 26, MARFIM_ESC, CENTRO);
+    const char* nomes[] = {"Baixo", "Médio", "Alto"};
+    for (int k = 0; k < 3; k++) {
+        float x = cx + (k - 1) * 150.f;
+        bool atual = nivel == k;
+        char n[8];
+        std::snprintf(n, sizeof n, "%d", k + 1);
+        float wt = tecla(n, x - 52, cy + 24, 22);
+        texto(Fonte::Forte, nomes[k], x - 52 + wt + 8, cy + 22, 26, atual ? OURO : MARFIM_ESC);
+        if (atual) linha(x, cy + 56, 110, OURO);
+    }
+    linha(cx, cy + 86, 460, OURO);
+    float x = cx - 190;
+    x += tecla("Clique", x, cy + 110, 22) + 8;
+    texto(Fonte::Texto, "continuar", x, cy + 108, 24, MARFIM);
+    x += largura(Fonte::Texto, "continuar", 24) + 36;
+    x += tecla("Q", x, cy + 110, 22) + 8;
+    texto(Fonte::Texto, "sair do jogo", x, cy + 108, 24, MARFIM);
+    texto(Fonte::Texto, std::string("versão ") + versao, W - 20.f, H - 34.f, 20, MARFIM_ESC, DIR);
 }

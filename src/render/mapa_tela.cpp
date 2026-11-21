@@ -4,6 +4,7 @@
 #include "core/bounty.h"
 #include "core/motion.h"
 #include "core/terrain.h"
+#include "render/estilo.h"
 #include "render/shaders.h"
 #include "render/terrain_mesh.h"
 
@@ -61,12 +62,12 @@ void MapaTela::descarregar() {
 }
 
 void MapaTela::desenharMini(Vec3f jog, float yawJ, float yawC, const std::vector<Vec3f>& rota, bool temObj, Vec3f obj) {
-    const float R = 105.f, RAIO_MUNDO = 170.f;  // pixels e metros
-    float cx = GetScreenWidth() - R - 26.f, cy = GetScreenHeight() - R - 26.f;
+    const float R = RAIO_MINI, RAIO_MUNDO = 170.f;  // pixels e metros
+    float cx = centroMini().x, cy = centroMini().y;
     Vec3f fr = frenteDe(yawC), dir{-std::cos(yawC), 0, std::sin(yawC)};
     float centro[2] = {(jog.x + meta_) / (2 * meta_), (jog.z + meta_) / (2 * meta_)};
     float vd[2] = {dir.x, dir.z}, vf[2] = {fr.x, fr.z}, esc = RAIO_MUNDO / (2 * meta_);
-    DrawCircle(int(cx), int(cy), R + 5, Color{30, 22, 14, 210});
+    DrawCircle(int(cx), int(cy), R + 4, Color{24, 17, 11, 220});
     BeginShaderMode(redondo_);
     SetShaderValue(redondo_, GetShaderLocation(redondo_, "centro"), centro, SHADER_UNIFORM_VEC2);
     SetShaderValue(redondo_, GetShaderLocation(redondo_, "direita"), vd, SHADER_UNIFORM_VEC2);
@@ -108,17 +109,19 @@ void MapaTela::desenharMini(Vec3f jog, float yawJ, float yawC, const std::vector
     // norte na borda
     bool dn;
     Vector2 n = tela(jog + Vec3f{0, 0, -1000}, dn);
-    DrawCircle(int(n.x), int(n.y), 10, Color{30, 22, 14, 230});
-    DrawText("N", int(n.x) - MeasureText("N", 16) / 2, int(n.y) - 8, 16, Color{240, 120, 90, 255});
-    DrawCircleLines(int(cx), int(cy), R + 1, Color{200, 175, 130, 255});
+    DrawRing({cx, cy}, R + 1, R + 2.5f, 0, 360, 72, estilo::comAlfa(estilo::OURO, 0.85f));
+    DrawCircle(int(n.x), int(n.y), 11, Color{24, 17, 11, 235});
+    estilo::texto(estilo::Fonte::Forte, "N", n.x, n.y - 11, 20, Color{214, 80, 58, 255}, estilo::CENTRO, false);
 }
 
 void MapaTela::desenharCheio(Vec3f jog, float yawJ, const std::vector<Vec3f>& rota, bool temObj, Vec3f obj) {
     int W = GetScreenWidth(), H = GetScreenHeight();
     DrawRectangle(0, 0, W, H, Color{10, 8, 6, 200});
-    float lado = float(std::min(W, H) - 90), x0 = (W - lado) / 2, y0 = (H - lado) / 2 + 10;
-    DrawRectangle(int(x0) - 8, int(y0) - 8, int(lado) + 16, int(lado) + 16, Color{60, 42, 26, 255});
+    float lado = float(std::min(W, H) - 120), x0 = (W - lado) / 2, y0 = (H - lado) / 2 + 22;
+    DrawRectangle(int(x0) + 10, int(y0) + 12, int(lado), int(lado), Color{0, 0, 0, 120});
     DrawTexturePro(tex_, {0, 0, float(tex_.width), float(tex_.height)}, {x0, y0, lado, lado}, {0, 0}, 0, WHITE);
+    DrawRectangleLinesEx({x0 - 1, y0 - 1, lado + 2, lado + 2}, 2, estilo::TINTA);
+    DrawRectangleLinesEx({x0 + 7, y0 + 7, lado - 14, lado - 14}, 1, estilo::comAlfa(estilo::TINTA, 0.6f));
     auto tela = [&](Vec3f p) { return v2(x0 + (p.x + meta_) / (2 * meta_) * lado, y0 + (p.z + meta_) / (2 * meta_) * lado); };
     for (size_t i = 1; i < rota.size(); i++) {
         DrawLineEx(tela(rota[i - 1]), tela(rota[i]), 5.f, Color{120, 20, 15, 255});
@@ -127,11 +130,10 @@ void MapaTela::desenharCheio(Vec3f jog, float yawJ, const std::vector<Vec3f>& ro
     for (auto& l : lugares_) {
         Vector2 q = tela({l.x, 0, l.z});
         std::string nome = nomeLegivel(l.nome);
-        int tam = l.tipo == TipoLugar::Cidade ? 22 : (l.tipo == TipoLugar::Vilarejo ? 19 : 16);
-        DrawCircle(int(q.x), int(q.y), 3, Color{50, 35, 20, 255});
-        int tw = MeasureText(nome.c_str(), tam);
-        DrawText(nome.c_str(), int(q.x) - tw / 2 + 1, int(q.y) + 7, tam, Color{240, 225, 190, 200});
-        DrawText(nome.c_str(), int(q.x) - tw / 2, int(q.y) + 6, tam, Color{45, 30, 18, 255});
+        bool grande = l.tipo == TipoLugar::Cidade || l.tipo == TipoLugar::Vilarejo;
+        DrawCircle(int(q.x), int(q.y), grande ? 4.f : 3.f, Color{50, 35, 20, 255});
+        if (grande) estilo::texto(estilo::Fonte::Titulo, nome, q.x, q.y + 6, l.tipo == TipoLugar::Cidade ? 26.f : 21.f, estilo::TINTA, estilo::CENTRO, false);
+        else estilo::texto(estilo::Fonte::Forte, nome, q.x, q.y + 5, 19, estilo::comAlfa(estilo::TINTA, 0.9f), estilo::CENTRO, false);
     }
     if (temObj) {
         Vector2 q = tela(obj);
@@ -143,6 +145,8 @@ void MapaTela::desenharCheio(Vec3f jog, float yawJ, const std::vector<Vec3f>& ro
         e2{c.x + std::sin(yawJ - 2.5f) * 9.f, c.y + std::cos(yawJ - 2.5f) * 9.f};
     DrawTriangle(ponta, e1, e2, Color{250, 250, 245, 255});
     DrawTriangle(ponta, e2, e1, Color{250, 250, 245, 255});
-    const char* t = "MAPA   -   M: fechar";
-    DrawText(t, W / 2 - MeasureText(t, 22) / 2, int(y0) - 36, 22, Color{240, 225, 190, 255});
+    estilo::texto(estilo::Fonte::Titulo, "Mapa", x0, y0 - 52, 40, estilo::MARFIM);
+    float tx = x0 + lado - 120;
+    tx += estilo::tecla("M", tx, y0 - 40, 22) + 8;
+    estilo::texto(estilo::Fonte::Texto, "fechar", tx, y0 - 42, 24, estilo::MARFIM);
 }

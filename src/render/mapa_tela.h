@@ -12,6 +12,8 @@ class MapaTela {
 public:
     void carregar(const Terreno& t, const Mapa& m);
     void descarregar();
+    static constexpr float RAIO_MINI = 105.f;
+    static Vector2 centroMini() { return {GetScreenWidth() - RAIO_MINI - 30.f, GetScreenHeight() - RAIO_MINI - 30.f}; }
     void desenharMini(Vec3f jogador, float yawJogador, float yawCamera, const std::vector<Vec3f>& rota, bool temObjetivo, Vec3f objetivo);
     void desenharCheio(Vec3f jogador, float yawJogador, const std::vector<Vec3f>& rota, bool temObjetivo, Vec3f objetivo);
 
