@@ -15,6 +15,9 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     mapa_ = carregarMapa(op.arquivoMapa);
     terreno_ = std::make_unique<Terreno>(mapa_, 1337);
     terrenoR_ = std::make_unique<TerrenoRender>(*terreno_);
+#if !defined(PLATFORM_WEB)
+    terrenoR_->definirMalhaFina(op.nivel == Nivel::Alto);
+#endif
     cenario_.construir(mapa_, *terreno_, col_, 1337);
     luz_.carregar(op.nivel);
     luz_.dbg.semCabecaRaio = op.semCabecaRaio;
@@ -479,6 +482,9 @@ void Jogo::teleportar(float x, float z, float yawGraus, float hora) {
 
 void Jogo::trocarNivel(Nivel n) {
     luz_.carregar(n);
+#if !defined(PLATFORM_WEB)
+    terrenoR_->definirMalhaFina(n == Nivel::Alto);
+#endif
     op_.nivel = n;
     configurarGrama();
     if (!op_.arquivoConfig.empty()) salvarConfig(op_.arquivoConfig, n);
@@ -543,7 +549,7 @@ void Jogo::desenhar() {
     luz_.modoHorizonte(dv - 40.f);
     terrenoR_->desenharHorizonte(luz_.material());
     luz_.modoHorizonte(0);
-    terrenoR_->desenhar(cam_, dv, luz_.material());
+    terrenoR_->desenhar(cam_, dv, luz_.materialSolo(), luz_.material());
     perfil_.terminar();
     perfil_.comecar(P_CONSTRUCOES);
     // predios detalhados perto (Alto 35 m, Medio 30 m); Baixo so a casca

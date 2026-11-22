@@ -27,6 +27,7 @@ public:
     void modoEstudio(Vec3f dirLuz, bool argila);
     Shader shaderLit() const { return lit_; }
     Material& material() { return mat_; }
+    Material& materialSolo() { return nivel_ != Nivel::Baixo && matSolo_.maps ? matSolo_ : mat_; }
     Material& materialConstrucoes() { return matConstr_; }  // construcoes: com o bloco das paredes
     const Efeitos& efeitos() const { return ef_; }
     Nivel nivel() const { return nivel_; }
@@ -82,6 +83,7 @@ private:
     bool usaFiltroSombra() const { return nivel_ == Nivel::Alto && sombraOk_ && samplerSombra_ != 0; }
     void desenharRaiosVolume(const Camera3D& cam, float intensidade);
     void liberarEfeitos();
+    void carregarSolo();
     void assarMateriais();
     RenderTexture2D texMat_[4]{};  // material das paredes (alturas, fatores de cor, pesos) e dos telhados
     bool materiaisAssados_ = false;
@@ -107,6 +109,8 @@ private:
     bool paredeOk_ = false;
     bool cabecaOk_ = false;
     Material mat_{}, matProf_{}, matPele_{}, matProfPele_{}, matCabeca_{}, matConstr_{};
+    Material matSolo_{};
+    bool soloTentado_ = false;
     Model esfera_{};
     Texture2D ruidoNuvem_{};  // ruido 3D barato (1 leitura) para as nuvens
     RenderTexture2D sombraPertoRT_{};

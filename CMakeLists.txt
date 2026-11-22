@@ -10,6 +10,9 @@ include(FetchContent)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 set(CUSTOMIZE_BUILD ON CACHE BOOL "" FORCE)
+if(NOT EMSCRIPTEN)
+  set(SUPPORT_FILEFORMAT_JPG ON CACHE BOOL "" FORCE)
+endif()
 FetchContent_Declare(raylib
   GIT_REPOSITORY https://github.com/raysan5/raylib.git
   GIT_TAG 5.5 GIT_SHALLOW TRUE)
@@ -39,7 +42,7 @@ endif()
 if(EMSCRIPTEN)
   set_target_properties(cacador PROPERTIES OUTPUT_NAME index SUFFIX ".html")
   target_link_options(cacador PRIVATE -sUSE_GLFW=3 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=128MB
-    -sASYNCIFY --preload-file ${CMAKE_SOURCE_DIR}/data@data)
+    -sASYNCIFY --preload-file ${CMAKE_SOURCE_DIR}/data@data --exclude-file "${CMAKE_SOURCE_DIR}/data/solo")
 endif()
 
 # --- testes (so no build nativo) ---

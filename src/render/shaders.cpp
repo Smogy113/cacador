@@ -67,10 +67,15 @@ VARY vec2 extra;
 #ifdef PAREDES
 ATTR vec2 vertexTexCoord2;   // x = indice da forma da parede + 1 (0: nenhuma)
 VARY float formaV;
+#elif defined(SOLO_DETALHADO)
+ATTR vec2 vertexTexCoord2;   // pesos de terra e rocha no terreno
+VARY vec2 pesosSolo;
 #endif
 void main() {
 #ifdef PAREDES
     formaV = vertexTexCoord2.x;
+#elif defined(SOLO_DETALHADO)
+    pesosSolo = vertexTexCoord2;
 #endif
     vec3 vp = vertexPosition;
     if (vertexTexCoord.y > 3.5 && vertexTexCoord.y < 4.5) {  // grama: a ponta balanca com o vento (rajadas passando pelo campo)
@@ -783,6 +788,41 @@ void relevoTelhado(inout vec3 n, inout vec3 albedo, inout float ao, float dist, 
     ao *= mix(0.5, 1.0, smoothstep(-fundo, -fundo * 0.35, m0.x));  // fundo entre fios, telhas e tabuas
 }
 #endif
+#ifdef SOLO_DETALHADO
+VARY vec2 pesosSolo;
+uniform sampler2D corGramaSolo, normalGramaSolo;
+uniform sampler2D corTerraSolo, normalTerraSolo;
+uniform sampler2D corRochaSolo, normalRochaSolo;
+
+void amostraSolo(sampler2D texCor, sampler2D texNormal, vec2 p, vec2 dx, vec2 dy,
+                 float peso, inout vec3 detalhe, inout vec2 relevo) {
+    detalhe += peso * textureGrad(texCor, p, dx, dy).rgb;
+    relevo += peso * (textureGrad(texNormal, p, dx, dy).rg * 2.0 - 1.0);
+}
+
+void materialDoSolo(inout vec3 n, inout vec3 albedo, float dist) {
+    vec2 p = posMundo.xz;
+    // Gradientes antes das ramificacoes para manter os mipmaps nas transicoes.
+    vec2 dx = dFdx(p), dy = dFdy(p);
+    float alcance = (1.0 - smoothstep(45.0, 100.0, dist)) * cor.a;
+    if (extra.y > -0.5 || alcance <= 0.0) return;
+
+    float rocha = smoothstep(0.12, 0.82, pesosSolo.y);
+    float terra = smoothstep(0.10, 0.84, pesosSolo.x) * (1.0 - rocha);
+    float grama = max(1.0 - terra - rocha, 0.0);
+    vec3 detalhe = vec3(0.0);
+    vec2 relevo = vec2(0.0);
+    // As escalas sao em metros e continuam iguais dos dois lados da borda do pedaco.
+    if (grama > 0.0) amostraSolo(corGramaSolo, normalGramaSolo, p / 3.8, dx / 3.8, dy / 3.8, grama, detalhe, relevo);
+    if (terra > 0.0) amostraSolo(corTerraSolo, normalTerraSolo, p / 4.6, dx / 4.6, dy / 4.6, terra, detalhe, relevo);
+    if (rocha > 0.0) amostraSolo(corRochaSolo, normalRochaSolo, p / 5.2, dx / 5.2, dy / 5.2, rocha, detalhe, relevo);
+    // Os mapas de cor foram equilibrados em torno de 0,45 sRGB para manter a paleta do terreno.
+    albedo *= mix(vec3(1.0), pow(detalhe / 0.45, vec3(2.2)), alcance * 0.82);
+    vec3 t = normalize(vec3(n.y, -n.x, 0.0));
+    vec3 b = cross(n, t);  // +Y do mapa OpenGL aponta para -Z do chao
+    n = normalize(n + (t * relevo.x + b * relevo.y) * alcance * 0.62);
+}
+#endif
 void main() {
 #ifdef RAYMARCH
     marchar();
@@ -804,6 +844,9 @@ void main() {
     vec3 v = paraCam / max(dist, 0.001);
     if (descartarPerto > 0.0 && length(paraCam.xz) < descartarPerto) discard;
 
+#ifdef SOLO_DETALHADO
+    materialDoSolo(n, albedo, dist);
+#else
     if (extra.y < -0.5 && dist < 120.0) {
         vec2 p = posMundo.xz;
         float alcance = 1.0 - smoothstep(65.0, 120.0, dist);
@@ -820,6 +863,7 @@ void main() {
         }
         albedo *= 1.0 + alcance * detalhe;
     }
+#endif
     // parametros de material (mundo: tudo zero)
     float brilho = 0.0, aspereza = 1.0, sss = 0.0, veludo = 0.0, metalico = 0.0;
     float kk = 0.0;               // cabelo (Kajiya-Kay)
@@ -1035,7 +1079,9 @@ void main() {
     vec3 luz = luzAmbiente * ao * fInt;
     if (fInt < 0.999) luz += vec3(1.0, 0.72, 0.48) * 0.14 * noite * ao;  // dentro, a noite: vela/lareira
     // sol e lua (com sombra)
-#if !defined(GL_ES)
+#if defined(SOLO_DETALHADO)
+    vec3 normalSombra = normalSuperficie;
+#elif !defined(GL_ES)
     vec3 normalSombra = usarFiltroSombra > 0.5 ? normalSuperficie : n;
 #else
     vec3 normalSombra = n;

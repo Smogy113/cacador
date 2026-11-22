@@ -3,15 +3,16 @@
 #include "raylib.h"
 #include "core/terrain.h"
 
-// Terreno desenhado em pedacos de 64 m, com 3 niveis de detalhe (passo 2/4/8 m).
+// Terreno desenhado em pedacos de 64 m, com passo de 1 m perto no Alto, 1,5/4/8 m no restante.
 // Malhas sao criadas sob demanda e descartadas quando ficam muito tempo sem uso.
 class TerrenoRender {
 public:
     static constexpr float TAM = 64.f;
     explicit TerrenoRender(const Terreno& t);
     ~TerrenoRender();
+    void definirMalhaFina(bool ativa) { malhaFina_ = ativa; }
     void atualizar(Vec3f foco, float distMax, float tempo, int maxConstrucoes = 6);
-    void desenhar(const Camera3D& cam, float distMax, Material& mat);
+    void desenhar(const Camera3D& cam, float distMax, Material& solo, Material& agua);
     // malha do mapa inteiro em baixo detalhe: montanhas e paisagem distante
     void desenharHorizonte(Material& mat);
     // sem recorte pela camera: tudo num raio (passe de sombra)
@@ -20,17 +21,18 @@ public:
     int chamadasDesenho() const { return chamadas_; }
 
 private:
+    static constexpr int NUM_LODS = 4;
     struct Pedaco {
-        Mesh lod[3]{};
-        BoundingBox limites[3]{};
-        bool tem[3]{false, false, false};
-        float uso[3]{0, 0, 0};
+        Mesh lod[NUM_LODS]{};
+        BoundingBox limites[NUM_LODS]{};
+        bool tem[NUM_LODS]{};
+        float uso[NUM_LODS]{};
         Mesh agua{};
         BoundingBox limitesAgua{};
         bool temAgua = false, aguaFeita = false;
         float hmin = 0, hmax = 0;
     };
-    int lodPara(float dist) const;
+    int lodPara(float dist, const Pedaco& p) const;
     void construir(int ci, int cj, int lod);
     void construirAgua(int ci, int cj);
     Vec3f centro(int ci, int cj) const;
@@ -42,6 +44,7 @@ private:
     size_t tris_ = 0;
     int chamadas_ = 0;
     float tempo_ = 0;
+    bool malhaFina_ = false;
 };
 
 // Cor do chao num ponto (sRGB), a mesma do terreno desenhado (a grama copia).

@@ -2,8 +2,8 @@
 
 Mundo aberto 3D low-poly, medieval, com clima de faroeste: você é um caçador de recompensas
 numa fronteira com cidade murada, vilarejo, fazendas, floresta, rio, ruínas de castelo,
-acampamento de bandidos, mina e cemitério. Feito em C++ com raylib, sem texturas nem arquivos de
-modelo em tempo de execução: a geometria é gerada ou decodificada pelo próprio código.
+acampamento de bandidos, mina e cemitério. Feito em C++ com raylib. A geometria é gerada
+ou decodificada pelo próprio código.
 
 O protagonista usa uma base humana real quantizada no executável (26,7 mil triângulos, cerca de
 250 KB), em A-pose e pronta para receber cabelo e roupas como camadas. Pessoas distantes e cavalos
@@ -39,6 +39,9 @@ Alto a sombra começa mais firme junto ao objeto e ganha penumbra conforme se af
 A água tem ondulações no reflexo do céu, do sol e da lua. Em todos os níveis há luz rebatida
 do chão e preenchimento do céu. Na primeira vez o jogo escolhe um nível pela placa de vídeo e
 salva em `config.txt`.
+
+No **Médio** e no **Alto** do PC, o chão usa texturas de 2048×2048 e mapas de relevo para terra,
+grama e pedra. No Alto, a malha próxima também usa o passo de 1 m da grade de alturas do mundo.
 
 **O caçador de perto (0.18):** no Médio e no Alto, a cabeça do caçador não é feita de triângulos:
 é desenhada pixel a pixel (raymarching) a partir da escultura guardada num bloco 3D. Não tem facetas

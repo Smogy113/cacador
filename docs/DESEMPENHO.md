@@ -95,3 +95,18 @@ Com `--benchmark --frames 40 --qualidade alto`, em 1280×720 no llvmpipe, a cida
 
 Em 32 quadros por cena no Alto, a 1280×720 no llvmpipe, o tempo médio passou de 262,04 para
 280,99 ms na cidade de perto e de 273,65 para 259,39 ms na floresta.
+
+## Chão
+
+- No Médio e no Alto do PC, `SOLO_DETALHADO` usa mapas de cor de 2048×2048 e normais de
+  1024×1024. Mipmaps e filtro anisotrópico ajudam a manter o detalhe em ângulos rasantes.
+  O shader só amostra os materiais presentes no fragmento e reduz o detalhe entre 45 e 100 m.
+- O LOD de 1 m fica nos pedaços mais próximos no Alto, fora da linha da água. A altura vem da grade
+  existente, compartilhada com o restante do jogo. Ao ajustar os raios em `terrain_mesh.cpp`, confira
+  o custo dos passes **Terreno** e **Sombras** no F1 e caminhe entre pedaços para ver a transição.
+- Para comparar texturas e relevo, use `--pos -40 10 --yaw 160 --hora 12 --pitch 36 --dist-camera 3`
+  na estrada e `--pos -420 -230 --yaw 120 --hora 8 --pitch 24 --dist-camera 3.2` na encosta.
+
+Com 32 quadros por cena no Alto, a 1280×720 no llvmpipe, o tempo médio passou de 209,65
+para 229,02 ms na estrada e de 194,60 para 214,37 ms na encosta. A contagem de chamadas de
+desenho permaneceu igual nas duas cenas.

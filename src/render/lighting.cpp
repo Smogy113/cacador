@@ -107,9 +107,47 @@ void Iluminacao::liberarEfeitos() {
         posOk_ = false;
     }
     mat_.maps[MATERIAL_MAP_SPECULAR].texture = matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
+    if (matSolo_.maps) matSolo_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
     float zero = 0;
     for (Shader sh : sombreados_) SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &zero, SHADER_UNIFORM_FLOAT);
     matPele_.maps[MATERIAL_MAP_SPECULAR].texture = matCabeca_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
+}
+
+void Iluminacao::carregarSolo() {
+#if !defined(PLATFORM_WEB)
+    soloTentado_ = true;
+    Shader sh = carregarShaderDef(VS_LIT, FS_LIT, "#define SOLO_DETALHADO\n");
+    if (sh.id == 0 || sh.id == rlGetShaderIdDefault()) return;
+    Material mat = LoadMaterialDefault();
+    mat.shader = sh;
+    struct MapaSolo { int slot; const char* uniforme; const char* arquivo; };
+    constexpr MapaSolo mapas[] = {
+        {MATERIAL_MAP_ALBEDO, "corGramaSolo", DATA_DIR "/solo/grama.jpg"},
+        {MATERIAL_MAP_NORMAL, "normalGramaSolo", DATA_DIR "/solo/grama-normal.jpg"},
+        {MATERIAL_MAP_ROUGHNESS, "corTerraSolo", DATA_DIR "/solo/terra.jpg"},
+        {MATERIAL_MAP_OCCLUSION, "normalTerraSolo", DATA_DIR "/solo/terra-normal.jpg"},
+        {MATERIAL_MAP_EMISSION, "corRochaSolo", DATA_DIR "/solo/rocha.jpg"},
+        {MATERIAL_MAP_HEIGHT, "normalRochaSolo", DATA_DIR "/solo/rocha-normal.jpg"},
+    };
+    for (const auto& mapa : mapas) {
+        Texture2D& tex = mat.maps[mapa.slot].texture;
+        tex = LoadTexture(mapa.arquivo);
+        if (!tex.id) {
+            UnloadMaterial(mat);
+            return;
+        }
+        GenTextureMipmaps(&tex);
+        SetTextureFilter(tex, TEXTURE_FILTER_TRILINEAR);
+        SetTextureFilter(tex, TEXTURE_FILTER_ANISOTROPIC_4X);
+        SetTextureWrap(tex, TEXTURE_WRAP_REPEAT);
+        sh.locs[SHADER_LOC_MAP_ALBEDO + mapa.slot] = GetShaderLocation(sh, mapa.uniforme);
+    }
+    sh.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(sh, "matModel");
+    sh.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(sh, "texSombra");
+    SetShaderValue(sh, GetShaderLocation(sh, "texSombraFiltrada"), &UNIDADE_SOMBRA_FILTRADA, SHADER_UNIFORM_INT);
+    matSolo_ = mat;
+    sombreados_.push_back(sh);
+#endif
 }
 
 void Iluminacao::carregar(Nivel nivel) {
@@ -210,6 +248,9 @@ void Iluminacao::carregar(Nivel nivel) {
 #endif
     carregado_ = true;
     }
+#if !defined(PLATFORM_WEB)
+    if (nivel_ != Nivel::Baixo && !soloTentado_) carregarSolo();
+#endif
     if (paredeOk_ && nivel_ != Nivel::Baixo && !materiaisAssados_) {
         assarMateriais();
         materiaisAssados_ = true;
@@ -245,14 +286,13 @@ void Iluminacao::carregar(Nivel nivel) {
         if (sombraOk_) {
             mat_.maps[MATERIAL_MAP_SPECULAR].texture = matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
             matPele_.maps[MATERIAL_MAP_SPECULAR].texture = matCabeca_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
+            if (matSolo_.maps) matSolo_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
             float texel = 1.f / ef_.resolucaoSombra;
-            setF(lit_, "texelSombra", texel);
-            if (paredeOk_) setF(litParede_, "texelSombra", texel);
-            for (Shader sh : personagens_) setF(sh, "texelSombra", texel);
             float tm = 2 * AREA_SOMBRA / ef_.resolucaoSombra;
-            setF(lit_, "texelMetros", tm);
-            if (paredeOk_) setF(litParede_, "texelMetros", tm);
-            for (Shader sh : personagens_) setF(sh, "texelMetros", tm);
+            for (Shader sh : sombreados_) {
+                setF(sh, "texelSombra", texel);
+                setF(sh, "texelMetros", tm);
+            }
         }
     }
     if (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) {
@@ -289,6 +329,9 @@ void Iluminacao::carregar(Nivel nivel) {
 void Iluminacao::descarregar() {
     if (!carregado_) return;
     liberarEfeitos();
+    if (matSolo_.maps) UnloadMaterial(matSolo_);
+    matSolo_ = {};
+    soloTentado_ = false;
 #if !defined(PLATFORM_WEB)
     if (raiosVolume_.id) UnloadShader(raiosVolume_);
     raiosVolume_ = {};
@@ -379,6 +422,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
 
     float luaAcima = smoothstep(-0.05f, 0.15f, lua_.y);
     for (Shader sh : sombreados_) {
+        if (nivel_ == Nivel::Baixo && sh.id == matSolo_.shader.id) continue;
         uniformesComuns(sh, paleta_, sol_, noite_);
         setV3(sh, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
         setF(sh, "tempoVento", tempo);
@@ -471,9 +515,7 @@ void Iluminacao::comecarSombra(Vec3f centro) {
     cl.fovy = 2 * AREA_SOMBRA;
     cl.projection = CAMERA_ORTHOGRAPHIC;
     dirSombra_ = dir;
-    setV3(lit_, "dirSombra", dir);
-    if (paredeOk_) setV3(litParede_, "dirSombra", dir);
-    for (Shader sh : personagens_) setV3(sh, "dirSombra", dir);
+    for (Shader sh : sombreados_) setV3(sh, "dirSombra", dir);
     BeginTextureMode(sombraRT_);
     ClearBackground(WHITE);
     BeginMode3D(cl);

@@ -7,22 +7,21 @@
 #include "render/frustum.h"
 
 namespace {
-constexpr float PASSOS[3] = {1.5f, 4.f, 8.f};  // perto: 1,5 m (chao com mais detalhe)
-const float DIST_LOD[2] = {110.f, 240.f};
+constexpr float PASSOS[] = {1.f, 1.5f, 4.f, 8.f};
 constexpr int CELULAS_MAX = int(TerrenoRender::TAM / PASSOS[0] + 0.5f);
 static_assert((CELULAS_MAX + 1) * (CELULAS_MAX + 1) + 16 * CELULAS_MAX <= 65536,
               "os indices da raylib precisam caber em 16 bits");
 
 struct Buf {
-    std::vector<float> v, n, t;
+    std::vector<float> v, n, t, pesosSolo;
     std::vector<unsigned char> c;
     std::vector<unsigned short> indices;
-    void vertice(Vec3f p, Vec3f normal, Rgb cor, float tipo = 0) {
+    void vertice(Vec3f p, Vec3f normal, Rgb cor, float tipo = 0, float semNeve = 1.f) {
         v.insert(v.end(), {p.x, p.y, p.z});
         n.insert(n.end(), {normal.x, normal.y, normal.z});
         t.insert(t.end(), {1.f, tipo});
         auto c8 = [](float x) { return (unsigned char)(std::clamp(x, 0.f, 1.f) * 255.f + .5f); };
-        c.insert(c.end(), {c8(cor.r), c8(cor.g), c8(cor.b), 255});
+        c.insert(c.end(), {c8(cor.r), c8(cor.g), c8(cor.b), c8(semNeve)});
     }
     void tri(Vec3f a, Vec3f b, Vec3f d, Rgb cor, float tipo = 0) {
         Vec3f normal = normalizar(cross(b - a, d - a));
@@ -44,6 +43,12 @@ struct Buf {
         std::copy(n.begin(), n.end(), m.normals);
         std::copy(t.begin(), t.end(), m.texcoords);
         std::copy(c.begin(), c.end(), m.colors);
+        if (!pesosSolo.empty()) {
+            // As saias nao usam o material detalhado.
+            pesosSolo.resize(m.vertexCount * 2);
+            m.texcoords2 = (float*)MemAlloc(pesosSolo.size() * sizeof(float));
+            std::copy(pesosSolo.begin(), pesosSolo.end(), m.texcoords2);
+        }
         if (!indices.empty()) {
             m.indices = (unsigned short*)MemAlloc(indices.size() * sizeof(unsigned short));
             std::copy(indices.begin(), indices.end(), m.indices);
@@ -54,12 +59,14 @@ struct Buf {
 };
 
 Rgb mix(Rgb a, Rgb b, float t) { return lerp(a, b, clamp01(t)); }
-}  // namespace
 
-// Cor do chao num ponto (cores em sRGB, o shader converte).
-Rgb corDoChao(const Terreno& t, float x, float z, float ny) {
+struct AmostraSolo {
+    Rgb cor;
+    float terra, rocha, neve;
+};
+
+AmostraSolo amostrarSolo(const Terreno& t, float x, float z, float h, float ny) {
     uint32_t s = t.semente();
-    float h = t.altura(x, z);
     float r1 = fbm2D(x * 0.02f, z * 0.02f, s + 11, 2) * 0.5f + 0.5f;
     float r2 = ruido2D(x * 0.15f, z * 0.15f, s + 12) * 0.5f + 0.5f;
     Rgb grama1{0.29f, 0.40f, 0.19f}, grama2{0.40f, 0.45f, 0.22f}, seca{0.55f, 0.52f, 0.28f};
@@ -75,14 +82,22 @@ Rgb corDoChao(const Terreno& t, float x, float z, float ny) {
     c = mix(c, trilha * (0.90f + r2 * 0.18f), smoothstep(0.42f, 0.94f, estrada));
     // margem/areia perto da agua
     Rgb lama{0.45f, 0.40f, 0.30f};
-    c = mix(c, lama, smoothstep(t.nivelAgua() + 1.4f, t.nivelAgua() + 0.3f, h));
+    float margem = smoothstep(t.nivelAgua() + 1.4f, t.nivelAgua() + 0.3f, h);
+    c = mix(c, lama, margem);
     // pedra nas encostas e montanhas
     Rgb pedra = mix(Rgb{0.42f, 0.40f, 0.38f}, Rgb{0.52f, 0.48f, 0.42f}, r2);
     float rocha = std::max(smoothstep(0.85f, 0.7f, ny), smoothstep(40.f, 60.f, h));
     c = mix(c, pedra, rocha);
     // neve no alto
-    c = mix(c, Rgb{0.88f, 0.90f, 0.95f}, smoothstep(105.f, 120.f, h) * smoothstep(0.6f, 0.8f, ny));
-    return c;
+    float neve = smoothstep(105.f, 120.f, h) * smoothstep(0.6f, 0.8f, ny);
+    c = mix(c, Rgb{0.88f, 0.90f, 0.95f}, neve);
+    return {c, std::max(estrada, margem), rocha, neve};
+}
+}  // namespace
+
+// Cor do chao num ponto (cores em sRGB, o shader converte).
+Rgb corDoChao(const Terreno& t, float x, float z, float ny) {
+    return amostrarSolo(t, x, z, t.altura(x, z), ny).cor;
 }
 
 TerrenoRender::TerrenoRender(const Terreno& t) : t_(t) {
@@ -127,7 +142,7 @@ void TerrenoRender::desenharHorizonte(Material& mat) { DrawMesh(horizonte_, mat,
 TerrenoRender::~TerrenoRender() {
     UnloadMesh(horizonte_);
     for (auto& p : p_) {
-        for (int l = 0; l < 3; l++)
+        for (int l = 0; l < NUM_LODS; l++)
             if (p.tem[l]) UnloadMesh(p.lod[l]);
         if (p.temAgua) UnloadMesh(p.agua);
     }
@@ -138,7 +153,12 @@ Vec3f TerrenoRender::centro(int ci, int cj) const {
     return {-Terreno::META + (ci + .5f) * TAM, (p.hmin + p.hmax) * .5f, -Terreno::META + (cj + .5f) * TAM};
 }
 
-int TerrenoRender::lodPara(float d) const { return d < DIST_LOD[0] ? 0 : (d < DIST_LOD[1] ? 1 : 2); }
+int TerrenoRender::lodPara(float d, const Pedaco& p) const {
+    // Mantem a mesma malha nas margens proximas para estabilizar a linha da agua.
+    if (malhaFina_ && d < 12.f && p.hmin > t_.nivelAgua() + 0.5f) return 0;
+    if (d < 110.f) return 1;
+    return d < 240.f ? 2 : 3;
+}
 
 void TerrenoRender::construir(int ci, int cj, int lod) {
     // o passo e ajustado para dividir o pedaco exatamente: sem fenda na borda entre pedacos
@@ -152,10 +172,17 @@ void TerrenoRender::construir(int ci, int cj, int lod) {
     };
     // As duas faces de cada celula usam os mesmos atributos nos vertices da grade.
     const int linha = k + 1;
+#if !defined(PLATFORM_WEB)
+    b.pesosSolo.reserve(2 * (linha * linha + 16 * k));
+#endif
     for (int j = 0; j <= k; ++j)
         for (int i = 0; i <= k; ++i) {
             Vec3f pos = P(i, j), normal = t_.normal(pos.x, pos.z);
-            b.vertice(pos, normal, corDoChao(t_, pos.x, pos.z, normal.y), -1.f);
+            AmostraSolo solo = amostrarSolo(t_, pos.x, pos.z, pos.y, normal.y);
+            b.vertice(pos, normal, solo.cor, -1.f, 1.f - solo.neve);
+#if !defined(PLATFORM_WEB)
+            b.pesosSolo.insert(b.pesosSolo.end(), {solo.terra, solo.rocha});
+#endif
         }
     for (int j = 0; j < k; ++j)
         for (int i = 0; i < k; ++i) {
@@ -223,7 +250,7 @@ void TerrenoRender::atualizar(Vec3f foco, float distMax, float tempo, int maxCon
             float d = std::hypot(c.x - foco.x, c.z - foco.z) - TAM * 0.7f;
             if (d > distMax) continue;
             Pedaco& p = p_[j * n_ + i];
-            int l = lodPara(std::max(d, 0.f));
+            int l = lodPara(d, p);
             if (!p.tem[l] || !p.aguaFeita) fila.push_back({d, j * n_ + i});
         }
     std::sort(fila.begin(), fila.end());
@@ -231,13 +258,13 @@ void TerrenoRender::atualizar(Vec3f foco, float distMax, float tempo, int maxCon
         if (feitas >= maxConstrucoes) break;
         int i = id % n_, j = id / n_;
         Pedaco& p = p_[id];
-        int l = lodPara(std::max(d, 0.f));
+        int l = lodPara(d, p);
         if (!p.tem[l]) { construir(i, j, l); feitas++; }
         if (!p.aguaFeita) construirAgua(i, j);
     }
     // descarta niveis que nao sao usados ha 10 s
     for (auto& p : p_)
-        for (int l = 0; l < 3; l++)
+        for (int l = 0; l < NUM_LODS; l++)
             if (p.tem[l] && tempo - p.uso[l] > 10.f && p.uso[l] > 0) {
                 UnloadMesh(p.lod[l]);
                 p.tem[l] = false;
@@ -245,7 +272,7 @@ void TerrenoRender::atualizar(Vec3f foco, float distMax, float tempo, int maxCon
             }
 }
 
-void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& mat) {
+void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& solo, Material& agua) {
     tris_ = 0;
     chamadas_ = 0;
     Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
@@ -266,19 +293,21 @@ void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& mat) 
                 float folga = std::asin(std::min(1.f, raio / d));
                 if (std::acos(std::clamp(cosAng, -1.f, 1.f)) - folga > std::acos(cosMeio)) continue;
             }
-            int l = lodPara(std::max(dh, 0.f));
+            int l = lodPara(dh, p);
             int usar = -1;
-            for (int k = l; k < 3 && usar < 0; k++) if (p.tem[k]) usar = k;
-            for (int k = l - 1; k >= 0 && usar < 0; k--) if (p.tem[k]) usar = k;
+            for (int k = l; k < NUM_LODS && usar < 0; k++) if (p.tem[k]) usar = k;
+            for (int k = l - 1; k >= (malhaFina_ ? 0 : 1) && usar < 0; k--) if (p.tem[k]) usar = k;
+            // Ao reduzir a qualidade, a malha fina ainda cobre o chao ate a outra ficar pronta.
+            if (usar < 0 && p.tem[0]) usar = 0;
             if (usar < 0) continue;
             p.uso[usar] = tempo_ + 0.001f;
             if (frustum.contemParte(p.limites[usar])) {
-                DrawMesh(p.lod[usar], mat, id);
+                DrawMesh(p.lod[usar], solo, id);
                 tris_ += p.lod[usar].triangleCount;
                 chamadas_++;
             }
             if (p.temAgua && frustum.contemParte(p.limitesAgua)) {
-                DrawMesh(p.agua, mat, id);
+                DrawMesh(p.agua, agua, id);
                 tris_ += p.agua.triangleCount;
                 chamadas_++;
             }
@@ -293,7 +322,7 @@ void TerrenoRender::desenharArea(Vec3f centro, float raio, Material& mat) {
             Pedaco& p = p_[j * n_ + i];
             Vec3f c = this->centro(i, j);
             if (std::hypot(c.x - centro.x, c.z - centro.z) > raio + TAM * 0.72f) continue;
-            for (int k = 0; k < 3; k++)
+            for (int k = 0; k < NUM_LODS; k++)
                 if (p.tem[k]) {
                     if (frustum.contemParte(p.limites[k])) DrawMesh(p.lod[k], mat, id);
                     break;
