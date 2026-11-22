@@ -101,17 +101,17 @@ MalhaPele corpoHumanoBase(const Proporcoes& pr, const Visual& vis) {
         v.ao = 1.f;
         v.material = MAT_PELE;
     }
-    // O hm08 ja modela a esclera dentro das palpebras. Uma pequena calota na
-    // frente acrescenta iris/pupila sem recortar nem duplicar a face.
+    // Globos encaixados atras das palpebras do hm08. A normal da superficie
+    // orienta a iris no shader.
     loft::Construtor construtor{m};
     construtor.material = MAT_OLHO;
     for (float sx : {1.f, -1.f}) {
-        Vec3f c{sx * .034f * s, 1.692f * s, .148f * s};
+        Vec3f c{sx * .034f * s, 1.687f * s, .136f * s};
         std::vector<loft::Anel> aneis;
         constexpr int linhas = 8;
+        const float r = .013f * s;
         for (int i = 0; i <= linhas; ++i) {
             float ang = loft::PI_F * (1.f - i / float(linhas));
-            float r = .0065f * s;
             aneis.push_back({c + Vec3f{0, 0, std::cos(ang) * r}, std::sin(ang) * r, std::sin(ang) * r,
                              CABECA, CABECA, 1.f});
         }
