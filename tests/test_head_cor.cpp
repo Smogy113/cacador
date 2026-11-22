@@ -27,8 +27,10 @@ static Vec3f naSuperficie(float x, float y) {
     return {x, y, 0};
 }
 
-TEST_CASE("cor da pele: malha do heroi nao mudou (referencia antes da refatoracao)") {
-    auto m = corpoHumanoHD({}, visHeroi());
+TEST_CASE("cor da pele: preserva as cores de referencia sem o penteado do heroi") {
+    Visual vis = visHeroi();
+    vis.cabeloLongo = false;
+    auto m = corpoHumanoHD({}, vis);
     double soma = 0;
     int n = 0, lab = 0;
     for (auto& v : m.v)
@@ -45,6 +47,16 @@ TEST_CASE("cor da pele: malha do heroi nao mudou (referencia antes da refatoraca
     CHECK(soma == doctest::Approx(REF_SOMA).epsilon(1e-6));
 }
 #ifndef SO_REFERENCIA
+
+TEST_CASE("cor da pele: cabelo comprido cobre a testa sem chegar a sobrancelha") {
+    Visual longo = visHeroi(), curto = longo;
+    curto.cabeloLongo = false;
+    Vec3f linha = naSuperficie(0, 1.757f);
+    Vec3f testa = naSuperficie(0, 1.735f);
+    CHECK(corDaPele(linha, sdf::gradiente(linha), longo).pelos > 0.6f);
+    CHECK(corDaPele(linha, sdf::gradiente(linha), curto).pelos < 0.1f);
+    CHECK(corDaPele(testa, sdf::gradiente(testa), longo).pelos < 0.1f);
+}
 
 TEST_CASE("cor da pele: igual a malha") {
     Visual vis = visHeroi();

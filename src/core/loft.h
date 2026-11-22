@@ -114,6 +114,7 @@ inline Rgb mix(Rgb a, Rgb b, float t) { return lerp(a, b, clamp01(t)); }
 std::vector<Anel> suavizar(const std::vector<Anel>& an, int sub);
 // Cabeca com proporcoes de um rosto real (head_hd.cpp)
 void cabecaHD(Construtor& k, float s, float ms, const Visual& vis);
+void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples);
 // Cascas de pelo para todo vertice com pelos > 0 (chamar depois das normais)
 void cascasDePelo(MalhaPele& m, Rgb corPelo);
 // Cartoes de pelo (fitas com fios) para todo vertice com pelos e direcao de crescimento

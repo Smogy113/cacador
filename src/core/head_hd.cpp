@@ -120,8 +120,14 @@ float sobrancelha(float ax, float y, float f) {
     return b * 0.95f;
 }
 
-float cabelo(float y, float f) {
-    float frente = smoothstep(1.768f, 1.776f, y + 0.01f * (1.f - f));  // linha do cabelo ~6 cm acima da raiz do nariz
+float cabelo(float y, float f, float x, bool comprido) {
+    float linha = 1.768f;
+    if (comprido) {
+        float tempora = smoothstep(0.024f, 0.071f, std::abs(x));
+        linha = 1.749f + 0.009f * tempora + 0.002f * std::sin(x * 84.f);
+    }
+    float frente = comprido ? smoothstep(linha, linha + 0.006f, y + 0.01f * (1.f - f))
+                            : smoothstep(1.768f, 1.776f, y + 0.01f * (1.f - f));
     float lados = (y > 1.715f ? 1.f : smoothstep(1.66f, 1.69f, y)) * smoothstep(-0.05f, -0.4f, f);
     float tempora = smoothstep(1.70f, 1.715f, y) * smoothstep(0.45f, 0.2f, f);
     return std::clamp(std::max(frente, std::max(lados, tempora)), 0.f, 1.f);
@@ -176,7 +182,7 @@ CorPele corDaPele(Vec3f p, Vec3f n, const Visual& vis) {
     }
     float pb = vis.barba ? barba(ax, y, f) : 0.f;
     float ps = sobrancelha(ax, y, f) * smoothstep(0.06f, 0.08f, z);
-    float pc = cabelo(y, f) * (1.f - smoothstep(0.075f, 0.082f, ax) * g(y, 1.69f, 0.03f));  // nao nas orelhas
+    float pc = cabelo(y, f, p.x, vis.cabeloLongo) * (1.f - smoothstep(0.075f, 0.082f, ax) * g(y, 1.69f, 0.03f));  // nao nas orelhas
     if (vis.chapeuAba && y > 1.768f) pc = 0.f;
     float pel = std::max(pb, std::max(ps, pc));
     if (pel > 0.02f) {
@@ -307,101 +313,152 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
         faixa(cilB, vis.cabelo * 0.45f, false);
     }
 
-    // ---- cabelo medio penteado para tras (sem chapeu) ----
-    // Cada mecha nasce na linha do cabelo (testa/temporas) ou na coroa, passa por cima do cranio
-    // seguindo a superficie esculpida (nunca entra na cabeca), vai atras da orelha e cai ate o
-    // pescoco com as pontas onduladas abrindo para fora. Material 24,5: a fisica age so na parte que
-    // cai (peso guardado no comprimento da tangente).
-    if (vis.cabeloLongo) {
-        const float CY = 1.7155f, CZ = -0.014f, RX = 0.0765f, RY = 0.0865f, RZ = 0.099f, PI = 3.14159265f;
-        uint32_t rng = 9137u;
-        auto rnd = [&]() { rng = rng * 1664525u + 1013904223u; return float((rng >> 8) & 0xFFFF) / 65535.f; };
-        auto dirDe = [](float th, float fi) { return Vec3f{std::cos(fi) * std::sin(th), std::sin(fi), std::cos(fi) * std::cos(th)}; };
-        // ponto acima da superficie real da cabeca na direcao d (a partir do centro do cranio)
-        auto naCabeca = [&](Vec3f d, float folga) {
-            Vec3f c{0, CY, CZ}, p = c + Vec3f{d.x * RX, d.y * RY, d.z * RZ} * 0.85f;
-            for (int it = 0; it < 80 && sdf::cabeca(p) < folga; it++) p = p + d * 0.0015f;
-            return p;
+    if (vis.cabeloLongo) cabeloComprido(m, s, ms, vis.cabelo, false);
+}
+
+void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
+    const Vec3f centro{0, 1.7155f, -0.014f};
+    constexpr float rad = 3.14159265f / 180.f;
+    uint32_t rng = 9137u;
+    auto rnd = [&]() { rng = rng * 1664525u + 1013904223u; return float((rng >> 8) & 0xFFFF) / 65535.f; };
+    auto direcao = [](float yaw, float altura) {
+        float t = yaw * rad, f = altura * rad;
+        return Vec3f{std::cos(f) * std::sin(t), std::sin(f), std::cos(f) * std::cos(t)};
+    };
+    auto naCabeca = [&](Vec3f d, float folga) {
+        Vec3f p = centro + Vec3f{d.x * 0.0765f, d.y * 0.0865f, d.z * 0.099f} * 0.85f;
+        for (int it = 0; it < 80 && sdf::cabeca(p) < folga; ++it) p = p + d * 0.0015f;
+        return p;
+    };
+    // Base rente ao cranio: cobre os espacos entre as mechas, inclusive na coroa.
+    constexpr int volta = 24, aneis = 12;
+    if (m.v.size() + volta * aneis + 1 < 64000) {
+        uint16_t base = uint16_t(m.v.size());
+        auto couro = [&](Vec3f d) {
+            Vec3f p = naCabeca(d, 0.0024f);
+            VertPele v;
+            v.pos = {p.x * s * ms, p.y * s, p.z * s * ms};
+            v.normal = normalizar({d.x / ms, d.y, d.z / ms});
+            v.cor = cor * 0.74f;
+            v.material = MAT_CABELO;
+            v.ao = 0.8f;
+            v.osso[0] = v.osso[1] = CABECA;
+            m.v.push_back(v);
         };
-        auto mecha = [&](Vec3f d0, Vec3f d1, float yFim, float larg, float volume, float tom, float escuro, bool atrasOrelha) {
-            const int NC = 9, NQ = 8;  // linhas sobre o cranio e caindo
-            std::vector<Vec3f> pts;
-            for (int r = 0; r < NC; r++) {  // por cima do cranio (arco entre as direcoes)
-                float t = float(r) / (NC - 1);
-                Vec3f d = normalizar(d0 * (1 - t) + d1 * t);
-                if (atrasOrelha) {  // passa por cima e por tras da orelha (a orelha fica a mostra)
-                    float th = std::atan2(std::abs(d.x), d.z) * 180.f / PI;
-                    if (th > 75.f && th < 118.f && d.y < 0.2f) d = normalizar(Vec3f{d.x, 0.2f, d.z});
-                }
-                pts.push_back(naCabeca(d, volume * (0.7f + 0.6f * t) + 0.012f * std::sin(PI * t) * (d.y > 0.3f ? 1.f : 0.4f)));  // volume no alto
-            }
-            Vec3f fimCranio = pts.back(), saida = normalizar(Vec3f{fimCranio.x, 0, fimCranio.z - CZ});
-            float fase = rnd() * 6.2831f, onda = 0.006f + 0.006f * rnd();
-            for (int r = 1; r <= NQ; r++) {  // cai ate o pescoco, as pontas abrem
-                float t = float(r) / NQ;
-                Vec3f p = fimCranio + Vec3f{0, (yFim - fimCranio.y) * t, 0} + saida * (0.006f * t + 0.03f * t * t * t);
-                Vec3f lado = normalizar(cross(saida, Vec3f{0, 1, 0}));
-                p = p + lado * (std::sin(t * 7.f + fase) * onda * t) + Vec3f{0, 0.015f * std::max(0.f, t - 0.8f) * 5.f, 0};
-                pts.push_back(p);
-            }
-            size_t b0 = m.v.size();
-            if (b0 + pts.size() * 2 >= 64000) return;
-            int n = int(pts.size());
-            for (int r = 0; r < n; r++) {
-                Vec3f a = pts[std::max(0, r - 1)], b = pts[std::min(n - 1, r + 1)];
-                Vec3f tg = normalizar(b - a);
-                Vec3f nr = normalizar(pts[r] - Vec3f{0, CY, CZ});
-                Vec3f lado = normalizar(cross(tg, nr));
-                float t = float(r) / (n - 1);
-                float w = larg * (1.f - 0.45f * std::max(0.f, t - 0.5f) * 2.f * std::max(0.f, t - 0.5f) * 2.f);
-                float fis = r < NC ? 0.f : float(r - NC + 1) / NQ;  // fisica so no que cai
-                for (int q = 0; q < 2; q++) {
-                    VertPele v;
-                    v.pos = W(pts[r] + lado * (q ? w : -w));
-                    v.cor = vis.cabelo * (tom * escuro);
-                    v.material = MAT_CARTAO + 0.5f;
-                    v.ao = escuro < 0.9f ? 0.62f : 0.9f;
-                    v.pelos = float(q);
-                    v.tv = t;
-                    v.tang = tg * (0.05f + fis);  // direcao do fio (brilho) e peso da fisica no comprimento
-                    v.compPelo = 0.2f;
-                    v.normal = Wn(nr);
-                    ossos(1.7f, v);
-                    m.v.push_back(v);
-                }
-            }
-            for (int r = 0; r + 1 < n; r++) {
-                uint16_t a = uint16_t(b0 + r * 2), b2 = uint16_t(a + 1), c = uint16_t(a + 3), dd = uint16_t(a + 2);
-                m.idx.insert(m.idx.end(), {a, b2, c, a, c, dd, a, c, b2, a, dd, c});  // dos dois lados
-            }
-        };
-        for (int camada = 0; camada < 2; camada++) {
-            float escuro = camada == 0 ? 0.68f : 1.f, vol = camada == 0 ? 0.004f : 0.011f;
-            // 1) da linha do cabelo (testa e temporas) para tras
-            int nF = camada == 0 ? 20 : 26;
-            for (int k2 = 0; k2 < nF; k2++) {
-                float u = (k2 + 0.5f + 0.4f * (rnd() - 0.5f)) / nF * 2.f - 1.f;        // -1..1 (lado a lado)
-                float th0 = u * 82.f * PI / 180.f;
-                float fi0 = lerp(41.f, 14.f, std::pow(std::abs(u), 1.4f)) * PI / 180.f;
-                float lado = u < 0 ? -1.f : 1.f;
-                float th1 = lado * (150.f + 22.f * std::abs(u) + 6.f * rnd()) * PI / 180.f;
-                float fi1 = (-18.f - 6.f * rnd()) * PI / 180.f;
-                float yFim = lerp(1.585f, 1.605f, rnd()) + (camada == 0 ? 0.02f : 0.f);
-                mecha(dirDe(th0, fi0), dirDe(th1, fi1), yFim, (camada == 0 ? 0.017f : 0.014f) * (0.85f + 0.3f * rnd()), vol,
-                      0.85f + 0.32f * rnd(), escuro, std::abs(u) > 0.55f);
-            }
-            // 2) da coroa para a nuca (cobre a parte de tras da cabeca)
-            int nC = camada == 0 ? 16 : 22;
-            for (int k2 = 0; k2 < nC; k2++) {
-                float u = (k2 + 0.5f) / nC * 2.f - 1.f;
-                float lado = u < 0 ? -1.f : 1.f;
-                float th = lado * (112.f + 68.f * (1.f - std::abs(u)) + 4.f * (rnd() - 0.5f)) * PI / 180.f;
-                float fi0 = (58.f + 8.f * rnd()) * PI / 180.f, fi1 = (-22.f - 6.f * rnd()) * PI / 180.f;
-                float yFim = lerp(1.575f, 1.6f, rnd()) + (camada == 0 ? 0.02f : 0.f);
-                mecha(dirDe(th, fi0), dirDe(th + lado * 0.05f, fi1), yFim, (camada == 0 ? 0.018f : 0.015f) * (0.85f + 0.3f * rnd()), vol,
-                      0.85f + 0.32f * rnd(), escuro, true);
+        for (int i = 0; i < aneis; ++i) {
+            for (int j = 0; j < volta; ++j) {
+                float giro = j * 360.f / volta, frente = std::cos(giro * rad);
+                float linha = frente > 0.f ? lerp(11.f, 24.f, frente) : lerp(11.f, -38.f, -frente);
+                couro(direcao(giro, lerp(linha, 90.f, float(i) / aneis)));
             }
         }
+        uint16_t topo = uint16_t(m.v.size());
+        couro({0, 1, 0});
+        for (int i = 0; i < aneis; ++i) {
+            for (int j = 0; j < volta; ++j) {
+                uint16_t a = base + i * volta + j, b = base + i * volta + (j + 1) % volta;
+                if (i + 1 == aneis) {
+                    m.idx.insert(m.idx.end(), {a, b, topo});
+                } else {
+                    uint16_t c = b + volta, dd = a + volta;
+                    m.idx.insert(m.idx.end(), {a, b, c, a, c, dd});
+                }
+            }
+        }
+    }
+    struct Amostra { Vec3f p; float flex; };
+    auto fita = [&](const std::vector<Amostra>& pts, float largura, float tom, bool base) {
+        size_t inicio = m.v.size(), n = pts.size();
+        if (inicio + n * 3 >= 64000) return;
+        for (size_t i = 0; i < n; ++i) {
+            Vec3f p = pts[i].p;
+            Vec3f anterior = pts[i ? i - 1 : 0].p, seguinte = pts[std::min(i + 1, n - 1)].p;
+            Vec3f tg = normalizar(seguinte - anterior);
+            Vec3f nr = normalizar(p - centro);
+            Vec3f lado = normalizar(cross(tg, nr));
+            float t = float(i) / (n - 1);
+            float w = largura * lerp(0.79f, 1.f, smoothstep(0.f, 0.25f, t)) * (1.f - 0.69f * smoothstep(0.58f, 1.f, t));
+            for (int q = -1; q <= 1; ++q) {
+                // Faixa abaulada no centro, para que o brilho mostre o volume de cada mecha.
+                Vec3f x = p + lado * (float(q) * w) + nr * (q == 0 ? w * 0.25f : 0.f);
+                Vec3f normal = normalizar(nr + lado * (float(q) * 0.38f));
+                VertPele v;
+                v.pos = {x.x * s * ms, x.y * s, x.z * s * ms};
+                v.normal = normalizar({normal.x / ms, normal.y, normal.z / ms});
+                v.cor = cor * tom;
+                v.material = MAT_CARTAO + 0.5f;
+                v.ao = base ? 0.73f : 0.94f;
+                v.pelos = (q + 1) * 0.5f;
+                v.tv = t;
+                v.tang = tg * (0.05f + pts[i].flex);
+                v.osso[0] = v.osso[1] = CABECA;
+                m.v.push_back(v);
+            }
+        }
+        for (size_t i = 0; i + 1 < n; ++i) {
+            bool livre = pts[i + 1].flex > 0.14f;
+            for (size_t q = 0; q < 2; ++q) {
+                uint16_t a = uint16_t(inicio + i * 3 + q), b = a + 1, c = a + 4, d = a + 3;
+                m.idx.insert(m.idx.end(), {a, b, c, a, c, d});
+                if (livre) m.idx.insert(m.idx.end(), {a, c, b, a, d, c});
+            }
+        }
+    };
+
+    // Risca fora do centro. A camada interna cobre o couro cabeludo e as mechas de fora
+    // atravessam o topo em diagonal, formando um topete baixo com volume.
+    for (int camada = 0; camada < (simples ? 1 : 2); ++camada) {
+        bool base = camada == 0;
+        int quantidade = simples ? 26 : base ? 32 : 35;
+        for (int k = 0; k < quantidade; ++k) {
+            float u = (k + 0.5f + 0.42f * (rnd() - 0.5f)) / quantidade * 2.f - 1.f;
+            float lado = u < -0.30f ? -1.f : 1.f;
+            float th = u * 102.f;
+            float altura = lerp(22.f, 10.f, smoothstep(0.25f, 1.f, std::abs(u)));
+            float alvo = lado * (142.f + 31.f * std::abs(u) + 5.f * rnd());
+            float onda = 0.003f + 0.005f * rnd();
+            float fase = rnd() * 6.2831853f;
+            int arco = simples ? 8 : 10, cauda = simples ? 4 : 6;
+            std::vector<Amostra> pts;
+            for (int i = 0; i <= arco; ++i) {
+                float t = float(i) / arco;
+                float giro = lerp(th, alvo, t);
+                float topo = std::sin(3.14159265f * t);
+                float elevacao = lerp(altura, -16.f, t) + topo * lerp(86.f, 33.f, std::pow(std::abs(u), 1.4f));
+                if (std::abs(giro) > 72.f && std::abs(giro) < 104.f) elevacao = std::max(elevacao, 20.f);
+                float volume = lerp(0.001f, base ? 0.003f : 0.008f, smoothstep(0.f, 0.22f, t))
+                             + topo * (base ? 0.009f : 0.021f);
+                pts.push_back({naCabeca(direcao(giro, elevacao), volume), 0.14f * smoothstep(0.35f, 1.f, t)});
+            }
+            Vec3f inicio = pts.back().p, fora = normalizar({inicio.x, 0, inicio.z - centro.z});
+            Vec3f transversal = cross(fora, Vec3f{0, 1, 0});
+            float nuca = lerp(1.566f, 1.617f, rnd());
+            for (int i = 1; i <= cauda; ++i) {
+                float t = float(i) / cauda;
+                Vec3f p = inicio + Vec3f{0, (nuca - inicio.y) * t, 0}
+                        + fora * (t * (0.007f + t * t * 0.019f))
+                        + transversal * (t * onda * std::sin(t * 8.f + fase));
+                pts.push_back({p, lerp(0.14f, 1.f, t * t)});
+            }
+            float tom = (base ? 0.77f : 1.02f) * lerp(0.91f, 1.18f, rnd());
+            fita(pts, (simples ? 0.016f : 0.011f) * lerp(0.78f, 1.28f, rnd()), tom, base);
+        }
+    }
+
+    // Mechas curtas na frente, saindo da risca e caindo diagonalmente sobre a tempora.
+    for (int k = 0; k < (simples ? 7 : 12); ++k) {
+        float u = rnd();
+        float th0 = lerp(-31.f, -11.f, u);
+        float th1 = lerp(36.f, 81.f, u);
+        std::vector<Amostra> pts;
+        for (int i = 0; i <= 10; ++i) {
+            float t = i / 10.f;
+            float ang = lerp(th0, th1, t);
+            float altura = lerp(47.f + 12.f * u, 4.f + 13.f * u, t) + 14.f * std::sin(3.14159265f * t);
+            float volume = lerp(0.009f, 0.007f, t) + 0.017f * std::sin(3.14159265f * t);
+            pts.push_back({naCabeca(direcao(ang, altura), volume), 0.49f * smoothstep(0.2f, 1.f, t)});
+        }
+        fita(pts, lerp(0.006f, 0.010f, rnd()), lerp(0.90f, 1.18f, rnd()), false);
     }
 }
 

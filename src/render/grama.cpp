@@ -27,6 +27,16 @@ Mesh Grama::montar(int bi, int bj) const {
     uint32_t rng = hash32(uint32_t(bi * 92821 + bj * 68917 + 7));
     int n = int(BLOCO * BLOCO * densidade_);
     float x0 = bi * BLOCO, z0 = bj * BLOCO;
+    std::vector<InteriorMundo> casas;
+    for (auto casa : *interiores_) {
+        // Folhas inclinadas ou balancando podem entrar pela borda do piso.
+        casa.meia.x += 0.35f;
+        casa.meia.z += 0.35f;
+        float alcance = std::hypot(casa.meia.x, casa.meia.z) + BLOCO * 0.5f;
+        if (std::abs(casa.centro.x - (x0 + BLOCO * 0.5f)) <= alcance &&
+            std::abs(casa.centro.z - (z0 + BLOCO * 0.5f)) <= alcance)
+            casas.push_back(casa);
+    }
     for (int k = 0; k < n; k++) {
         float x = x0 + aleatorio01(rng) * BLOCO, z = z0 + aleatorio01(rng) * BLOCO;
         float r1 = aleatorio01(rng), r2 = aleatorio01(rng), r3 = aleatorio01(rng), r4 = aleatorio01(rng);
@@ -37,7 +47,9 @@ Mesh Grama::montar(int bi, int bj) const {
         if (nn.y < 0.86f) continue;
         Rgb chao = corDoChao(t, x, z, nn.y);
         if (!(chao.g > chao.r * 1.05f && chao.g > chao.b * 1.3f)) continue;  // so onde o chao e verde
-        if (std::hypot(col_->resolver({x, y, z}, 0.25f).x - x, col_->resolver({x, y, z}, 0.25f).z - z) > 0.01f) continue;
+        if (dentroDeInterior(casas, {x, y + 0.72f, z}) >= 0) continue;
+        Vec3f livre = col_->resolver({x, y, z}, 0.25f);
+        if (std::hypot(livre.x - x, livre.z - z) > 0.01f) continue;
         // manchas: em uns lugares a grama e mais alta e mais clara
         float mancha = 0.5f + 0.5f * std::sin(x * 0.21f + std::sin(z * 0.17f) * 2.f) * std::cos(z * 0.13f);
         float h = 0.18f + 0.32f * mancha + 0.18f * r1, w = 0.025f + 0.025f * r2;

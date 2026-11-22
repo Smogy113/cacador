@@ -923,4 +923,7 @@ void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vect
 #endif
 }
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
-void Iluminacao::definirCabelo(Vec3f d) { SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloDesl"), &d, SHADER_UNIFORM_VEC3); }
+void Iluminacao::definirCabelo(Vec3f raiz, Vec3f ponta) {
+    SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloRaiz"), &raiz, SHADER_UNIFORM_VEC3);
+    SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloPonta"), &ponta, SHADER_UNIFORM_VEC3);
+}

@@ -117,7 +117,7 @@ private:
     // ---- recompensas e tiroteio (game/combate.cpp) ----
     struct Particula {
         Vec3f pos, vel;
-        float vida, tam;
+        float vida, duracao, tam, expansao;
         Rgb cor;
     };
     Cacada cacada_;
@@ -129,8 +129,15 @@ private:
     float marcaAcerto_ = 0;
     bool marcaMatou_ = false;
     float amarrarT_ = 0, morteT_ = -1;
-    float flashT_ = 0;
-    Vec3f flashPos_{};
+    static constexpr float DURACAO_FLASH = 0.035f;
+    struct Clarao {
+        Vec3f pos, dir;
+        float vida;
+    };
+    Texture2D texturaFumaca_{};
+    std::vector<Clarao> claroes_;
+    void efeitoTiro(Vec3f pos, Vec3f dir);
+
     std::vector<Particula> particulas_;
     std::string mensagem_;
     float mensagemT_ = 0;
@@ -139,7 +146,7 @@ private:
     int xerifePerto_ = -1;
     std::vector<ModeloHumano> modelosBando_;  // 0 = chefe; 1..3 capangas
     ModeloHumano modeloXerife_;
-    uint32_t rngTiro_ = 12345;
+    uint32_t rngTiro_ = 12345, rngEfeito_ = 18431;
     bool tiroOuvido_ = false;
     Sons sons_;
     Grama grama_;
@@ -164,8 +171,10 @@ public:
     void imprimirPerfil() const;  // tempos por parte (capturas com --depuracao)
 private:
     Vec3f direitaJogador() const { return {-std::cos(jogador_.yaw), 0, std::sin(jogador_.yaw)}; }
-    Vec3f cabeloX_{}, cabeloV_{}, cabecaAntes_{}, velCabecaAntes_{};  // fisica do cabelo (mola)
-    float yawCabeloAntes_ = 0;
+    struct MolaCabelo { Vec3f pos, vel; };
+    MolaCabelo cabeloRaiz_{}, cabeloPonta_{};
+    Vec3f cabecaAntes_{}, velCabecaAntes_{}, acelCabelo_{};
+    float yawCabeloAntes_ = 0, giroCabelo_ = 0;
     bool cabeloIniciado_ = false;
     void atualizarCabelo(float dt);
     void configurarGrama();

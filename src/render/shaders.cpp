@@ -1448,7 +1448,7 @@ mat4 matrizPele() {
 )"
 
 const char* VS_PELE = CORPO_SKIN R"(
-uniform vec3 cabeloDesl;   // fisica do cabelo: deslocamento da ponta (espaco do modelo)
+uniform vec3 cabeloRaiz, cabeloPonta;  // deslocamentos das duas molas no espaco do modelo
 uniform float tempoVento;
 VARY vec4 tanRep;
 VARY vec3 tanMundo;
@@ -1464,22 +1464,34 @@ VARY vec2 extra;
 void main() {
     mat4 S = matrizPele();
     vec4 pl = S * vec4(vertexPosition, 1.0);
-    if (vertexTexCoord.y > 24.25 && vertexTexCoord.y < 24.75) {  // cabelo comprido: a raiz fica, a ponta balanca
-        float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);  // peso da fisica (0 na raiz/cranio)
-        w = w * w;
-        pl.xyz += cabeloDesl * w;
-        pl.x += sin(tempoVento * 2.3 + vertexPosition.y * 40.0) * 0.004 * w;  // brisa
+    vec3 tangente = mat3(S) * vertexTangent.xyz;
+    vec3 normal = normalize(mat3(S) * vertexNormal);
+    if (vertexTexCoord.y > 24.25 && vertexTexCoord.y < 24.75) {
+        float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
+        float ponta = smoothstep(0.25, 1.0, w);
+        float lado = clamp(vertexPosition.x * 9.0, -1.0, 1.0);
+        vec3 vento = vec3(sin(tempoVento * 3.1 + lado * 2.3), 0.4 * sin(tempoVento * 4.5 + lado * 2.0),
+                          cos(tempoVento * 2.4 + lado * 3.0)) * 0.009;
+        vec3 desloc = cabeloRaiz * smoothstep(0.0, 0.5, w) * (1.0 - ponta)
+                     + (cabeloPonta * (1.0 + lado * 0.20) + vento) * ponta;
+        // Na franja e perto do couro, a normal bloqueia a parte do movimento que entraria na cabeca.
+        float paraDentro = min(0.0, dot(desloc, normal) + mix(0.002, 0.016, ponta));
+        desloc -= normal * paraDentro;
+        pl.xyz += desloc;
+        vec3 fio = normalize(tangente + desloc * 0.8);
+        normal = normalize(normal - fio * dot(normal, fio) * w);
+        tangente = fio;
     }
     vec4 p = matModel * pl;
     posMundo = p.xyz;
     mat3 mn = mat3(matModel) * mat3(S);
-    normalMundo = normalize(mn * vertexNormal);
+    normalMundo = normalize(mat3(matModel) * normal);
     cor = vertexColor;
     extra = vertexTexCoord;
     posRep = vertexPosition;
     nRep = vertexNormal;
     tanRep = vertexTangent;
-    tanMundo = mn * vertexTangent.xyz;
+    tanMundo = mat3(matModel) * tangente;
     mc0 = mn[0];
     mc1 = mn[1];
     mc2 = mn[2];

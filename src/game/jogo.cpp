@@ -22,7 +22,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     luz_.dbg.semFoco = op.semFoco;
     luz_.dbg.semParedes = op.semParedes;
     estilo::carregar();
-    grama_.iniciar(*terreno_, col_);
+    grama_.iniciar(*terreno_, col_, cenario_.interiores());
     nav_ = std::make_unique<Navegador>(*terreno_, &mapa_);
     mapaTela_.carregar(*terreno_, mapa_);
     configurarGrama();
@@ -327,7 +327,7 @@ void Jogo::atualizar(float dt) {
         passada_ += dt * jogador_.vel * fasePorMetro(jogador_.vel);
         if (int(passada_ / 3.14159f) != passoAntes_) {  // um som por passo
             passoAntes_ = int(passada_ / 3.14159f);
-            if (jogador_.vel > 0.1f) sons_.passo(jogador_.vel > 3.f ? 0.55f : 0.35f);
+            if (jogador_.vel > 0.1f) sons_.passo(jogador_.vel > 3.f ? 0.55f : 0.35f, dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0);
         }
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
@@ -352,7 +352,7 @@ void Jogo::atualizar(float dt) {
     atualizarCombate(dt, e);
     atualizarCabelo(dt);
     atualizarRota(dt);
-    sons_.ambiente(dt, relogio_.intensidadeTochas());
+    sons_.ambiente(dt, relogio_.intensidadeTochas(), dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0);
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
         if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);
@@ -374,7 +374,10 @@ void Jogo::atualizar(float dt) {
         Vec3f p = jogador_.pos + Vec3f{0, 1.25f, 0} + dir * 0.35f + frenteDe(jogador_.yaw) * 0.2f;
         luzes_.push_back({p, Rgb{1.0f, 0.72f, 0.42f} * (2.4f * noite), 15.f, 0.3f});
     }
-    if (flashT_ > 0) luzes_.insert(luzes_.begin(), {flashPos_, Rgb{1.f, 0.75f, 0.4f} * 6.f, 9.f, 0.f});  // clarao do tiro
+    for (const Clarao& flash : claroes_) {
+        float brilho = clamp01(flash.vida / DURACAO_FLASH);
+        luzes_.insert(luzes_.begin(), {flash.pos, Rgb{1.f, 0.64f, 0.32f} * (4.5f * brilho), 4.f, 0.f});
+    }
 }
 
 // fora do campo de visao (atras da camera, com folga): nao calcula pose nem desenha
@@ -399,15 +402,15 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         const Cavalo& c = cavalos_[montadoEm_];
         Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_ + float(montadoEm_) * 3.7f);
         Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc);
-        luz_.definirCabelo(rotY(cabeloX_, -c.corpo.yaw));
+        luz_.definirCabelo(rotY(cabeloRaiz_.pos, -c.corpo.yaw), rotY(cabeloPonta_.pos, -c.corpo.yaw));
         modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd, matCabeca);
-        luz_.definirCabelo({});
+        luz_.definirCabelo({}, {});
         luz_.definirHeroi(false);
         return;
     }
-    luz_.definirCabelo(rotY(cabeloX_, -jogador_.yaw));
+    luz_.definirCabelo(rotY(cabeloRaiz_.pos, -jogador_.yaw), rotY(cabeloPonta_.pos, -jogador_.yaw));
     modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd, matCabeca);
-    luz_.definirCabelo({});
+    luz_.definirCabelo({}, {});
     luz_.definirHeroi(false);
 }
 
@@ -579,37 +582,68 @@ void Jogo::configurarGrama() {
     else grama_.configurar(34.f, 20.f);
 }
 
-// Fisica do cabelo: uma mola amortecida puxada pela inercia da cabeca (arrancar, frear, pular no
-// galope), pelos giros (o cabelo abre para fora) e por um vento leve. O shader desloca a ponta das mechas.
+// Molas acopladas: a parte curta acompanha a cabeca; o comprimento e as pontas atrasam.
 void Jogo::atualizarCabelo(float dt) {
-    float yaw = montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw;
-    Vec3f cab = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.5f : 1.7f, 0};
-    if (montadoEm_ >= 0) cab.y += 0.06f * std::sin(cavalos_[montadoEm_].passada * 2.f);  // sobe e desce no trote
-    else cab.y += 0.03f * std::sin(passada_ * 2.f) * std::min(1.f, jogador_.vel);
-    if (!cabeloIniciado_ || dt <= 0) {
+    if (dt <= 0.f) return;
+    const Esqueleto& e = modeloJogador_.esqueleto();
+    Vec3f base = jogador_.pos;
+    float yaw = jogador_.yaw;
+    Pose pose;
+    if (montadoEm_ >= 0) {
+        const Cavalo& cavalo = cavalos_[montadoEm_];
+        const auto& modelo = modelosCavalo_[montadoEm_];
+        Pose cav = poseCavalo(modelo.esqueleto(), cavalo.passada, int(cavalo.andadura), tempo_ + float(montadoEm_) * 3.7f);
+        base = modelo.assento(cavalo.corpo.pos, cavalo.corpo.yaw, cav) - Vec3f{0, e.ossos[QUADRIL].inicio.y, 0};
+        yaw = cavalo.corpo.yaw;
+        pose = poseMontado(e, cavalo.passada, int(cavalo.andadura));
+    } else {
+        pose = poseDoJogador(e);
+    }
+    std::vector<Mat4> ossos;
+    calcularMatrizes(e, pose, ossos);
+    Vec3f cranio = e.ossos[CABECA].inicio + Vec3f{0, 0.12f, 0};
+    Vec3f cab = base + rotY(ossos[CABECA].ponto(cranio), yaw);
+    Vec3f delta = cab - cabecaAntes_;
+    if (!cabeloIniciado_ || len(delta) > std::max(0.75f, 26.f * dt)) {
         cabecaAntes_ = cab;
-        velCabecaAntes_ = {};
+        velCabecaAntes_ = acelCabelo_ = {};
+        cabeloRaiz_ = cabeloPonta_ = {};
         yawCabeloAntes_ = yaw;
+        giroCabelo_ = 0.f;
         cabeloIniciado_ = true;
         return;
     }
-    Vec3f vel = (cab - cabecaAntes_) * (1.f / dt);
-    if (len(vel) > 30.f) vel = {};  // teleporte
+    Vec3f vel = delta * (1.f / dt);
+    float filtro = 1.f - std::exp(-dt * 17.f);
     Vec3f acel = (vel - velCabecaAntes_) * (1.f / dt);
-    if (len(acel) > 60.f) acel = acel * (60.f / len(acel));
-    float giro = std::atan2(std::sin(yaw - yawCabeloAntes_), std::cos(yaw - yawCabeloAntes_)) / dt;
+    acel = acel * std::min(1.f, 48.f / std::max(len(acel), 0.01f));
+    acelCabelo_ = acelCabelo_ + (acel - acelCabelo_) * filtro;
+    float difYaw = yaw - yawCabeloAntes_;
+    float giro = std::clamp(std::atan2(std::sin(difYaw), std::cos(difYaw)) / dt, -6.f, 6.f);
+    giroCabelo_ = lerp(giroCabelo_, giro, filtro);
     cabecaAntes_ = cab;
     velCabecaAntes_ = vel;
     yawCabeloAntes_ = yaw;
-    Vec3f direita{-std::cos(yaw), 0, std::sin(yaw)};
-    Vec3f alvo = acel * -0.01f + vel * -0.006f + direita * (giro * 0.02f) +
-                 Vec3f{std::sin(tempo_ * 1.3f) * 0.008f, 0, std::cos(tempo_ * 0.9f) * 0.006f};
-    Vec3f a = (alvo - cabeloX_) * 80.f - cabeloV_ * 8.f;
-    cabeloV_ = cabeloV_ + a * dt;
-    cabeloX_ = cabeloX_ + cabeloV_ * dt;
-    cabeloX_.y = std::clamp(cabeloX_.y, -0.03f, 0.04f);
-    float l = len(cabeloX_);
-    if (l > 0.11f) cabeloX_ = cabeloX_ * (0.11f / l);
+
+    Vec3f vento{std::sin(tempo_ * 1.5f) * 0.010f, 0, std::cos(tempo_ * 0.91f) * 0.008f};
+    Vec3f alvo = acelCabelo_ * -0.0013f + vel * -0.0033f + direitaJogador() * (giroCabelo_ * 0.009f) + vento;
+    alvo.y = std::clamp(alvo.y, -0.030f, 0.043f);
+    auto integrar = [](MolaCabelo& m, Vec3f alvo, float rigidez, float amortecimento, float limite, float h) {
+        m.vel = (m.vel + (alvo - m.pos) * (rigidez * h)) * std::exp(-amortecimento * h);
+        m.pos = m.pos + m.vel * h;
+        float d = len(m.pos);
+        if (d > limite) {
+            Vec3f fora = m.pos * (1.f / d);
+            m.pos = fora * limite;
+            m.vel = m.vel - fora * std::max(0.f, dot(m.vel, fora));
+        }
+    };
+    int passos = std::max(1, int(std::ceil(dt * 120.f)));
+    float h = dt / passos;
+    for (int i = 0; i < passos; ++i) {
+        integrar(cabeloRaiz_, alvo * 0.50f, 210.f, 18.f, 0.040f, h);
+        integrar(cabeloPonta_, alvo * 0.56f + cabeloRaiz_.pos * 0.95f, 88.f, 9.f, 0.075f, h);
+    }
 }
 
 // Rota ate o objetivo da recompensa (esconderijo -> procurado -> xerife), recalculada quando o
@@ -661,13 +695,20 @@ void Jogo::atualizarPortas(float dt, bool interagir) {
             sons_.porta(true);
         } else if (portaPodeFechar(p, jogador_.pos, RAIO_PESSOA)) {
             p.querAberta = false;
-            sons_.porta(false);
         }
     }
     std::vector<CaixaGirada> folhas;
     for (auto& p : ps) {
         float alvo = p.querAberta ? 1.f : 0.f;
-        if (p.abertura != alvo) p.abertura = alvo > p.abertura ? std::min(alvo, p.abertura + dt / 0.4f) : std::max(alvo, p.abertura - dt / 0.4f);
+        if (p.abertura != alvo) {
+            if (alvo == 0.f && !portaPodeFechar(p, jogador_.pos, RAIO_PESSOA)) {
+                p.querAberta = true;
+            } else {
+                p.abertura = alvo > p.abertura ? std::min(alvo, p.abertura + dt / 0.4f) : std::max(alvo, p.abertura - dt / 0.4f);
+                if (p.abertura == 0.f && std::hypot(p.dobradica.x - jogador_.pos.x, p.dobradica.z - jogador_.pos.z) < 8.f)
+                    sons_.porta(false);
+            }
+        }
         if (std::hypot(p.dobradica.x - jogador_.pos.x, p.dobradica.z - jogador_.pos.z) < 25.f) folhas.push_back(folhaPorta(p));
     }
     col_.definirDinamicas(std::move(folhas));

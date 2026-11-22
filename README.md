@@ -12,7 +12,7 @@ de vídeo: andar, correr, respirar parado e cavalgar (passo, trote e galope).
 procurado e o bando dele no revólver e traga o alvo vivo (vale mais) ou morto ao xerife, ao lado do
 quadro. Cada procurado tem um temperamento — uns se rendem, outros lutam até o fim, outros fogem —
 e o cartaz dá a pista. Se você cair, acorda na cidade e a recompensa continua.
-Missões de história, loja e sons vêm depois.
+Missões de história e loja vêm depois.
 
 ## Como jogar (Windows)
 
@@ -23,7 +23,7 @@ Abra `cacador.exe` (a pasta `data/` precisa estar ao lado dele).
 | W A S D | andar (no cavalo: W anda, A/D viram, S freia) |
 | Shift | correr / galopar |
 | Mouse | girar a câmera |
-| E | montar, desmontar, ver o quadro de recompensas, puxar o preso pela corda, entregar ao xerife |
+| E | montar, desmontar, abrir e fechar portas, ver o quadro de recompensas, puxar o preso pela corda, entregar ao xerife |
 | Segurar E | amarrar o procurado rendido |
 | Enter (no quadro) | aceitar a recompensa do cartaz |
 | Botão direito | mirar (câmera sobre o ombro) |
@@ -49,6 +49,11 @@ aberração cromática sutil nas bordas.
 traçada contra as construções de verdade: escuro sob o beiral e junto ao alicerce e, à noite, a
 janela acesa clareando a parede. No Alto ainda há sombra suave do sol traçada contra casas e
 telhados, sombra de cada tábua e pedra, e a luz que uma parede ensolarada rebate na casa em frente.
+
+**Casas e disparos (0.20):** use E perto de uma porta para entrar nos prédios. A câmera se aproxima
+em cômodos fechados e a lanterna continua útil à noite. Os passos mudam sobre o piso das casas,
+os tiros reverberam nos interiores e as paredes abafam disparos do outro lado. O clarão e a fumaça
+saem do cano, e as pontas do cabelo do caçador reagem ao movimento e ao vento.
 
 **Painel de depuração (F1):** em "Gráficos" dá para ligar e desligar a cabeça por raymarching (com
 o tempo do quadro ao lado, para comparar o custo), a luz de personagem, a profundidade de campo e a

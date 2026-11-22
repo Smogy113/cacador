@@ -21,6 +21,19 @@ void bracosPresos(Pose& p, const Pose& amarrado) {
 }  // namespace
 
 void Jogo::iniciarCombate() {
+    Image fumaca = GenImageColor(64, 64, BLANK);
+    for (int y = 0; y < fumaca.height; ++y) {
+        for (int x = 0; x < fumaca.width; ++x) {
+            float u = (x + 0.5f) / 32.f - 1.f, v = (y + 0.5f) / 32.f - 1.f;
+            float r = std::hypot(u, v);
+            float n = std::sin(13.f * u + 8.f * v) * std::sin(11.f * v - 3.f * u);
+            float alfa = (1.f - smoothstep(0.05f, 0.95f, r + 0.09f * n)) * (0.87f + 0.13f * n);
+            ImageDrawPixel(&fumaca, x, y, Fade(WHITE, alfa));
+        }
+    }
+    texturaFumaca_ = LoadTextureFromImage(fumaca);
+    UnloadImage(fumaca);
+    SetTextureFilter(texturaFumaca_, TEXTURE_FILTER_BILINEAR);
     Visual chefe, cap, xer;
     chefe.revolver = cap.revolver = true;
     chefe.casaco = {0.36f, 0.12f, 0.1f};
@@ -61,6 +74,7 @@ void Jogo::iniciarCombate() {
 }
 
 void Jogo::descarregarCombate() {
+    UnloadTexture(texturaFumaca_);
     for (auto& m : modelosBando_) m.descarregar();
     modeloXerife_.descarregar();
 }
@@ -177,7 +191,15 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     tiroT_ = std::max(0.f, tiroT_ - dt);
     marcaAcerto_ = std::max(0.f, marcaAcerto_ - dt);
     mensagemT_ = std::max(0.f, mensagemT_ - dt);
-    flashT_ = std::max(0.f, flashT_ - dt);
+    for (auto& f : claroes_) f.vida -= dt;
+    claroes_.erase(std::remove_if(claroes_.begin(), claroes_.end(), [](const Clarao& f) { return f.vida <= 0; }), claroes_.end());
+    for (auto& p : particulas_) {
+        p.vida -= dt;
+        p.pos = p.pos + p.vel * dt;
+        p.vel = p.vel * std::exp(-3.8f * dt) + Vec3f{0, 0.38f * dt, 0};
+        p.tam += dt * p.expansao;
+    }
+    particulas_.erase(std::remove_if(particulas_.begin(), particulas_.end(), [](const Particula& p) { return p.vida <= 0; }), particulas_.end());
     bool recarregavaAntes = arma_.recarregando();
     if (e.recarregar && vivoJ) arma_.recarregar();
 
@@ -187,6 +209,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
         jogador_.yaw = rig_.yaw;
         anguloMira_ = std::asin(std::clamp(camDir.y, -0.9f, 0.9f));
     }
+    int interior = dentroDeInterior(cenario_.interiores(), jogador_.pos);
     // ---- tiro do jogador ----
     tiroOuvido_ = false;
     if (e.atirar && aPe && vivoJ && quadroAberto_ < 0) {
@@ -194,7 +217,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
         if (arma_.podeAtirar()) {
             arma_.atirar();
             if (dbg_.municaoInf) arma_.balas = Revolver::CAPACIDADE;
-            sons_.tiro(1.f, 0.5f);
+            sons_.tiro(1.f, 0.5f, interior >= 0);
             tiroOuvido_ = true;
             tiroT_ = 0.18f;
             jogador_.yaw = rig_.yaw;
@@ -214,12 +237,17 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
             } else if (t.dist < 199.f) {
                 for (int k = 0; k < 5; k++)  // poeira onde a bala bateu
                     particulas_.push_back({t.ponto, Vec3f{aleatorio01(rngTiro_) - 0.5f, 1.2f + aleatorio01(rngTiro_), aleatorio01(rngTiro_) - 0.5f},
-                                           0.6f, 0.06f, Rgb{0.55f, 0.48f, 0.38f}});
+                                           0.45f, 0.45f, 0.09f, 0.22f, Rgb{0.55f, 0.48f, 0.38f}});
             }
-            flashT_ = 0.06f;
-            flashPos_ = cano + dir * 0.2f;
-            for (int k = 0; k < 4; k++)  // fumaca do cano
-                particulas_.push_back({flashPos_, dir * 1.5f + Vec3f{0, 0.4f, 0} * float(k), 0.8f, 0.05f, Rgb{0.7f, 0.7f, 0.68f}});
+            const Esqueleto& e = modeloJogador_.esqueleto();
+            const Osso& mao = e.ossos[MAO_D];
+            std::vector<Mat4> ossos;
+            calcularMatrizes(e, poseDoJogador(e), ossos);
+            Vec3f eixo = normalizar(mao.fim - mao.inicio);
+            float escala = e.ossos[CABECA].fim.y / 1.8f;
+            Vec3f p = ossos[MAO_D].ponto(bocaDoRevolver(e, escala));
+            Vec3f frente = ossos[MAO_D].vetor(eixo);
+            efeitoTiro(jogador_.pos + rotY(p, jogador_.yaw), normalizar(rotY(frente, jogador_.yaw)));
         }
     }
     // ---- amarrar (segurar E) ----
@@ -242,10 +270,12 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     for (Vec3f c : ev.claroes) {
         Vec3f d = c - jogador_.pos;
         float dist = std::hypot(d.x, d.z), lado = dist > 0.1f ? dot(d * (1.f / dist), direitaDe(rig_.yaw)) : 0.f;
-        sons_.tiro(std::clamp(1.f - dist / 220.f, 0.05f, 1.f) * 0.85f, 0.5f - 0.4f * lado);
-        flashT_ = 0.06f;
-        flashPos_ = c;
-        particulas_.push_back({c, Vec3f{0, 0.6f, 0}, 0.7f, 0.05f, Rgb{0.7f, 0.7f, 0.68f}});
+        int origem = dentroDeInterior(cenario_.interiores(), c);
+        Vec3f ouvido = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.4f : 1.55f, 0};
+        bool abafado = !col_.raioLivre(c, ouvido);
+        float ganho = 0.84f / (1.f + dist * 0.035f);
+        sons_.tiro(ganho * (abafado ? 0.38f : 1.f), 0.5f - 0.4f * lado, origem >= 0 && origem == interior, abafado);
+        efeitoTiro(c, normalizar(Vec3f{-d.x, 0, -d.z}));
     }
     if (const Bandido* c = cacada_.bando().chefe()) {
         if (c->estado != estadoChefeAntes_) {
@@ -294,15 +324,9 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     xerifePerto_ = -1;
     for (size_t i = 0; i < xerifes_.size(); i++)
         if (distXZ(xerifes_[i], jogador_.pos) <= DIST_ENTREGAR) xerifePerto_ = int(i);
-    // ---- particulas ----
-    for (auto& p : particulas_) {
-        p.vida -= dt;
-        p.pos = p.pos + p.vel * dt;
-        p.vel = p.vel * (1.f - std::min(1.f, dt * 2.f)) + Vec3f{0, 0.3f * dt, 0};
-        p.tam += dt * 0.25f;
-    }
-    particulas_.erase(std::remove_if(particulas_.begin(), particulas_.end(), [](const Particula& p) { return p.vida <= 0; }), particulas_.end());
-    if (particulas_.size() > 30) particulas_.erase(particulas_.begin(), particulas_.begin() + long(particulas_.size() - 30));
+    constexpr size_t maxParticulas = 72;
+    if (particulas_.size() > maxParticulas)
+        particulas_.erase(particulas_.begin(), particulas_.end() - maxParticulas);
 }
 
 Pose Jogo::poseDoJogador(const Esqueleto& ej) const {
@@ -398,11 +422,49 @@ void Jogo::desenharCombatentes(Material& matPele, bool sombraBolha, float distMa
     }
 }
 
-void Jogo::desenharEfeitos() {
-    if (particulas_.empty()) return;
-    for (auto& p : particulas_) {
-        float a = std::clamp(p.vida, 0.f, 1.f) * 0.5f;
-        DrawSphere({p.pos.x, p.pos.y, p.pos.z}, p.tam,
-                   Color{(unsigned char)(p.cor.r * 255), (unsigned char)(p.cor.g * 255), (unsigned char)(p.cor.b * 255), (unsigned char)(a * 255)});
+void Jogo::efeitoTiro(Vec3f pos, Vec3f dir) {
+    claroes_.push_back({pos, dir, DURACAO_FLASH});
+    // Jato curto junto ao cano e nuvem mais lenta que se dispersa.
+    for (int i = 0; i < 5; ++i) {
+        float t = float(i) / 4.f;
+        float duracao = 0.20f + t * 0.20f;
+        Vec3f deriva{aleatorio01(rngEfeito_) - 0.5f, aleatorio01(rngEfeito_) * 0.12f, aleatorio01(rngEfeito_) - 0.5f};
+        Vec3f p = pos + dir * (0.025f + t * 0.08f);
+        Vec3f v = dir * (0.75f + t * 0.70f) + deriva * 0.38f;
+        particulas_.push_back({p, v, duracao, duracao, 0.035f + t * 0.025f, 0.18f, Rgb{0.68f, 0.65f, 0.61f}});
     }
+}
+
+void Jogo::desenharEfeitos() {
+    if (!texturaFumaca_.id || (particulas_.empty() && claroes_.empty())) return;
+    Vec3f olho{cam_.position.x, cam_.position.y, cam_.position.z};
+    Vec3f frente = normalizar(Vec3f{cam_.target.x, cam_.target.y, cam_.target.z} - olho);
+    std::vector<const Particula*> ordenadas;
+    ordenadas.reserve(particulas_.size());
+    for (const Particula& p : particulas_) ordenadas.push_back(&p);
+    std::sort(ordenadas.begin(), ordenadas.end(), [&](const Particula* a, const Particula* b) {
+        return dot(a->pos - olho, frente) > dot(b->pos - olho, frente);
+    });
+
+    rlDrawRenderBatchActive();
+    rlDisableDepthMask();
+    for (const Particula* part : ordenadas) {
+        const Particula& p = *part;
+        float vida = clamp01(p.vida / p.duracao);
+        DrawBillboard(cam_, texturaFumaca_, {p.pos.x, p.pos.y, p.pos.z}, p.tam,
+                      Fade(Color{static_cast<unsigned char>(p.cor.r * 255), static_cast<unsigned char>(p.cor.g * 255),
+                                 static_cast<unsigned char>(p.cor.b * 255), 255}, 0.31f * vida * vida));
+    }
+    BeginBlendMode(BLEND_ADDITIVE);
+    for (const Clarao& f : claroes_) {
+        float a = clamp01(f.vida / DURACAO_FLASH);
+        for (int i = 0; i < 3; ++i) {
+            Vec3f p = f.pos + f.dir * (0.012f + 0.034f * i);
+            DrawBillboard(cam_, texturaFumaca_, {p.x, p.y, p.z}, (0.065f + 0.018f * i) * a,
+                          Fade(i == 0 ? Color{255, 246, 210, 255} : Color{255, 147, 57, 255}, a * (1.f - 0.22f * i)));
+        }
+    }
+    EndBlendMode();
+    rlDrawRenderBatchActive();
+    rlEnableDepthMask();
 }

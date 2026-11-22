@@ -10,18 +10,18 @@ public:
     void descarregar();
     bool ok() const { return ok_; }
     // vol 0..1, pan 0 (direita) .. 1 (esquerda), tom ~1
-    void tiro(float vol, float pan);
-    void passo(float vol);
+    void tiro(float vol, float pan, bool interior, bool abafado = false);
+    void passo(float vol, bool interior);
     void casco(float vol);
     void recarga();
     void porta(bool abrindo);  // rangido ao abrir, batida ao fechar
     // chamado todo quadro: noite 0..1, dt
-    void ambiente(float dt, float noite);
+    void ambiente(float dt, float noite, bool interior);
 
 private:
     bool ok_ = false;
-    Sound tiro_[4]{}, passo_{}, casco_{}, recarga_{}, vento_{}, passaro_{}, grilo_{}, rangido_{}, batida_{};
-    int prox_ = 0;
+    Sound tiro_[3][4]{}, madeira_[4]{}, passo_{}, casco_{}, recarga_{}, vento_{}, passaro_{}, grilo_{}, rangido_{}, batida_{};
+    unsigned proxTiro_[3]{}, proxPasso_ = 0;
     float tPassaro_ = 3, tGrilo_ = 1;
     unsigned semente_ = 12345;
     float rnd();

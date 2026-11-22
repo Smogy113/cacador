@@ -32,7 +32,7 @@ public:
     Nivel nivel() const { return nivel_; }
     void definirRaioGrama(float r);
     float posSolTela_[2] = {-1.f, -1.f};
-    void definirCabelo(Vec3f deslocamentoModelo);
+    void definirCabelo(Vec3f raiz, Vec3f ponta);
     void definirHeroi(bool sim);
     void definirFoco(float distHeroi);
     // construcoes perto da camera (formas exatas) e janelas, para a luz tracada nas paredes

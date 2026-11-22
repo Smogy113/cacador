@@ -3,6 +3,7 @@
 #include <utility>
 #include "core/collision.h"
 #include "core/math.h"
+#include "core/predio.h"
 #include "raylib.h"
 
 class Terreno;
@@ -13,7 +14,11 @@ class Terreno;
 class Grama {
 public:
     static constexpr float BLOCO = 8.f;
-    void iniciar(const Terreno& t, const MundoColisao& col) { t_ = &t; col_ = &col; }
+    void iniciar(const Terreno& t, const MundoColisao& col, const std::vector<InteriorMundo>& interiores) {
+        t_ = &t;
+        col_ = &col;
+        interiores_ = &interiores;
+    }
     // raio 0 = sem grama; densidade em folhas por m2
     void configurar(float raio, float densidade);
     void atualizar(Vec3f foco, int maxNovos);
@@ -27,6 +32,7 @@ private:
     Mesh montar(int i, int j) const;
     const Terreno* t_ = nullptr;
     const MundoColisao* col_ = nullptr;
+    const std::vector<InteriorMundo>* interiores_ = nullptr;
     float raio_ = 0, densidade_ = 0;
     std::map<std::pair<int, int>, Mesh> blocos_;
     size_t tris_ = 0;

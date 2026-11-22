@@ -4,7 +4,7 @@
 #include <vector>
 
 namespace {
-constexpr int TAXA = 22050;
+constexpr int TAXA = 44100;
 const float PI2 = 6.2831853f;
 
 struct Gerador {
@@ -34,30 +34,48 @@ void abafar(std::vector<float>& a, float corte) {
     for (float& v : a) v = y += k * (v - y);
 }
 
-// Tiro de revolver: estalo de ruido curtissimo, estrondo grave (60-90 Hz) e eco nos morros.
-std::vector<float> somTiro(unsigned semente) {
+// Impulso de pressao, estalo de banda larga e reflexos do ambiente.
+std::vector<float> somTiro(unsigned semente, bool interior, bool abafado) {
     Gerador g{semente};
-    int n = int(TAXA * 1.6f);
-    std::vector<float> a(n, 0.f), seco(int(TAXA * 0.45f));
-    for (int i = 0; i < int(seco.size()); i++) {
+    std::vector<float> a(TAXA * 3 / 2), direto(TAXA / 5);
+    float medio = 0.f, grave = 0.f;
+    for (size_t i = 0; i < direto.size(); ++i) {
         float t = float(i) / TAXA;
-        float estalo = g.ruido() * std::exp(-t * 55.f);
-        float corpo = g.ruido() * std::exp(-t * 9.f) * 0.5f;
-        float grave = std::sin(PI2 * (85.f - 40.f * t) * t) * std::exp(-t * 7.f) * 0.9f;
-        seco[i] = estalo + corpo + grave;
+        float ruido = g.ruido();
+        medio += 0.21f * (ruido - medio);
+        grave += 0.025f * (ruido - grave);
+        float frente = 1.f - std::exp(-t * 9000.f);
+        float impulso = (std::exp(-t * 180.f) - std::exp(-t * 760.f)) * 0.8f;
+        direto[i] = impulso + frente * ((ruido - medio) * 1.1f * std::exp(-t * 165.f)
+                  + (medio - grave) * 0.95f * std::exp(-t * 39.f)
+                  + grave * 2.2f * std::exp(-t * 26.f));
+        a[i] = direto[i];
     }
-    std::vector<float> corpoAbafado(seco);
-    abafar(corpoAbafado, 1800.f);
-    for (size_t i = 0; i < seco.size(); i++) seco[i] = 0.55f * seco[i] + 0.45f * corpoAbafado[i];
-    // eco: copias atrasadas, mais abafadas e fracas
-    std::vector<float> eco(seco);
-    abafar(eco, 700.f);
-    const float atrasos[] = {0.f, 0.21f, 0.47f, 0.8f}, ganhos[] = {1.f, 0.32f, 0.18f, 0.08f};
-    for (int e = 0; e < 4; e++) {
-        int o = int(atrasos[e] * TAXA);
-        const std::vector<float>& src = e == 0 ? seco : eco;
-        for (size_t i = 0; i < src.size() && o + int(i) < n; i++) a[o + i] += src[i] * ganhos[e];
+    std::vector<float> reflexo = direto;
+    abafar(reflexo, interior ? 2800.f : 950.f);
+    const float sala[] = {0.014f, 0.023f, 0.036f, 0.054f, 0.079f, 0.109f, 0.153f, 0.207f};
+    const float campo[] = {0.130f, 0.190f, 0.274f, 0.366f, 0.453f, 0.567f, 0.684f, 0.846f};
+    const auto& atrasos = interior ? sala : campo;
+    for (size_t k = 0; k < 8; ++k) {
+        size_t atraso = size_t(TAXA * (atrasos[k] + 0.002f * g.ruido()));
+        float ganho = (interior ? 0.49f : 0.23f) * std::exp(-float(k) * 0.35f);
+        for (size_t i = 0; i < reflexo.size(); ++i) a[atraso + i] += reflexo[i] * ganho;
     }
+    if (abafado) abafar(a, 510.f);
+    return a;
+}
+
+std::vector<float> somPassoMadeira(unsigned semente) {
+    Gerador g{semente};
+    std::vector<float> a(TAXA / 5);
+    for (size_t i = 0; i < a.size(); ++i) {
+        float t = float(i) / TAXA;
+        float calcanhar = g.ruido() * std::exp(-t * 260.f);
+        float tabua = (std::sin(PI2 * 124.f * t) + 0.35f * std::sin(PI2 * 281.f * t)) * std::exp(-t * 48.f);
+        float sola = std::max(0.f, t - 0.035f);
+        a[i] = calcanhar * 0.28f + tabua * 0.45f + g.ruido() * sola * 25.f * std::exp(-sola * 90.f);
+    }
+    abafar(a, 3100.f);
     return a;
 }
 // Passo na terra: baque grave curto + chiado de cascalho abafado.
@@ -151,14 +169,14 @@ std::vector<float> somGrilo() {
 // Porta: rangido da dobradica (atrito: tom que sobe e desce com aspereza) e batida de madeira.
 std::vector<float> somRangido() {
     Gerador g{4242u};
-    int n = int(TAXA * 0.7f);
+    int n = int(TAXA * 0.44f);
     std::vector<float> a(n);
     float fase = 0;
     for (int i = 0; i < n; i++) {
-        float t = float(i) / TAXA, u = t / 0.7f;
-        float f = 520.f + 260.f * std::sin(u * 7.f) + 90.f * std::sin(u * 31.f);
+        float t = float(i) / TAXA, u = float(i) / n;
+        float f = 310.f + 125.f * std::sin(u * 6.4f) + 56.f * std::sin(u * 28.f);
         fase += PI2 * f / TAXA;
-        float atrito = 0.5f + 0.5f * std::sin(t * 2.f * PI2 * 38.f);  // "engasgos" do atrito
+        float atrito = 0.5f + 0.5f * std::sin(t * PI2 * (27.f + 12.f * u));  // "engasgos" do atrito
         float env = std::sin(PI2 * 0.5f * u) * (0.6f + 0.4f * atrito);
         a[i] = (std::sin(fase) * 0.6f + std::sin(fase * 2.03f) * 0.25f + g.ruido() * 0.15f) * env;
     }
@@ -173,6 +191,10 @@ std::vector<float> somBatida() {
         a[i] = (std::sin(PI2 * 95.f * t) * 0.8f + std::sin(PI2 * 180.f * t) * 0.3f) * std::exp(-t * 14.f) + g.ruido() * std::exp(-t * 60.f) * 0.6f;
     }
     abafar(a, 1800.f);
+    for (size_t i = TAXA * 18 / 1000; i < a.size(); ++i) {
+        float t = float(i - TAXA * 18 / 1000) / TAXA;
+        a[i] += (0.19f * std::sin(PI2 * 1580.f * t) + g.ruido() * 0.31f) * std::exp(-t * 155.f);
+    }
     return a;
 }
 }  // namespace
@@ -185,9 +207,15 @@ float Sons::rnd() {
 void Sons::carregar() {
     ok_ = IsAudioDeviceReady();
     if (!ok_) return;
-    for (int k = 0; k < 4; k++) {
-        auto t = somTiro(11u + unsigned(k) * 977u);
-        tiro_[k] = paraSom(t);
+    for (unsigned k = 0; k < 4; ++k) {
+        auto aberto = somTiro(11u + k * 977u, false, false);
+        auto fechado = somTiro(11u + k * 977u, true, false);
+        auto abafado = somTiro(11u + k * 977u, false, true);
+        tiro_[0][k] = paraSom(aberto);
+        tiro_[1][k] = paraSom(fechado);
+        tiro_[2][k] = paraSom(abafado);
+        auto madeira = somPassoMadeira(53u + k * 691u);
+        madeira_[k] = paraSom(madeira);
     }
     auto p = somPasso(), c = somCasco(), r = somRecarga(), v = somVento(), b = somPassaro(), g = somGrilo();
     passo_ = paraSom(p);
@@ -203,24 +231,27 @@ void Sons::carregar() {
 
 void Sons::descarregar() {
     if (!ok_) return;
-    for (auto& s : tiro_) UnloadSound(s);
+    for (auto& grupo : tiro_) for (auto& s : grupo) UnloadSound(s);
+    for (auto& s : madeira_) UnloadSound(s);
     for (Sound* s : {&passo_, &casco_, &recarga_, &vento_, &passaro_, &grilo_, &rangido_, &batida_}) UnloadSound(*s);
     ok_ = false;
 }
 
-void Sons::tiro(float vol, float pan) {
+void Sons::tiro(float vol, float pan, bool interior, bool abafado) {
     if (!ok_ || vol < 0.01f) return;
-    Sound& s = tiro_[prox_++ % 4];  // varios ao mesmo tempo
+    unsigned grupo = abafado ? 2 : interior ? 1 : 0;
+    Sound& s = tiro_[grupo][proxTiro_[grupo]++ % 4];
     SetSoundVolume(s, vol);
     SetSoundPan(s, pan);
-    SetSoundPitch(s, 0.92f + rnd() * 0.16f);
+    SetSoundPitch(s, 0.97f + rnd() * 0.06f);
     PlaySound(s);
 }
-void Sons::passo(float vol) {
+void Sons::passo(float vol, bool interior) {
     if (!ok_) return;
-    SetSoundVolume(passo_, vol * (0.7f + rnd() * 0.3f));
-    SetSoundPitch(passo_, 0.85f + rnd() * 0.3f);
-    PlaySound(passo_);
+    Sound& s = interior ? madeira_[proxPasso_++ % 4] : passo_;
+    SetSoundVolume(s, vol * (0.82f + rnd() * 0.18f));
+    SetSoundPitch(s, 0.92f + rnd() * 0.16f);
+    PlaySound(s);
 }
 void Sons::casco(float vol) {
     if (!ok_) return;
@@ -240,17 +271,21 @@ void Sons::porta(bool abrindo) {
     SetSoundPitch(s, 0.9f + rnd() * 0.2f);
     PlaySound(s);
 }
-void Sons::ambiente(float dt, float noite) {
+void Sons::ambiente(float dt, float noite, bool interior) {
     if (!ok_) return;
     if (!IsSoundPlaying(vento_)) {
-        SetSoundVolume(vento_, 0.18f);
         SetSoundPitch(vento_, 0.9f + rnd() * 0.2f);
         PlaySound(vento_);
+    }
+    SetSoundVolume(vento_, interior ? 0.035f : 0.18f);
+    if (interior) {
+        SetSoundVolume(passaro_, 0.02f);
+        SetSoundVolume(grilo_, 0.02f);
     }
     tPassaro_ -= dt;
     if (tPassaro_ <= 0) {
         tPassaro_ = 4.f + rnd() * 9.f;
-        if (noite < 0.3f) {
+        if (!interior && noite < 0.3f) {
             SetSoundVolume(passaro_, 0.06f + rnd() * 0.1f);
             SetSoundPan(passaro_, rnd());
             SetSoundPitch(passaro_, 0.85f + rnd() * 0.35f);
@@ -260,7 +295,7 @@ void Sons::ambiente(float dt, float noite) {
     tGrilo_ -= dt;
     if (tGrilo_ <= 0) {
         tGrilo_ = 0.7f + rnd() * 1.2f;
-        if (noite > 0.5f) {
+        if (!interior && noite > 0.5f) {
             SetSoundVolume(grilo_, 0.05f + rnd() * 0.05f);
             SetSoundPan(grilo_, rnd());
             SetSoundPitch(grilo_, 0.95f + rnd() * 0.1f);

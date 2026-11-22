@@ -54,6 +54,7 @@ struct MalhaPele {
 };
 
 Esqueleto esqueletoHumano(const Proporcoes& p);
+Vec3f bocaDoRevolver(const Esqueleto& esq, float escala);
 MalhaPele corpoHumano(const Proporcoes& p, const Visual& vis);
 // Versao de alta definicao (perto da camera): ~6-14 mil triangulos, rosto esculpido, dedos, roupa com volume.
 MalhaPele corpoHumanoHD(const Proporcoes& p, const Visual& vis);

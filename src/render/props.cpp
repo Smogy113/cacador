@@ -1016,6 +1016,7 @@ void Cenario::construirPerto(Pedaco& p) {
                 if (aleatorio01(rng) > 0.75f || !t.dentroDoJogavel(x, z)) continue;
                 float y = t.altura(x, z);
                 if (t.mascaraEstrada(x, z) > 0.25f || t.mascaraRio(x, z) > 0.05f || y < t.nivelAgua() + 0.4f || t.normal(x, z).y < 0.88f) continue;
+                if (dentroDeInterior(interiores_, {x, y + 0.60f, z}) >= 0) continue;
                 Vec3f base{x, y, z};
                 Vec3f r = col_->resolver(base, 0.35f);
                 if (std::hypot(r.x - x, r.z - z) > 0.01f) continue;  // nao nasce dentro de casa/cerca
