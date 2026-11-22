@@ -192,6 +192,12 @@ Planta gerarPredio(const Lote& l) {
             continue;
         }
         k.caixa(naFachada(v.lado, um, v.v0 - 0.04f, 0.06f - (t + 0.12f) * 0.5f, W, D), tamFachada(v.lado, w + 0.2f, 0.08f, t + 0.12f), matMold, corMold, false, true);
+        if (tipo == TipoPredio::Casa && v.lado == 0) {
+            // Caixilho recuado e pingadeira saliente: a espessura aparece de perfil.
+            k.caixa(naFachada(v.lado, um, ym, -0.09f, W, D), tamFachada(v.lado, 0.045f, h, 0.055f), matMold, corMold, false, true);
+            k.caixa(naFachada(v.lado, um, v.v0 + h * 0.66f, -0.09f, W, D), tamFachada(v.lado, w, 0.045f, 0.055f), matMold, corMold, false, true);
+            k.caixa(naFachada(v.lado, um, v.v0 - 0.045f, 0.065f, W, D), tamFachada(v.lado, w + 0.24f, 0.09f, 0.18f), MatPeca::Pedra, PEDRA, false, true);
+        }
         Vec3f n = normalLado(v.lado);
         p.janelas.push_back({naFachada(v.lado, um, ym, 0, W, D), n});
         if (v.andar > 0)  // andar de cima nao e acessivel: vidro (acende a noite)

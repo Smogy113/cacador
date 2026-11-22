@@ -501,14 +501,14 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
     rota.push_back(centro + Vec3f{-2, 0, -3});
     int feitas = 0;
     for (float raioAnel : {16.f, 27.f, 38.f}) {
-        int nl = int(2 * PI * raioAnel / 14.f);
+        int nl = int(2 * PI * raioAnel / 17.f);
         float desloc = g.r(0, 1);
         for (int k = 0; k < nl && feitas < 9; k++) {
             float a = 2 * PI * (k + desloc) / nl;
             Vec3f p{l.x + std::sin(a) * raioAnel, 0, l.z + std::cos(a) * raioAnel};
             p.y = g.h(p.x, p.z);
             Frame f{p, a + PI + g.r(-0.25f, 0.25f)};
-            float w = g.r(5.5f, 7.5f), d = g.r(4.5f, 6.f);
+            float w = g.r(7.f, 10.f), d = g.r(6.f, 8.5f);
             if (!g.livre(f, w, d, 3.f)) continue;
             Lote lt;
             lt.largura = w, lt.profundidade = d, lt.andares = g.r01() < 0.25f ? 2 : 1, lt.estilo = Estilo::Medieval;
@@ -544,7 +544,7 @@ static void gerarFazenda(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec
     Frame fc{fl.P(8, 0, -9), rot};
     fc.o.y = g.h(fc.o.x, fc.o.z);
     Lote lf;
-    lf.largura = 7, lf.profundidade = 5.5f, lf.estilo = Estilo::Faroeste, lf.tipo = TipoPredio::Casa;
+    lf.largura = 9, lf.profundidade = 7, lf.estilo = Estilo::Faroeste, lf.tipo = TipoPredio::Casa;
     lf.semente = uint32_t(l.x * 31 + l.z * 17) + 9u;
     lf.corParede = Rgb{0.62f, 0.52f, 0.4f}, lf.corTelhado = Rgb{0.36f, 0.3f, 0.26f};
     rota.push_back(g.predio(fc, lf));
