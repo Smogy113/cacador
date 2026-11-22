@@ -237,26 +237,53 @@ Planta gerarPredio(const Lote& l) {
     }
 
     // ---------------- telhado: duas placas, empenas, cumeeira ----------------
+    // A cobertura decide a espessura e o beiral; o desenho (palha, telhas, tabuas) e do shader.
+    Cobertura cob = l.cobertura;
+    if (cob == Cobertura::Auto) cob = (!med || matParede == MatPeca::Madeira) ? Cobertura::Tabua : Cobertura::Telha;
+    p.cobertura = cob;
     {
         bool cumeX = W >= D || tipo == TipoPredio::Capela;  // cumeeira ao longo de x
         if (tipo == TipoPredio::Capela) cumeX = false;      // capela: nave comprida para tras (cumeeira em z)
         float vao = cumeX ? D : W, comp = cumeX ? W : D;
         float beiral = med ? 0.6f : 0.45f, empena = 0.3f;
         float incl = med ? g.r(0.5f, 0.62f) : g.r(0.28f, 0.36f);
+        if (cob == Cobertura::Palha) incl = g.r(0.68f, 0.8f), beiral = 0.55f;  // palha escorre a chuva: mais inclinada
         if (tipo == TipoPredio::Capela) incl = 0.72f;
         float s = vao * 0.5f, rh = s * incl * 1.6f;  // altura da cumeeira
         float a = std::atan2(rh, s);
-        float esp = med ? 0.22f : 0.12f;
-        float L = (s + beiral) / std::cos(a);
+        // espessura da cobertura (a borda aparece no beiral e na empena)
+        float esp = cob == Cobertura::Palha ? 0.38f : (cob == Cobertura::Telha ? 0.16f : 0.09f);
         float rot = cumeX ? 0.f : PI * 0.5f;
-        for (float lado : {1.f, -1.f}) {
-            // centro da placa: meio do caminho entre a cumeeira e a ponta do beiral, acima do plano
-            float zc = lado * (s + beiral) * 0.5f, yc = yT + rh - (s + beiral) * 0.5f * std::tan(a);
-            Vec3f c = cumeX ? Vec3f{0, yc, zc} : Vec3f{zc, yc, 0};
+        // placa da agua "lado" entre as distancias horizontais h0..h1 da cumeeira e u0..u1 ao longo dela
+        // e = espessura da peca; topo = onde fica a face de cima (acima das tesouras), para as pontas do
+        // beiral ficarem no mesmo plano da placa e afinarem por baixo
+        auto placa = [&](float lado, float h0, float h1, float u0, float u1, float e, float topo, bool detalhe) {
+            float hc = (h0 + h1) * 0.5f, uc = (u0 + u1) * 0.5f;
+            float yc = yT + rh - hc * std::tan(a);
+            Vec3f c = cumeX ? Vec3f{uc, yc, lado * hc} : Vec3f{lado * hc, yc, uc};
             Vec3f nrm = cumeX ? Vec3f{0, std::cos(a), lado * std::sin(a)} : Vec3f{lado * std::sin(a), std::cos(a), 0};
-            c = c + nrm * (esp * 0.5f);
+            c = c + nrm * (topo - e * 0.5f);
             float ry = lado > 0 ? rot : rot + PI;
-            k.caixa(c, {comp + 2 * empena, esp, L}, MatPeca::Telhado, l.corTelhado, false, false, ry, a);
+            k.caixa(c, {u1 - u0, e, (h1 - h0) / std::cos(a)}, MatPeca::Telhado, l.corTelhado, false, detalhe, ry, a);
+        };
+        const float meioComp = comp * 0.5f + empena;
+        // beiral irregular (so perto): a placa para um pouco antes e pontas de largura e comprimento
+        // variados completam a borda. Palha: feixes aparados a mao; tabuas: cada tabua de um tamanho.
+        bool irregular = cob != Cobertura::Telha;
+        float recuo = cob == Cobertura::Palha ? 0.18f : 0.05f;
+        for (float lado : {1.f, -1.f}) {
+            placa(lado, 0.f, s + beiral - (irregular ? recuo : 0.f), -meioComp, meioComp, esp, esp, false);
+            if (!irregular) continue;
+            // largura dos feixes/tabuas e comprimento da ponta: onda suave + sorteio (sem dentes regulares)
+            float larg0 = cob == Cobertura::Palha ? 0.5f : 0.3f, onda = g.r(0.f, 6.f);
+            for (float u = -meioComp; u < meioComp - 0.05f;) {
+                float lg = std::min(larg0 * g.r(0.75f, 1.3f), meioComp - u);
+                if (meioComp - u - lg < 0.15f) lg = meioComp - u;  // sem lasca fina no fim
+                float ponta = cob == Cobertura::Palha ? 0.12f + 0.07f * std::sin(u * 1.3f + onda) + g.r(-0.04f, 0.05f) : g.r(0.0f, 0.06f);
+                float e = esp * (cob == Cobertura::Palha ? g.r(0.7f, 0.92f) : 1.f);  // a palha afina na ponta (por baixo)
+                placa(lado, s + beiral - recuo - 0.15f, s + beiral - recuo + ponta, u, u + lg, e, esp, true);
+                u += lg;
+            }
         }
         // empenas (triangulos na cor da parede, para fora)
         for (float e : {1.f, -1.f}) {
@@ -269,9 +296,16 @@ Planta gerarPredio(const Lote& l) {
             if (dot(n, fora) < 0) std::swap(A, B);
             k.tri(A, B, C, matParede, corParede);
         }
-        // cumeeira e caibros sob o beiral
-        k.caixa(cumeX ? Vec3f{0, yT + rh + 0.05f, 0} : Vec3f{0, yT + rh + 0.05f, 0}, cumeX ? Vec3f{comp + 2 * empena, 0.16f, 0.2f} : Vec3f{0.2f, 0.16f, comp + 2 * empena},
-                MatPeca::MadeiraEsc, mul(l.corTelhado, 0.7f));
+        // cumeeira: rolo de palha, fileira de telhas de capa ou tabua de arremate, por cima da cobertura
+        {
+            float topo = yT + rh + esp / std::cos(a);
+            Vec3f t3 = cob == Cobertura::Palha ? Vec3f{2 * meioComp, 0.26f, 0.62f}
+                     : (cob == Cobertura::Telha ? Vec3f{2 * meioComp, 0.13f, 0.3f} : Vec3f{2 * meioComp, 0.1f, 0.26f});
+            MatPeca mc = cob == Cobertura::Tabua ? MatPeca::MadeiraEsc : MatPeca::Telhado;
+            Rgb cc = cob == Cobertura::Tabua ? mul(l.corTelhado, 0.7f) : mul(l.corTelhado, 0.92f);
+            Vec3f c{0, topo - t3.y * 0.3f, 0};
+            k.caixa(c, cumeX ? t3 : Vec3f{t3.z, t3.y, t3.x}, mc, cc);
+        }
         int nc = int(comp / 0.6f);
         for (int i = 0; i <= nc && med; i++)
             for (float lado : {1.f, -1.f}) {
@@ -339,7 +373,7 @@ Planta gerarPredio(const Lote& l) {
         vol.centro = {0, (piso - 1.5f + yT) * 0.5f, 0}, vol.tam = {W, yT - piso + 1.5f, D}, vol.mat = matParede, vol.cor = corParede;
         c.push_back(vol);
         for (auto& q : p.pecas) {
-            bool telhado = q.mat == MatPeca::Telhado && !q.soForma;
+            bool telhado = q.mat == MatPeca::Telhado && !q.soForma && !q.detalhe;
             bool empena = q.tipo == PecaPredio::Triangulo;
             bool chamine = q.mat == MatPeca::Pedra && q.forma && q.tam.y > yT - piso;
             bool varanda = !med && q.mat == MatPeca::MadeiraEsc && q.forma;

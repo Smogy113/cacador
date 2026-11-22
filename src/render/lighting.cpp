@@ -259,7 +259,7 @@ void Iluminacao::descarregar() {
     for (auto& t : texMat_) t = RenderTexture2D{};
     if (paredeOk_) {
         matConstr_.shader = lit_;
-        for (int m : {MATERIAL_MAP_NORMAL, MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION}) matConstr_.maps[m].texture = Texture2D{};
+        for (int m : {MATERIAL_MAP_ALBEDO, MATERIAL_MAP_NORMAL, MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION}) matConstr_.maps[m].texture = Texture2D{};
         matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
         UnloadShader(litParede_);
         paredeOk_ = false;
@@ -606,36 +606,43 @@ void Iluminacao::terminarSombraPerto() {
         SetShaderValue(sh, GetShaderLocation(sh, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
     }
 }
-// Tabuas, pedra e reboco desenhados uma vez em texturas (mesmas funcoes do shader, periodicas em 4 m):
-// o relevo das paredes passa a ler a textura em vez de calcular o ruido em todo pixel.
+// Tabuas, pedra e reboco (2048 texels) e as coberturas dos telhados (palha e telhas, 1024 texels)
+// desenhados uma vez em texturas que repetem a cada 4 m (mesmas funcoes de antes no shader):
+// as construcoes leem a textura em vez de calcular o ruido em todo pixel.
 void Iluminacao::assarMateriais() {
-    const int TAM = 2048;
-    Shader sh = carregarShaderPos(FS_ASSAR_MATERIAL);
-    if (sh.id == 0 || sh.id == rlGetShaderIdDefault()) return;
-    const int mapas[3] = {MATERIAL_MAP_NORMAL, MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION};
-    const char* nomes[3] = {"texAltura", "texFator", "texPeso"};
-    float tam = float(TAM);
-    for (int k = 0; k < 3; k++) {
-        texMat_[k] = LoadRenderTexture(TAM, TAM);
-        float saida = float(k);
+    struct Assar { const char* fs; float saida; int tam, mapa; const char* nome; };
+    const Assar lista[4] = {
+        {FS_ASSAR_MATERIAL, 0, 2048, MATERIAL_MAP_NORMAL, "texAltura"},
+        {FS_ASSAR_MATERIAL, 1, 2048, MATERIAL_MAP_ROUGHNESS, "texFator"},
+        {FS_ASSAR_MATERIAL, 2, 2048, MATERIAL_MAP_OCCLUSION, "texPeso"},
+        {FS_ASSAR_TELHADO, 0, 1024, MATERIAL_MAP_ALBEDO, "texTelhado"},
+    };
+    Shader paredes = carregarShaderPos(FS_ASSAR_MATERIAL), telhados = carregarShaderPos(FS_ASSAR_TELHADO);
+    for (int k = 0; k < 4; k++) {
+        const Assar& a = lista[k];
+        Shader sh = a.fs == FS_ASSAR_MATERIAL ? paredes : telhados;
+        if (sh.id == 0 || sh.id == rlGetShaderIdDefault()) continue;  // sem a textura: o shader le a branca (sem relevo)
+        float tam = float(a.tam);
+        texMat_[k] = LoadRenderTexture(a.tam, a.tam);
         BeginTextureMode(texMat_[k]);
         ClearBackground(BLANK);
         BeginShaderMode(sh);
-        SetShaderValue(sh, GetShaderLocation(sh, "saida"), &saida, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(sh, GetShaderLocation(sh, "saida"), &a.saida, SHADER_UNIFORM_FLOAT);
         SetShaderValue(sh, GetShaderLocation(sh, "tamTex"), &tam, SHADER_UNIFORM_FLOAT);
         rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // grava o alfa como esta
         BeginBlendMode(BLEND_CUSTOM);
-        DrawRectangle(0, 0, TAM, TAM, WHITE);
+        DrawRectangle(0, 0, a.tam, a.tam, WHITE);
         EndBlendMode();
         EndShaderMode();
         EndTextureMode();
         GenTextureMipmaps(&texMat_[k].texture);
         SetTextureFilter(texMat_[k].texture, TEXTURE_FILTER_TRILINEAR);
         SetTextureWrap(texMat_[k].texture, TEXTURE_WRAP_REPEAT);
-        matConstr_.maps[mapas[k]].texture = texMat_[k].texture;
-        litParede_.locs[SHADER_LOC_MAP_DIFFUSE + mapas[k]] = GetShaderLocation(litParede_, nomes[k]);
+        matConstr_.maps[a.mapa].texture = texMat_[k].texture;
+        litParede_.locs[SHADER_LOC_MAP_DIFFUSE + a.mapa] = GetShaderLocation(litParede_, a.nome);
     }
-    UnloadShader(sh);
+    UnloadShader(paredes);
+    UnloadShader(telhados);
 }
 
 void Iluminacao::limparLuzParedes() {

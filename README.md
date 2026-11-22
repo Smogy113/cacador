@@ -57,6 +57,12 @@ em cômodos fechados e a lanterna continua útil à noite. Os passos mudam sobre
 os tiros reverberam nos interiores e as paredes abafam disparos do outro lado. O clarão e a fumaça
 saem do cano, e as pontas do cabelo do caçador reagem ao movimento e ao vento.
 
+**Telhados (0.26):** cada telhado tem espessura e uma cobertura desenhada no shader: palha penteada
+em camadas, com beiral irregular e rolo na cumeeira (vilarejo); telhas capa e canal em fileiras,
+com a sombra de cada fileira (cidade); e tábuas sobrepostas nas casas de madeira e no faroeste. A
+palha e as telhas são desenhadas uma vez numa textura de 1024² ao abrir o jogo; as tábuas usam a
+textura de madeira das paredes. O custo por quadro fica praticamente igual ao de antes.
+
 **Painel de depuração (F1):** em "Gráficos" dá para ligar e desligar a cabeça por raymarching (com
 o tempo do quadro ao lado, para comparar o custo), a luz de personagem, a profundidade de campo e a
 granulação/aberração.
@@ -69,6 +75,17 @@ e a sua lanterna ilumina o caminho.
 Os lugares ficam em `data/lugares.txt` (dá para editar). Cada linha é
 `lugar <tipo> <nome> <x> <z> <rotação> <raio>` ou `estrada <lugarA> <lugarB>`. Se uma linha tiver
 erro, o jogo abre mesmo assim e mostra o problema na tela.
+
+## Onde mexer
+
+- **Prédios** (`src/core/predio.cpp`): gramática lote → volume → fachadas → peças. A cobertura do
+  telhado vem de `Lote::cobertura` (`Auto`, `Palha`, `Telha`, `Tabua`) e define espessura, beiral e
+  cumeeira. As peças marcadas `detalhe` (pontas do beiral, vigas...) só aparecem de perto.
+- **Materiais das construções** (`src/render/shaders.cpp`): `FS_ASSAR_MATERIAL` (paredes) e
+  `FS_ASSAR_TELHADO` (telhados) desenham os padrões uma vez em texturas que repetem a cada 4 m.
+  `relevoParede` e `relevoTelhado` só leem essas texturas. Para criar uma cobertura nova, some um
+  `TIPO_*` em `src/core/meshbuilder.h`, um caso em `matTelhado` e, se precisar de padrão próprio, um
+  canal na textura assada.
 
 ## Como compilar
 

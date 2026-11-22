@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <cmath>
 #include <set>
 #include <string>
@@ -17,6 +18,15 @@ static std::vector<Lote> lotes() {
             l.largura = 5.5f + float(s % 7) * 0.9f;
             l.profundidade = 4.8f + float(s % 5) * 0.8f;
             l.andares = (t == TipoPredio::Taverna || s % 3 == 0) && t != TipoPredio::Capela && t != TipoPredio::Cadeia ? 2 : 1;
+            v.push_back(l);
+        }
+        {   // casa de palha (vilarejo)
+            Lote l;
+            l.semente = s * 15485863u;
+            l.tipo = TipoPredio::Casa;
+            l.largura = 5.f + float(s % 5);
+            l.profundidade = 4.5f + float(s % 4) * 0.7f;
+            l.cobertura = Cobertura::Palha;
             v.push_back(l);
         }
         for (auto t : tiposF) {
@@ -156,6 +166,62 @@ TEST_CASE("predio: casca simples e leve") {
         for (auto& q : p.casca) tris += q.tipo == PecaPredio::Caixa ? 12 : (q.tipo == PecaPredio::Prisma ? 8 : 1);
         CHECK(tris <= 320);
         CHECK(tris * 3 <= triangulosPlanta(p, false) * 2);  // bem mais leve que o predio sem detalhes (1,5x)
+    }
+}
+
+// ---------------- telhados ----------------
+// placas principais do telhado: material de telhado, inclinadas e sem ser detalhe
+static float espessuraTelhado(const Planta& p) {
+    float e = 0;
+    for (auto& q : p.pecas)
+        if (q.mat == MatPeca::Telhado && q.inclinacao != 0 && !q.detalhe) e = std::max(e, q.tam.y);
+    return e;
+}
+static Lote loteCobertura(Cobertura c, uint32_t s) {
+    Lote l;
+    l.semente = s;
+    l.largura = 7.f, l.profundidade = 5.5f;
+    l.cobertura = c;
+    return l;
+}
+TEST_CASE("telhado: cobertura automatica") {
+    Lote reboco;  // medieval de reboco: telhas
+    CHECK(gerarPredio(reboco).cobertura == Cobertura::Telha);
+    Lote madeira;
+    madeira.corParede = {0.45f, 0.32f, 0.21f};
+    CHECK(gerarPredio(madeira).cobertura == Cobertura::Tabua);
+    Lote oeste;
+    oeste.estilo = Estilo::Faroeste;
+    CHECK(gerarPredio(oeste).cobertura == Cobertura::Tabua);
+    CHECK(gerarPredio(loteCobertura(Cobertura::Palha, 3)).cobertura == Cobertura::Palha);
+}
+TEST_CASE("telhado: espessura por cobertura (palha > telha > tabua)") {
+    for (uint32_t s = 1; s <= 10; s++) {
+        float palha = espessuraTelhado(gerarPredio(loteCobertura(Cobertura::Palha, s)));
+        float telha = espessuraTelhado(gerarPredio(loteCobertura(Cobertura::Telha, s)));
+        float tabua = espessuraTelhado(gerarPredio(loteCobertura(Cobertura::Tabua, s)));
+        CHECK(palha >= 0.3f);
+        CHECK(palha > telha);
+        CHECK(telha > tabua);
+        CHECK(tabua >= 0.06f);
+    }
+}
+TEST_CASE("telhado: beiral irregular na palha e nas tabuas, so no detalhe") {
+    for (Cobertura c : {Cobertura::Palha, Cobertura::Tabua}) {
+        Planta p = gerarPredio(loteCobertura(c, 7));
+        std::set<int> comprimentos;
+        int pontas = 0;
+        for (auto& q : p.pecas)
+            if (q.mat == MatPeca::Telhado && q.detalhe && q.inclinacao != 0) {
+                pontas++;
+                comprimentos.insert(int(std::round(q.tam.z * 100)));
+            }
+        CHECK(pontas >= 16);                  // as duas aguas
+        CHECK(comprimentos.size() >= 4);      // irregular
+        for (auto& q : p.casca) CHECK_FALSE(q.detalhe);
+        int telhadoCasca = 0;
+        for (auto& q : p.casca) telhadoCasca += q.mat == MatPeca::Telhado;
+        CHECK(telhadoCasca <= 4);             // longe: so as placas e a cumeeira
     }
 }
 

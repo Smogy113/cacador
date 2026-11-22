@@ -10,6 +10,10 @@
 enum class Estilo { Medieval, Faroeste };
 enum class TipoPredio { Casa, Taverna, Xerife, Cadeia, Capela, Celeiro, Barracao };
 enum class MatPeca { Reboco, Madeira, MadeiraEsc, Pedra, Telhado, Vidro, Ferro, Escuro, Placa };
+// O que cobre o telhado (pecas MatPeca::Telhado). Muda a espessura, o beiral e o desenho no shader:
+// palha penteada (grossa, beiral irregular), telhas em fileiras, tabuas sobrepostas (casas de madeira).
+// Auto: tabuas nas casas de madeira e no faroeste, telhas no resto.
+enum class Cobertura { Auto, Palha, Telha, Tabua };
 
 struct PecaPredio {
     enum Tipo { Caixa, Prisma, Triangulo } tipo = Caixa;
@@ -49,6 +53,7 @@ struct Planta {
     Vec3f interiorCentro{}, interiorMeia{};  // volume interior do terreo (sem giro no lote)
     float piso = 0.35f, peDireito = 2.8f;
     Vec3f entrada{};                       // ponto do lado de fora, na frente da porta
+    Cobertura cobertura = Cobertura::Telha;  // ja resolvida (nunca Auto)
 };
 
 struct Lote {
@@ -59,6 +64,7 @@ struct Lote {
     uint32_t semente = 1;
     float piso = 0.35f;                    // altura do piso acima do chao de referencia
     Rgb corParede{0.8f, 0.74f, 0.6f}, corTelhado{0.42f, 0.27f, 0.18f};
+    Cobertura cobertura = Cobertura::Auto;
 };
 
 Planta gerarPredio(const Lote& l);

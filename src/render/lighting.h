@@ -80,7 +80,7 @@ private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
     void liberarEfeitos();
     void assarMateriais();
-    RenderTexture2D texMat_[3]{};  // material das paredes: alturas, fatores de cor, pesos
+    RenderTexture2D texMat_[4]{};  // material das paredes (alturas, fatores de cor, pesos) e dos telhados
     // luz guardada das paredes
     static constexpr int TAM_ATLAS = 2048;
     static constexpr float METRO_TEXEL = 0.25f;

@@ -540,6 +540,19 @@ float hParede(vec2 uv, float mat) {
     vec3 a = textureLod(texAltura, uv * 0.25, lodMat).rgb;
     return -0.03 * (mat < 5.5 ? a.r : (mat < 6.5 ? a.g : a.b));
 }
+// ---- telhados: palha penteada, telhas em fileiras, tabuas sobrepostas. So normal, oclusao, cor e a
+// sombra dos degraus (sem raio andando no relevo): poucas leituras de textura por pixel ----
+uniform sampler2D texTelhado;   // FS_ASSAR_TELHADO (1024 texels em 4 m)
+vec2 matTelhado(vec2 uv, float mat) {  // altura (m, <= 0) e fator de cor
+    float lt = max(lodMat - 1.0, 0.0);
+    if (mat < 8.5) { vec2 t = textureLod(texTelhado, uv * 0.25, lt).rg; return vec2(-0.045 * t.x, t.y * 2.0); }
+    if (mat < 9.5) { vec2 t = textureLod(texTelhado, uv * 0.25, lt).ba; return vec2(-0.04 * t.x, t.y * 2.0); }
+    // tabuas: a madeira das paredes (fileiras de 0,2 m) com cada tabua inclinada sobre a de baixo
+    // o degrau e calculado (sem mipmap): some quando o pixel fica do tamanho da tabua (sem moire)
+    float degrau = 0.014 * (1.0 - smoothstep(2.5, 4.0, lodMat));
+    float h = -0.03 * textureLod(texAltura, uv * 0.25, lodMat).g - degrau * fract(uv.y * 5.0);
+    return vec2(h, textureLod(texFator, uv * 0.25, lodMat).g * 2.0);
+}
 )" CENA_SDF R"(
 vec3 nParede = vec3(0.0);   // normal da face (antes do relevo)
 float aoCena = 1.0;
@@ -659,6 +672,37 @@ void relevoParede(inout vec3 n, inout vec3 albedo, inout float ao, vec3 v, float
     ao *= mix(0.45, 1.0, smoothstep(-0.03, -0.004, h0));             // fundo das frestas escuro
 }
 #endif
+#ifdef PAREDES
+void relevoTelhado(inout vec3 n, inout vec3 albedo, inout float ao, float dist, float mat) {
+    vec3 N0 = n;
+    vec3 T = abs(N0.y) > 0.999 ? vec3(1.0, 0.0, 0.0) : normalize(cross(vec3(0.0, 1.0, 0.0), N0));  // ao longo da cumeeira
+    vec3 B = cross(N0, T);                                                                          // sobe a agua
+    vec2 uv = vec2(dot(posMundo, T), dot(posMundo, B));
+    vec2 m0 = matTelhado(uv, mat);
+    float fundo = mat < 8.5 ? 0.045 : (mat < 9.5 ? 0.04 : 0.044);
+    float kn = 1.0 - smoothstep(35.0, 60.0, dist);  // longe: so a cor (a mipmap ja alisou o relevo)
+    if (kn > 0.0) {
+        float e = 0.006;
+        float hx = matTelhado(uv + vec2(e, 0.0), mat).x, hy = matTelhado(uv + vec2(0.0, e), mat).x;
+        vec3 nt = normalize(vec3(-(hx - m0.x) / e * kn, -(hy - m0.x) / e * kn, 1.0));
+        n = normalize(T * nt.x + B * nt.y + N0 * nt.z);
+        // sombra dos degraus (ponta da palha, boca da telha, borda da tabua): uma amostra rumo ao sol
+        vec3 Lt = vec3(dot(dirSombra, T), dot(dirSombra, B), dot(dirSombra, N0));
+        if (paredes > 1.5 && Lt.z > 0.02 && dist < 30.0) {
+            float lx = max(length(Lt.xy), 1e-3), d = 0.035;
+            float hs = matTelhado(uv + Lt.xy / lx * d, mat).x;
+            float raio = m0.x + d * Lt.z / lx;  // altura do raio de luz ali
+            sombraRelevo = mix(1.0, 0.35, smoothstep(0.0, 0.008, hs - raio) * (1.0 - smoothstep(20.0, 30.0, dist)));
+        }
+    }
+    albedo *= m0.y;
+    if (mat < 8.5) {  // palha seca ao sol: menos saturada, mais cinza onde e velha
+        float lum = dot(albedo, vec3(0.3, 0.59, 0.11));
+        albedo = mix(albedo, vec3(lum) * vec3(1.05, 0.95, 0.8), 0.3 + clamp(0.9 - m0.y, 0.0, 0.4));
+    }
+    ao *= mix(0.5, 1.0, smoothstep(-fundo, -fundo * 0.35, m0.x));  // fundo entre fios, telhas e tabuas
+}
+#endif
 void main() {
 #ifdef RAYMARCH
     marchar();
@@ -715,6 +759,7 @@ void main() {
         }
         if (dist < 45.0) relevoParede(n, albedo, ao, v, dist, floor(extra.y + 0.5));
     }
+    if (paredes > 0.5 && extra.y > 7.5 && extra.y < 10.5 && dist < 90.0) relevoTelhado(n, albedo, ao, dist, floor(extra.y + 0.5));
 #endif
 #ifdef PERSONAGEM
     float m = extra.y;
@@ -1269,6 +1314,63 @@ void main() {
 }
 )";
 
+
+// Coberturas de telhado assadas numa textura RGBA (ladrilho de 4 m, 1024 texels): palha (R altura,
+// G cor) e telhas (B altura, A cor). Coordenadas: x ao longo da cumeeira, y subindo a agua (m).
+// Altura guardada como profundidade 0..1 (0 = mais alto); cor como fator / 2.
+const char* FS_ASSAR_TELHADO = R"(
+uniform float tamTex;
+float hashA(vec2 p) {
+    p += vec2(271.3, 517.9);
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+float vp(vec2 p, vec2 per) {  // ruido periodico: o reticulado da a volta a cada "per" celulas
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    vec2 i0 = mod(i, per), i1 = mod(i + 1.0, per);
+    return mix(mix(hashA(i0), hashA(vec2(i1.x, i0.y)), f.x), mix(hashA(vec2(i0.x, i1.y)), hashA(i1), f.x), f.y);
+}
+// Palha penteada: fios ao longo da agua, em camadas de 0,4 m; a ponta de cada camada fica saliente
+// e desfiada (borda irregular), o fundo logo abaixo dela fica na sombra.
+vec2 palha(vec2 uv) {
+    float fio = vp(vec2(uv.x * 55.0, uv.y * 1.2), vec2(220.0, 4.8));
+    float fio2 = vp(vec2(uv.x * 130.0 + fio * 3.0, uv.y * 2.5), vec2(520.0, 10.0));
+    // borda da camada: ondula devagar e desfia pouco (fios de comprimentos diferentes)
+    float camada = uv.y / 0.4 + (vp(vec2(uv.x * 1.25, 0.0), vec2(5.0, 1.0)) - 0.5) * 0.5 + (fio - 0.5) * 0.12;
+    float fy = fract(camada), id = hashA(vec2(mod(floor(camada), 10.0), 3.0));
+    float degrau = (1.0 - fy) * smoothstep(0.0, 0.12, fy);    // 1 na ponta da camada, 0 onde a de cima cobre
+    float alto = 0.45 * degrau + 0.35 * fio + 0.2 * fio2;
+    float manchas = vp(uv * 1.5, vec2(6.0));                    // palha velha (acinzentada) em manchas
+    float cor = (0.72 + 0.26 * fio2 + 0.14 * fio) * (0.92 + 0.16 * id) * mix(1.0, 0.75, smoothstep(0.5, 0.85, manchas));
+    cor *= mix(0.78, 1.0, smoothstep(0.0, 0.3, fy));            // a ponta da camada de cima escurece a de baixo
+    return vec2(1.0 - alto, cor * 0.5);
+}
+// Telhas capa e canal em fileiras de 0,4 m: a capa (convexa) cobre a junta de dois canais
+// (concavos); cada telha e mais alta na boca, que faz sombra na fileira de baixo.
+vec2 telha(vec2 uv) {
+    float t = fract(uv.x / 0.5), col = mod(floor(uv.x / 0.5), 8.0);
+    bool capa = t < 0.42;
+    float desl = (hashA(vec2(col, capa ? 1.0 : 2.0)) - 0.5) * 0.06 + (capa ? 0.2 : 0.0);  // capa alterna a fileira
+    float fila = (uv.y + desl) / 0.4, fy = fract(fila);
+    float id = hashA(vec2(col * 2.0 + (capa ? 0.0 : 1.0), mod(floor(fila), 10.0)));
+    float perfil;
+    if (capa) { float q = t / 0.42 * 2.0 - 1.0; perfil = 0.45 + 0.55 * sqrt(max(1.0 - q * q, 0.0)); }
+    else { float q = (t - 0.42) / 0.58 * 2.0 - 1.0; perfil = 0.35 * (1.0 - sqrt(max(1.0 - q * q, 0.0))); }
+    float boca = (1.0 - fy) * smoothstep(0.0, 0.05, fy);        // borda de baixo de cada telha
+    float alto = 0.6 * perfil + 0.4 * boca + 0.03 * vp(uv * 40.0, vec2(160.0));
+    float cor = (0.78 + 0.42 * id) * (0.92 + 0.12 * vp(uv * 9.0, vec2(36.0)));
+    if (!capa) cor *= 0.86;                                     // sujeira escorre no canal
+    cor *= mix(0.5, 1.0, smoothstep(0.0, 0.22, fy));            // sombra da telha de cima
+    cor = mix(cor, cor * 0.7, smoothstep(0.7, 0.9, vp(uv * 0.9, vec2(3.6))) * (1.0 - perfil * 0.5));  // limo
+    return vec2(1.0 - alto, cor * 0.5);
+}
+void main() {
+    vec2 uv = gl_FragCoord.xy / tamTex * 4.0;
+    FRAG = vec4(palha(uv), telha(uv));
+}
+)";
 
 // ---------- luz das paredes guardada por face: desenhada no atlas, algumas faces por quadro ----------
 const char* FS_LUZ_PAREDE = R"(

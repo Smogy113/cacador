@@ -142,8 +142,9 @@ struct Gerador {
 
     // Predio gerado pela gramatica (core/predio): malha detalhada + casca simples, formas da luz
     // tracada, colisao girada, pisos, janelas, porta e interior. Devolve a entrada (mundo).
-    static float tipoMaterial(MatPeca m) {
+    static float tipoMaterial(MatPeca m, Cobertura cob = Cobertura::Telha) {
         switch (m) {
+            case MatPeca::Telhado: return cob == Cobertura::Palha ? TIPO_PALHA : (cob == Cobertura::Tabua ? TIPO_TABUADO : TIPO_TELHA);
             case MatPeca::Reboco: return TIPO_REBOCO;
             case MatPeca::Madeira: case MatPeca::MadeiraEsc: return TIPO_MADEIRA;
             case MatPeca::Pedra: return TIPO_PEDRA;
@@ -177,7 +178,7 @@ struct Gerador {
         ml.tamanhoMaximoFace(1000.f);  // casca: faces inteiras
         std::vector<std::pair<int, Vec3f>> paredesReg;  // formas de parede desta casa (detalhes usam a luz delas)
         for (const auto& pc : pl.pecas) {
-            float tipoV = tipoMaterial(pc.mat);
+            float tipoV = tipoMaterial(pc.mat, pl.cobertura);
             bool deParede = tipoV > 4.5f && tipoV < 7.5f;
             if (pc.soForma) {
                 if (formas) m.soForma(pc.tipo == PecaPredio::Prisma ? TipoForma::Prisma : TipoForma::Caixa, f.P(pc.centro.x, pc.centro.y, pc.centro.z), pc.tam * 0.5f, f.rot + pc.rotY, pc.grossa);
@@ -200,7 +201,7 @@ struct Gerador {
             m.tipo(TIPO_NORMAL);
         }
         for (const auto& pc : pl.casca) {  // versao simples (longe, Baixo, sombras)
-            ml.tipo(tipoMaterial(pc.mat));
+            ml.tipo(tipoMaterial(pc.mat, pl.cobertura));
             desenharPeca(ml, pc, f);
             ml.tipo(TIPO_NORMAL);
         }
@@ -468,7 +469,9 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
                 g.registrar(m, false);
                 for (int b2 = 1; b2 < 4; b2++) g.caixa(m, f, {-e.w / 2 + b2 * e.w / 4, 0.7f, -e.d / 4}, {0.12f, 1.4f, e.d / 2}, MADEIRA_ESC);
                 g.registrar(m, true);
+                m.tipo(TIPO_PALHA);
                 m.prisma(f.P(0, 3.8f, 0), {e.w + 0.8f, 1.6f, e.d + 1.0f}, f.rot, PALHA);
+                m.tipo(TIPO_NORMAL);
                 g.registrar(m, false);
                 g.caixa(m, f, {e.w * 0.3f, 0.4f, -e.d * 0.3f}, {1.4f, 0.8f, 1.0f}, PALHA * 0.9f);  // feno
                 g.colisaoRet(f, 0, -e.d / 2, e.w, 0.4f, 3);
@@ -545,7 +548,9 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
             lt.largura = w, lt.profundidade = d, lt.andares = g.r01() < 0.25f ? 2 : 1, lt.estilo = Estilo::Medieval;
             lt.semente = g.rng ^ uint32_t(k * 104729 + int(raioAnel) * 7);
             lt.corParede = g.r01() < 0.5f ? REBOCO2 : MADEIRA * 1.3f;
-            lt.corTelhado = g.r01() < 0.6f ? PALHA : TELHA_M;
+            bool palha = g.r01() < 0.6f;
+            lt.corTelhado = palha ? PALHA : TELHA_M;
+            lt.cobertura = palha ? Cobertura::Palha : Cobertura::Auto;
             rota.push_back(g.predio(f, lt));
             if (g.r01() < 0.5f) g.barril(f.P(-w / 2 - 0.6f, 0, d / 2 - 0.5f));
             if (g.r01() < 0.4f) g.caixote(f.P(w / 2 + 0.7f, 0, 0.5f), g.r(0, 1));
