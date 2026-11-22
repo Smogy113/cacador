@@ -32,17 +32,25 @@ struct Gerador {
     std::vector<LuzPontual>& luzes;
     uint32_t rng;
     std::map<int, MeshBuilder> constr;  // por pedaco
+    std::map<int, MeshBuilder> predioDet, predioCasca;  // predios por pedaco: detalhados e simples (longe, Baixo, sombras)
     int n;
     std::vector<AABB> ocupado;          // pegadas ja usadas (evita sobrepor)
     std::vector<FormaCena>* formas = nullptr;   // construcoes como formas exatas (luz tracada)
     std::vector<JanelaLuz>* janelas = nullptr;
+    std::vector<PortaMundo>* portas = nullptr;
+    std::vector<InteriorMundo>* interiores = nullptr;
 
     float r01() { return aleatorio01(rng); }
     float r(float a, float b) { return a + (b - a) * r01(); }
-    MeshBuilder& b(Vec3f p) {
+    int pedaco(Vec3f p) const {
         int i = std::clamp(int((p.x + Terreno::META) / Cenario::TAM), 0, n - 1);
         int j = std::clamp(int((p.z + Terreno::META) / Cenario::TAM), 0, n - 1);
-        return constr[j * n + i];
+        return j * n + i;
+    }
+    MeshBuilder& b(Vec3f p) { return constr[pedaco(p)]; }
+    static int quadrante(Vec3f p) {  // qual quarto (32 x 32 m) do pedaco
+        float lx = std::fmod(p.x + Terreno::META, Cenario::TAM), lz = std::fmod(p.z + Terreno::META, Cenario::TAM);
+        return (lx >= Cenario::TAM * 0.5f ? 1 : 0) + (lz >= Cenario::TAM * 0.5f ? 2 : 0);
     }
     float h(float x, float z) const { return t.altura(x, z); }
 
@@ -128,66 +136,88 @@ struct Gerador {
         m.tipo(TIPO_NORMAL);
     }
 
-    // casa enxaimel: w = largura (x), d = profundidade (z); frente em +z
-    void casa(const Frame& f, float w, float d, int andares, Rgb parede, Rgb telhado, bool placa = false, Rgb corPlaca = {0.6f, 0.2f, 0.15f}) {
-        MeshBuilder& m = b(f.o);
-        float base = 1.0f, alt = 2.6f * andares;
-        registrar(m, true);
-        m.tipo(TIPO_PEDRA);
-        caixa(m, f, {0, base / 2 - 1.0f, 0}, {w, base + 2.0f, d}, PEDRA);  // alicerce (enterrado)
-        m.tipo(tipoParede(parede));
-        caixa(m, f, {0, base + alt / 2, 0}, {w - 0.15f, alt, d - 0.15f}, parede);
-        registrar(m, false);
-        if (formas) m.formaFixa(int(formas->size()) - 1);  // vigas usam a luz guardada da parede
-        m.tipo(TIPO_MADEIRA);
-        // vigas de madeira (enxaimel)
-        for (float sx : {-0.5f, 0.5f})
-            for (float sz : {-0.5f, 0.5f}) caixa(m, f, {sx * (w - 0.1f), base + alt / 2, sz * (d - 0.1f)}, {0.22f, alt, 0.22f}, MADEIRA_ESC);
-        for (int a = 1; a <= andares; a++) {
-            float y = base + 2.6f * a - 0.1f;
-            caixa(m, f, {0, y, d / 2 - 0.05f}, {w, 0.2f, 0.12f}, MADEIRA_ESC);
-            caixa(m, f, {0, y, -d / 2 + 0.05f}, {w, 0.2f, 0.12f}, MADEIRA_ESC);
-            caixa(m, f, {w / 2 - 0.05f, y, 0}, {0.12f, 0.2f, d}, MADEIRA_ESC);
-            caixa(m, f, {-w / 2 + 0.05f, y, 0}, {0.12f, 0.2f, d}, MADEIRA_ESC);
+    // Predio gerado pela gramatica (core/predio): malha detalhada + casca simples, formas da luz
+    // tracada, colisao girada, pisos, janelas, porta e interior. Devolve a entrada (mundo).
+    static float tipoMaterial(MatPeca m) {
+        switch (m) {
+            case MatPeca::Reboco: return TIPO_REBOCO;
+            case MatPeca::Madeira: case MatPeca::MadeiraEsc: return TIPO_MADEIRA;
+            case MatPeca::Pedra: return TIPO_PEDRA;
+            case MatPeca::Vidro: return TIPO_JANELA;
+            default: return TIPO_NORMAL;
         }
-        int nv = std::max(1, int(w / 2.2f));
-        for (int k = 1; k < nv; k++) {
-            float x = -w / 2 + k * w / nv;
-            caixa(m, f, {x, base + alt / 2, d / 2 - 0.04f}, {0.14f, alt, 0.1f}, MADEIRA_ESC);
+    }
+    static void desenharPeca(MeshBuilder& m, const PecaPredio& pc, const Frame& f) {
+        auto P = [&](Vec3f q) { return f.P(q.x, q.y, q.z); };
+        float rot = f.rot + pc.rotY;
+        if (pc.tipo == PecaPredio::Triangulo) m.triangulo(P(pc.a), P(pc.b), P(pc.c), pc.cor);
+        else if (pc.tipo == PecaPredio::Prisma) m.prisma(P(pc.centro), pc.tam, rot, pc.cor);
+        else if (pc.inclinacao != 0) m.caixaInclinada(P(pc.centro), pc.tam, rot, pc.inclinacao, pc.cor);
+        else m.caixa(P(pc.centro), pc.tam, rot, pc.cor);
+    }
+    Vec3f predio(const Frame& f, Lote l) {
+        // piso acima do chao mais alto da pegada (terreno inclinado: o alicerce desce ate o mais baixo)
+        float hmax = -1e9f;
+        for (float sx : {-0.5f, 0.f, 0.5f})
+            for (float sz : {-0.5f, 0.f, 0.5f}) {
+                Vec3f q = f.P(sx * l.largura, 0, sz * l.profundidade);
+                hmax = std::max(hmax, h(q.x, q.z));
+            }
+        l.piso = hmax - f.o.y + 0.35f;
+        Planta pl = gerarPredio(l);
+        int idx = pedaco(f.o) * 4 + quadrante(f.o);
+        MeshBuilder& m = predioDet[idx];
+        MeshBuilder& ml = predioCasca[idx];
+        m.tamanhoMaximoFace(3.5f);    // as paredes usam a luz guardada: pouca subdivisao basta
+        ml.tamanhoMaximoFace(1000.f);  // casca: faces inteiras
+        std::vector<std::pair<int, Vec3f>> paredesReg;  // formas de parede desta casa (detalhes usam a luz delas)
+        for (const auto& pc : pl.pecas) {
+            float tipoV = tipoMaterial(pc.mat);
+            bool deParede = tipoV > 4.5f && tipoV < 7.5f;
+            if (pc.soForma) {
+                if (formas) m.soForma(pc.tipo == PecaPredio::Prisma ? TipoForma::Prisma : TipoForma::Caixa, f.P(pc.centro.x, pc.centro.y, pc.centro.z), pc.tam * 0.5f, f.rot + pc.rotY);
+                continue;
+            }
+            if (!pc.forma && deParede && !paredesReg.empty()) {
+                Vec3f c = f.P(pc.centro.x, pc.centro.y, pc.centro.z);
+                int melhor = paredesReg[0].first;
+                float dm = 1e9f;
+                for (auto& [i, w] : paredesReg)
+                    if (len(w - c) < dm) dm = len(w - c), melhor = i;
+                m.formaFixa(melhor);
+            }
+            m.tipo(tipoV);
+            if (pc.forma) registrar(m, true);
+            desenharPeca(m, pc, f);
+            if (pc.forma) registrar(m, false);
+            if (pc.forma && deParede && formas) paredesReg.push_back({int(formas->size()) - 1, f.P(pc.centro.x, pc.centro.y, pc.centro.z)});
+            m.formaFixa(-1);
+            m.tipo(TIPO_NORMAL);
         }
-        // diagonais decorativas no andar de cima
-        if (andares > 1) {
-            caixa(m, f, {-w / 4, base + 2.6f * 1.5f, d / 2 - 0.03f}, {0.12f, 2.9f, 0.08f}, MADEIRA_ESC);
+        for (const auto& pc : pl.casca) {  // versao simples (longe, Baixo, sombras)
+            ml.tipo(tipoMaterial(pc.mat));
+            desenharPeca(ml, pc, f);
+            ml.tipo(TIPO_NORMAL);
         }
-        m.tipo(TIPO_NORMAL);
-        m.formaFixa(-1);
-        // telhado
-        bool cumeeiraX = w >= d;
-        float rw = (cumeeiraX ? w : d) + 0.9f, rd = (cumeeiraX ? d : w) + 1.0f, rh = std::min(rd * 0.45f, 3.4f);
-        registrar(m, true);
-        m.prisma(f.P(0, base + alt + rh / 2, 0), {rw, rh, rd}, f.rot + (cumeeiraX ? 0 : PI / 2), telhado);
-        // chamine
-        caixa(m, f, {w * 0.3f, base + alt + rh * 0.6f, -d * 0.15f}, {0.7f, rh + 0.6f, 0.7f}, PEDRA_ESC);
-        registrar(m, false);
-        // porta
-        caixa(m, f, {w * 0.18f, base + 1.05f, d / 2 + 0.02f}, {1.1f, 2.1f, 0.12f}, MADEIRA * 0.8f);
-        caixa(m, f, {w * 0.18f, base + 2.2f, d / 2 + 0.04f}, {1.4f, 0.18f, 0.16f}, MADEIRA_ESC);
-        // degrau
-        caixa(m, f, {w * 0.18f, base - 0.25f, d / 2 + 0.5f}, {1.4f, 0.5f, 0.9f}, PEDRA_ESC);
-        // janelas
-        janela(m, f, -w * 0.22f, base + 1.4f, d / 2 + 0.02f);
-        for (int a = 1; a < andares; a++) {
-            janela(m, f, -w * 0.22f, base + 1.4f + 2.6f * a, d / 2 + 0.02f);
-            janela(m, f, w * 0.22f, base + 1.4f + 2.6f * a, d / 2 + 0.02f);
+        for (const auto& c : pl.paredes) {
+            Vec3f w = f.P(c.centro.x, 0, c.centro.z);
+            col.adicionarGirada({w, c.meiaX, c.meiaZ, f.rot + c.rot, f.o.y + c.y0, f.o.y + c.y1});
         }
-        janela(m, f, 0, base + 1.4f, -d / 2 - 0.02f);
-        janela(m, f, w / 2 + 0.02f, base + 1.4f, 0, PI / 2);
-        if (placa) {
-            caixa(m, f, {w * 0.42f, base + 2.9f, d / 2 + 0.6f}, {0.08f, 0.08f, 1.2f}, FERRO);
-            caixa(m, f, {w * 0.42f, base + 2.45f, d / 2 + 1.0f}, {0.08f, 0.7f, 0.9f}, corPlaca);
+        for (const auto& c : pl.pisos) {
+            Vec3f w = f.P(c.centro.x, 0, c.centro.z);
+            col.adicionarPisoGirado({w, c.meiaX, c.meiaZ, f.rot + c.rot, f.o.y + c.y0, f.o.y + c.y1});
         }
-        colisaoRet(f, 0, 0, w, d, base + alt);
-        ocupar(f, w, d);
+        if (janelas)
+            for (const auto& j : pl.janelas) janelas->push_back({f.P(j.pos.x, j.pos.y, j.pos.z), rotY(j.normal, f.rot)});
+        Vec3f portaC = f.P(pl.porta.dobradica.x + pl.porta.largura * 0.5f, pl.piso, pl.porta.dobradica.z);
+        if (portas)
+            portas->push_back({f.P(pl.porta.dobradica.x, pl.porta.dobradica.y, pl.porta.dobradica.z), pl.porta.largura, pl.porta.altura,
+                               f.rot + pl.porta.rotFechada, pl.porta.sentido});
+        if (interiores) interiores->push_back({f.P(pl.interiorCentro.x, pl.interiorCentro.y, pl.interiorCentro.z), pl.interiorMeia, f.rot, portaC});
+        ocupar(f, l.largura + 1.2f, l.profundidade + (l.estilo == Estilo::Faroeste ? 4.5f : 1.5f));
+        Vec3f e = f.P(pl.entrada.x, 0, pl.entrada.z);
+        e.y = h(e.x, e.z);
+        return e;
     }
 
     void cerca(Vec3f a, Vec3f c, Rgb cor = MADEIRA) {
@@ -411,6 +441,7 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
             if (!fila.empty()) e = fila.front();
             if (!g.livre(f, e.w, e.d, 2.5f)) continue;
             if (!fila.empty()) fila.erase(fila.begin());
+            Vec3f entrada = f.P(e.w * 0.18f, 0, e.d / 2 + 1.8f);
             if (e.tipo == 4) {
                 // estabulo: telhado sobre postes, cocheiras e cerca
                 MeshBuilder& m = g.b(p);
@@ -434,7 +465,12 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
                 c.cavalos.push_back(f.P(0, 0, e.d / 2 + 2.5f));
                 g.tochaParede(f, -e.w / 2 - 0.2f, 2.4f, e.d / 2 + 0.1f);
             } else {
-                g.casa(f, e.w, e.d, e.andares, e.parede, e.telhado, e.placa, e.corPlaca);
+                Lote lt;
+                lt.largura = e.w, lt.profundidade = e.d, lt.andares = e.andares, lt.estilo = Estilo::Medieval;
+                lt.tipo = e.tipo == 1 ? TipoPredio::Taverna : (e.tipo == 2 ? TipoPredio::Xerife : (e.tipo == 3 ? TipoPredio::Cadeia : TipoPredio::Casa));
+                lt.semente = g.rng ^ uint32_t(k * 7919 + int(raioAnel) * 131);
+                lt.corParede = e.parede, lt.corTelhado = e.telhado;
+                entrada = g.predio(f, lt);
                 if (e.tipo == 1) {  // taverna: barris e tochas na frente
                     g.barril(f.P(-e.w / 2 + 0.8f, 0, e.d / 2 + 1.0f));
                     g.barril(f.P(-e.w / 2 + 1.7f, 0, e.d / 2 + 1.2f));
@@ -447,13 +483,9 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
                     g.quadroRecompensas(fq, c.quadros, l.nome);
                     g.tochaParede(f, e.w * 0.45f, 2.8f, e.d / 2 + 0.25f);
                 }
-                if (e.tipo == 3) {  // cadeia: grades nas janelas
-                    MeshBuilder& m = g.b(p);
-                    for (int gk = 0; gk < 4; gk++) g.caixa(m, f, {-e.w * 0.22f - 0.24f + gk * 0.16f, 2.4f, e.d / 2 + 0.1f}, {0.05f, 0.85f, 0.05f}, FERRO);
-                }
                 if (e.tipo == 0) casas++;
             }
-            rota.push_back(f.P(e.w * 0.18f, 0, e.d / 2 + 1.8f));
+            rota.push_back(entrada);
         }
     }
     (void)casas;
@@ -475,8 +507,12 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
             Frame f{p, a + PI + g.r(-0.25f, 0.25f)};
             float w = g.r(5.5f, 7.5f), d = g.r(4.5f, 6.f);
             if (!g.livre(f, w, d, 3.f)) continue;
-            g.casa(f, w, d, 1, g.r01() < 0.5f ? REBOCO2 : MADEIRA * 1.3f, g.r01() < 0.6f ? PALHA : TELHA_M);
-            rota.push_back(f.P(w * 0.18f, 0, d / 2 + 1.6f));
+            Lote lt;
+            lt.largura = w, lt.profundidade = d, lt.andares = g.r01() < 0.25f ? 2 : 1, lt.estilo = Estilo::Medieval;
+            lt.semente = g.rng ^ uint32_t(k * 104729 + int(raioAnel) * 7);
+            lt.corParede = g.r01() < 0.5f ? REBOCO2 : MADEIRA * 1.3f;
+            lt.corTelhado = g.r01() < 0.6f ? PALHA : TELHA_M;
+            rota.push_back(g.predio(f, lt));
             if (g.r01() < 0.5f) g.barril(f.P(-w / 2 - 0.6f, 0, d / 2 - 0.5f));
             if (g.r01() < 0.4f) g.caixote(f.P(w / 2 + 0.7f, 0, 0.5f), g.r(0, 1));
             feitas++;
@@ -494,24 +530,22 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
 static void gerarFazenda(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f>& rota) {
     float rot = l.rot * PI / 180.f;
     Frame fl{{l.x, g.h(l.x, l.z), l.z}, rot};
-    // celeiro
+    // celeiro e casa no estilo faroeste
     Frame fb{fl.P(-10, 0, -8), rot};
     fb.o.y = g.h(fb.o.x, fb.o.z);
-    {
-        MeshBuilder& m = g.b(fb.o);
-        Rgb celeiro{0.55f, 0.22f, 0.16f};
-        g.caixa(m, fb, {0, 2.0f, 0}, {12, 5.0f, 8}, celeiro);
-        g.caixa(m, fb, {0, 1.6f, 4.02f}, {3.6f, 3.2f, 0.1f}, MADEIRA_ESC);
-        g.caixa(m, fb, {0, 1.6f, 4.06f}, {0.15f, 3.2f, 0.1f}, Rgb{0.85f, 0.8f, 0.7f});
-        m.prisma(fb.P(0, 5.9f, 0), {12.8f, 2.8f, 9.0f}, rot, TELHA_M);
-        g.colisaoRet(fb, 0, 0, 12, 8, 5);
-        g.ocupar(fb, 12, 8);
-    }
+    Lote lc;
+    lc.largura = 12, lc.profundidade = 8, lc.estilo = Estilo::Faroeste, lc.tipo = TipoPredio::Celeiro;
+    lc.semente = uint32_t(l.x * 13 + l.z * 7) + 5u;
+    lc.corParede = Rgb{0.55f, 0.22f, 0.16f}, lc.corTelhado = TELHA_M;
+    Vec3f entCeleiro = g.predio(fb, lc);
     Frame fc{fl.P(8, 0, -9), rot};
     fc.o.y = g.h(fc.o.x, fc.o.z);
-    g.casa(fc, 7, 5.5f, 1, REBOCO2, PALHA);
-    rota.push_back(fc.P(1.3f, 0, 4.5f));
-    rota.push_back(fb.P(0, 0, 6));
+    Lote lf;
+    lf.largura = 7, lf.profundidade = 5.5f, lf.estilo = Estilo::Faroeste, lf.tipo = TipoPredio::Casa;
+    lf.semente = uint32_t(l.x * 31 + l.z * 17) + 9u;
+    lf.corParede = Rgb{0.62f, 0.52f, 0.4f}, lf.corTelhado = Rgb{0.36f, 0.3f, 0.26f};
+    rota.push_back(g.predio(fc, lf));
+    rota.push_back(entCeleiro);
     // plantacao com cerca
     float pw = 24, pd = 16;
     Vec3f c0 = fl.P(-pw / 2, 0, 4), c1 = fl.P(pw / 2, 0, 4), c2 = fl.P(pw / 2, 0, 4 + pd), c3 = fl.P(-pw / 2, 0, 4 + pd);
@@ -674,6 +708,15 @@ static void gerarMina(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f>
         g.colisaoRet(f, 0, 4, 1.3f, 1.8f, 1.3f);
         g.tochaParede(f, -2.3f, 2.4f, -2.5f);
     }
+    {   // barracao do minerador (faroeste)
+        Frame fm{f.P(-9, 0, 4), rot + PI * 0.5f};
+        fm.o.y = g.h(fm.o.x, fm.o.z);
+        Lote lb;
+        lb.largura = 4.2f, lb.profundidade = 3.6f, lb.estilo = Estilo::Faroeste, lb.tipo = TipoPredio::Barracao;
+        lb.semente = uint32_t(l.x * 5 + l.z * 3) + 1u;
+        lb.corParede = Rgb{0.5f, 0.42f, 0.33f}, lb.corTelhado = Rgb{0.3f, 0.27f, 0.25f};
+        rota.push_back(g.predio(fm, lb));
+    }
     rota.push_back(f.P(3, 0, 2));
     rota.push_back(f.P(-4, 0, 6));
     for (int k = 0; k < 5; k++) g.caixote(f.P(g.r(3, 7), 0, g.r(0, 6)), g.r(0, 2));
@@ -710,8 +753,12 @@ static void gerarCemiterio(Gerador& g, const Lugar& l, Cenario& c, std::vector<V
     // capela
     Frame fcap{f.P(0, 0, -12), rot};
     fcap.o.y = g.h(fcap.o.x, fcap.o.z);
-    g.casa(fcap, 6, 9, 1, PEDRA, ARDOSIA);
-    Vec3f tor = fcap.P(0, 0, 4.0f);
+    Lote lcap;
+    lcap.largura = 6, lcap.profundidade = 9, lcap.estilo = Estilo::Medieval, lcap.tipo = TipoPredio::Capela;
+    lcap.semente = uint32_t(l.x * 3 + l.z * 11) + 3u;
+    lcap.corParede = PEDRA, lcap.corTelhado = ARDOSIA;
+    g.predio(fcap, lcap);
+    Vec3f tor = fcap.P(0, 0, -(9 * 0.5f + 1.3f));  // torre nos fundos (a porta fica na frente)
     g.torre(tor, 1.2f, 7.5f, PEDRA * 0.95f, true, ARDOSIA);
     rota.push_back(f.P(0, 0, L - 3));
     rota.push_back(f.P(-6, 0, 3));
@@ -874,11 +921,15 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
     col_ = &col;
     n_ = int(std::ceil(2 * Terreno::META / TAM));
     p_.assign(n_ * n_, Pedaco{});
-    Gerador g{t, col, luzes, semente, {}, n_, {}};
+    Gerador g{t, col, luzes, semente, {}, {}, {}, n_, {}};
     formas_.clear();
     janelas_.clear();
+    portas_.clear();
+    interiores_.clear();
     g.formas = &formas_;
     g.janelas = &janelas_;
+    g.portas = &portas_;
+    g.interiores = &interiores_;
     rotasNPC.clear();
     for (auto& l : mapa.lugares) {
         std::vector<Vec3f> rota;
@@ -910,11 +961,26 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
                         -Terreno::META + (j + .5f) * TAM};
             p.raio = TAM * 0.75f + 25.f;
             p.arvores = std::move(arv[j * n_ + i]);
-            auto it = g.constr.find(j * n_ + i);
-            if (it != g.constr.end() && !it->second.vazio()) {
-                it->second.calcularAO(&t, 10);
-                p.construcoes = paraMesh(it->second);
-                p.temConstr = true;
+            {
+                int k = j * n_ + i;
+                auto io = g.constr.find(k);
+                if (io != g.constr.end() && !io->second.vazio()) {
+                    io->second.calcularAO(&t, 10);
+                    p.construcoes = paraMesh(io->second);
+                    p.temConstr = true;
+                }
+                for (int qd = 0; qd < 4; qd++) {  // predios por quadrante: detalhados e casca
+                    auto id = g.predioDet.find(k * 4 + qd);
+                    auto ic = g.predioCasca.find(k * 4 + qd);
+                    if (id == g.predioDet.end() || id->second.vazio() || ic == g.predioCasca.end()) continue;
+                    Pedaco::Quadrante& Q = p.q[qd];
+                    Q.centro = {-Terreno::META + (i + 0.25f + 0.5f * (qd & 1)) * TAM, p.centro.y, -Terreno::META + (j + 0.25f + 0.5f * (qd >> 1)) * TAM};
+                    id->second.calcularAO(&t, 8);
+                    ic->second.calcularAO(&t, 4);
+                    Q.det = paraMesh(id->second);
+                    Q.casca = paraMesh(ic->second);
+                    Q.tem = true;
+                }
             }
             if (!p.arvores.empty()) {
                 MeshBuilder m;
@@ -994,7 +1060,7 @@ void Cenario::atualizar(Vec3f foco, float tempo, int maxConstrucoes) {
     }
 }
 
-void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr, int partes) {
+void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr, int partes, float distDetalhe) {
     if (partes & 1) {  // a contagem recomeca na primeira parte do quadro
         tris_ = 0;
         chamadas_ = 0;
@@ -1003,7 +1069,7 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Materi
     float meio = std::acos(std::cos(cam.fovy * 0.5f * 1.9f * DEG2RAD));
     Matrix id = MatrixIdentity();
     for (auto& p : p_) {
-        if (!p.temConstr && !p.temLonge && !p.temPerto) continue;
+        if (!p.temConstr && !p.temLonge && !p.temPerto && !p.q[0].tem && !p.q[1].tem && !p.q[2].tem && !p.q[3].tem) continue;
         Vector3 v{p.centro.x - cam.position.x, p.centro.y - cam.position.y, p.centro.z - cam.position.z};
         float d = Vector3Length(v);
         float dh = std::hypot(v.x, v.z) - TAM * 0.7f;
@@ -1012,10 +1078,20 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Materi
             float ang = std::acos(std::clamp(Vector3DotProduct(Vector3Scale(v, 1.f / d), fwd), -1.f, 1.f));
             if (ang - std::asin(std::min(1.f, p.raio / d)) > meio) continue;
         }
-        if (p.temConstr && (partes & 1)) {
-            DrawMesh(p.construcoes, matConstr ? *matConstr : mat, id);
-            tris_ += p.construcoes.triangleCount;
-            chamadas_++;
+        if (partes & 1) {
+            if (p.temConstr) {
+                DrawMesh(p.construcoes, matConstr ? *matConstr : mat, id);
+                tris_ += p.construcoes.triangleCount;
+                chamadas_++;
+            }
+            for (auto& Q : p.q) {  // predios: detalhados perto, casca longe (Baixo: sempre casca)
+                if (!Q.tem) continue;
+                float dq = std::hypot(Q.centro.x - cam.position.x, Q.centro.z - cam.position.z) - TAM * 0.36f;
+                const Mesh& mq = dq > distDetalhe ? Q.casca : Q.det;
+                DrawMesh(mq, matConstr ? *matConstr : mat, id);
+                tris_ += mq.triangleCount;
+                chamadas_++;
+            }
         }
         if (!(partes & 2)) continue;
         bool perto = dh < DIST_PERTO && p.temPerto;
@@ -1037,6 +1113,8 @@ void Cenario::desenharArea(Vec3f centro, float raio, Material& mat) {
     for (auto& p : p_) {
         if (std::hypot(p.centro.x - centro.x, p.centro.z - centro.z) > raio + p.raio) continue;
         if (p.temConstr) DrawMesh(p.construcoes, mat, id);
+        for (auto& Q : p.q)
+            if (Q.tem) DrawMesh(Q.casca, mat, id);  // sombras: a casca dos predios basta (bem mais leve)
         if (p.temPerto) DrawMesh(p.arvPerto, mat, id);
         else if (p.temLonge) DrawMesh(p.arvLonge, mat, id);
     }
@@ -1045,6 +1123,11 @@ void Cenario::desenharArea(Vec3f centro, float raio, Material& mat) {
 void Cenario::descarregar() {
     for (auto& p : p_) {
         if (p.temConstr) UnloadMesh(p.construcoes);
+        for (auto& Q : p.q)
+            if (Q.tem) {
+                UnloadMesh(Q.det);
+                UnloadMesh(Q.casca);
+            }
         if (p.temPerto) UnloadMesh(p.arvPerto);
         if (p.temLonge) UnloadMesh(p.arvLonge);
     }

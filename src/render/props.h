@@ -4,6 +4,7 @@
 #include <vector>
 #include "core/collision.h"
 #include "core/formas.h"
+#include "core/predio.h"
 #include "core/places.h"
 #include "core/terrain.h"
 #include "raylib.h"
@@ -30,7 +31,9 @@ public:
     void construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, uint32_t semente);
     void atualizar(Vec3f foco, float tempo, int maxConstrucoes = 4);
     // matConstr: construcoes; partes: 1 construcoes, 2 arvores, 3 ambas
-    void desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr = nullptr, int partes = 3);
+    // simples: so as cascas dos predios (Baixo)
+    // distDetalhe: ate onde os predios sao desenhados detalhados (alem: casca; 0 = sempre casca)
+    void desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr = nullptr, int partes = 3, float distDetalhe = 70.f);
     void desenharArea(Vec3f centro, float raio, Material& mat);  // passe de sombra
     void descarregar();
 
@@ -44,12 +47,20 @@ public:
     // construcoes como formas exatas e janelas (luz tracada nas paredes)
     const std::vector<FormaCena>& formas() const { return formas_; }
     const std::vector<JanelaLuz>& janelas() const { return janelas_; }
+    std::vector<PortaMundo>& portas() { return portas_; }
+    const std::vector<InteriorMundo>& interiores() const { return interiores_; }
 
 private:
     struct Pedaco {
         Vec3f centro{};
         float raio = 0;
         Mesh construcoes{}, arvPerto{}, arvLonge{};
+        struct Quadrante {  // predios de 32 x 32 m: detalhados perto, casca simples longe (e no Baixo/sombras)
+            Vec3f centro{};
+            Mesh det{}, casca{};
+            bool tem = false;
+        };
+        Quadrante q[4];
         bool temConstr = false, temPerto = false, temLonge = false, vazioPerto = false;
         float usoPerto = 0;
         std::vector<ArvoreInst> arvores;
@@ -58,6 +69,8 @@ private:
     std::vector<Pedaco> p_;
     std::vector<FormaCena> formas_;
     std::vector<JanelaLuz> janelas_;
+    std::vector<PortaMundo> portas_;
+    std::vector<InteriorMundo> interiores_;
     const Terreno* ter_ = nullptr;
     const MundoColisao* col_ = nullptr;
     int n_ = 0;

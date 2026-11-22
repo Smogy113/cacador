@@ -24,6 +24,10 @@ struct Vert {
 class MeshBuilder {
 public:
     void caixa(Vec3f centro, Vec3f tamanho, float rotY, Rgb cor);
+    // caixa inclinada: gira "incl" em torno do x local e depois "rotY" (placas de telhado)
+    void caixaInclinada(Vec3f centro, Vec3f tamanho, float rotY, float incl, Rgb cor);
+    // so registra a forma (bloqueia a luz tracada), sem desenhar nada
+    void soForma(TipoForma t, Vec3f centro, Vec3f meia, float rotY) { registrarForma(t, centro, meia, rotY, {}); formaAtual_ = formaFixa_; }
     void cilindro(Vec3f base, float raio, float altura, int lados, Rgb cor);
     void cone(Vec3f base, float raio, float altura, int lados, Rgb cor);
     void prisma(Vec3f centro, Vec3f tamanho, float rotY, Rgb cor);  // telhado de duas aguas, cumeeira no eixo x local
@@ -32,6 +36,8 @@ public:
     // AO barata: escurece de baixo (y0) para cima (y1). Usada em arvores.
     void aoVertical(float y0, float y1);
     void tipo(float t) { tipoAtual_ = t; }
+    // faces maiores que isto sao subdivididas (oclusao por vertice mais suave); padrao 2 m
+    void tamanhoMaximoFace(float m) { tamFace_ = m; }
     // passa a anexar em "destino" a forma exata de cada caixa/prisma/cilindro (null = nao registra)
     void registrar(std::vector<FormaCena>* destino) { formas_ = destino; }
     // pecas presas a uma forma ja registrada (vigas na parede): os vertices levam o indice dela (-1: nenhuma)
@@ -43,15 +49,18 @@ public:
     bool vazio() const { return v_.empty(); }
 
 private:
-    struct Caixa {
-        Vec3f min, max;
+    struct Caixa {  // oclusor: caixa girada em y (centro, meia, giro)
+        Vec3f c, h;
+        float rot;
     };
     void quadOrientado(Vec3f a, Vec3f b, Vec3f c, Vec3f d, Vec3f dir, Rgb cor, float tamMax);
     void triOrientado(Vec3f a, Vec3f b, Vec3f c, Vec3f dir, Rgb cor);
     void addOclusor(Vec3f mn, Vec3f mx);
+    void addOclusorGirado(Vec3f centro, Vec3f meia, float rotY);
     std::vector<Vert> v_;
     int donoAtual_ = -1;
     float tipoAtual_ = TIPO_NORMAL;
+    float tamFace_ = 2.f;
     std::vector<FormaCena>* formas_ = nullptr;
     int formaAtual_ = -1, formaFixa_ = -1;
     void registrarForma(TipoForma t, Vec3f c, Vec3f h, float rot, Rgb cor);

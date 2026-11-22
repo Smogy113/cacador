@@ -53,22 +53,18 @@ void MeshBuilder::triOrientado(Vec3f a, Vec3f b, Vec3f c, Vec3f dir, Rgb cor) {
     triangulo(a, b, c, cor);
 }
 
-void MeshBuilder::addOclusor(Vec3f mn, Vec3f mx) {
-    oclusores_.push_back({mn, mx});
+void MeshBuilder::addOclusorGirado(Vec3f c, Vec3f h, float rotY) {
+    oclusores_.push_back({c, h, rotY});
     donoAtual_ = int(oclusores_.size()) - 1;
 }
+
+void MeshBuilder::addOclusor(Vec3f mn, Vec3f mx) { addOclusorGirado((mn + mx) * 0.5f, (mx - mn) * 0.5f, 0.f); }
 
 void MeshBuilder::caixa(Vec3f centro, Vec3f t, float rotY, Rgb cor) {
     Vec3f h = t * 0.5f;
     registrarForma(TipoForma::Caixa, centro, h, rotY, cor);
     struct Fim { int& f; int v; ~Fim() { f = v; } } fim{formaAtual_, formaFixa_};
-    Vec3f mn{1e9f, 1e9f, 1e9f}, mx{-1e9f, -1e9f, -1e9f};
-    for (int k = 0; k < 8; k++) {
-        Vec3f p = centro + girarY({(k & 1) ? h.x : -h.x, (k & 2) ? h.y : -h.y, (k & 4) ? h.z : -h.z}, rotY);
-        mn = {std::min(mn.x, p.x), std::min(mn.y, p.y), std::min(mn.z, p.z)};
-        mx = {std::max(mx.x, p.x), std::max(mx.y, p.y), std::max(mx.z, p.z)};
-    }
-    addOclusor(mn, mx);
+    addOclusorGirado(centro, h, rotY);
     const Vec3f eixos[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
     for (auto n : eixos) {
         Vec3f w = std::abs(n.y) > 0.5f ? Vec3f{0, 0, 1} : Vec3f{0, 1, 0};
@@ -76,7 +72,31 @@ void MeshBuilder::caixa(Vec3f centro, Vec3f t, float rotY, Rgb cor) {
         Vec3f cf{n.x * h.x, n.y * h.y, n.z * h.z};
         Vec3f us{u.x * h.x, u.y * h.y, u.z * h.z}, ws{w.x * h.x, w.y * h.y, w.z * h.z};
         auto W = [&](Vec3f p) { return centro + girarY(p, rotY); };
-        quadOrientado(W(cf - us - ws), W(cf + us - ws), W(cf + us + ws), W(cf - us + ws), girarY(n, rotY), cor, 2.f);
+        quadOrientado(W(cf - us - ws), W(cf + us - ws), W(cf + us + ws), W(cf - us + ws), girarY(n, rotY), cor, tamFace_);
+    }
+    donoAtual_ = -1;
+}
+
+void MeshBuilder::caixaInclinada(Vec3f centro, Vec3f t, float rotY, float incl, Rgb cor) {
+    Vec3f h = t * 0.5f;
+    float ci = std::cos(incl), si = std::sin(incl);
+    auto rx = [&](Vec3f p) { return Vec3f{p.x, p.y * ci - p.z * si, p.y * si + p.z * ci}; };
+    auto W = [&](Vec3f p) { return centro + girarY(rx(p), rotY); };
+    // oclusor: caixa (girada em y) que envolve a caixa inclinada
+    Vec3f mn{1e9f, 1e9f, 1e9f}, mx{-1e9f, -1e9f, -1e9f};
+    for (int k = 0; k < 8; k++) {
+        Vec3f p = rx({(k & 1) ? h.x : -h.x, (k & 2) ? h.y : -h.y, (k & 4) ? h.z : -h.z});
+        mn = {std::min(mn.x, p.x), std::min(mn.y, p.y), std::min(mn.z, p.z)};
+        mx = {std::max(mx.x, p.x), std::max(mx.y, p.y), std::max(mx.z, p.z)};
+    }
+    addOclusorGirado(centro + girarY((mn + mx) * 0.5f, rotY), (mx - mn) * 0.5f, rotY);
+    const Vec3f eixos[6] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    for (auto n : eixos) {
+        Vec3f w = std::abs(n.y) > 0.5f ? Vec3f{0, 0, 1} : Vec3f{0, 1, 0};
+        Vec3f u = cross(w, n);
+        Vec3f cf{n.x * h.x, n.y * h.y, n.z * h.z};
+        Vec3f us{u.x * h.x, u.y * h.y, u.z * h.z}, ws{w.x * h.x, w.y * h.y, w.z * h.z};
+        quadOrientado(W(cf - us - ws), W(cf + us - ws), W(cf + us + ws), W(cf - us + ws), girarY(rx(n), rotY), cor, tamFace_);
     }
     donoAtual_ = -1;
 }
@@ -116,11 +136,11 @@ void MeshBuilder::prisma(Vec3f centro, Vec3f t, float rotY, Rgb cor) {
     addOclusor(centro - Vec3f{std::max(h.x, h.z), h.y, std::max(h.x, h.z)} * 0.8f, centro + Vec3f{std::max(h.x, h.z) * .8f, 0, std::max(h.x, h.z) * .8f});
     Vec3f r0{-h.x, h.y, 0}, r1{h.x, h.y, 0};
     Vec3f f0{-h.x, -h.y, h.z}, f1{h.x, -h.y, h.z}, b0{-h.x, -h.y, -h.z}, b1{h.x, -h.y, -h.z};
-    quadOrientado(W(f0), W(f1), W(r1), W(r0), girarY({0, h.z, h.y}, rotY), cor, 2.f);
-    quadOrientado(W(b1), W(b0), W(r0), W(r1), girarY({0, h.z, -h.y}, rotY), cor, 2.f);
+    quadOrientado(W(f0), W(f1), W(r1), W(r0), girarY({0, h.z, h.y}, rotY), cor, tamFace_);
+    quadOrientado(W(b1), W(b0), W(r0), W(r1), girarY({0, h.z, -h.y}, rotY), cor, tamFace_);
     triOrientado(W(f0), W(r0), W(b0), girarY({-1, 0, 0}, rotY), cor);
     triOrientado(W(f1), W(b1), W(r1), girarY({1, 0, 0}, rotY), cor);
-    quadOrientado(W(f0), W(b0), W(b1), W(f1), {0, -1, 0}, cor, 2.f);
+    quadOrientado(W(f0), W(b0), W(b1), W(f1), {0, -1, 0}, cor, tamFace_);
     donoAtual_ = -1;
 }
 
@@ -138,14 +158,12 @@ void MeshBuilder::calcularAO(const Terreno* t, int amostras) {
         Vec3f w = std::abs(n.y) > 0.9f ? Vec3f{1, 0, 0} : Vec3f{0, 1, 0};
         Vec3f tx = normalizar(cross(w, n)), tz = cross(n, tx);
         Vec3f o = v.pos + n * 0.03f;
-        // oclusores proximos
+        // oclusores proximos (esfera que envolve a caixa)
         std::vector<const Caixa*> perto;
         for (size_t c = 0; c < oclusores_.size(); c++) {
             if (int(c) == dono_[vi]) continue;
             const Caixa& b = oclusores_[c];
-            if (o.x < b.min.x - ALCANCE_AO || o.x > b.max.x + ALCANCE_AO || o.y < b.min.y - ALCANCE_AO ||
-                o.y > b.max.y + ALCANCE_AO || o.z < b.min.z - ALCANCE_AO || o.z > b.max.z + ALCANCE_AO)
-                continue;
+            if (len(o - b.c) > len(b.h) + ALCANCE_AO) continue;
             perto.push_back(&b);
         }
         int bloqueados = 0;
@@ -154,8 +172,11 @@ void MeshBuilder::calcularAO(const Terreno* t, int amostras) {
             bool hit = false;
             for (auto* b : perto) {
                 float tmin = 0, tmax = ALCANCE_AO;
-                const float* oo = &o.x; const float* dd = &d.x;
-                const float* mn = &b->min.x; const float* mx = &b->max.x;
+                // raio no espaco da caixa (desfaz o giro)
+                Vec3f ol = girarY(o - b->c, -b->rot), dl = girarY(d, -b->rot);
+                const float* oo = &ol.x; const float* dd = &dl.x;
+                Vec3f mnv = b->h * -1.f, mxv = b->h;
+                const float* mn = &mnv.x; const float* mx = &mxv.x;
                 bool ok = true;
                 for (int e = 0; e < 3 && ok; e++) {
                     if (std::abs(dd[e]) < 1e-6f) {
@@ -188,6 +209,9 @@ void MeshBuilder::aoVertical(float y0, float y1) {
 }
 
 void MeshBuilder::anexar(const MeshBuilder& o) {
+    // junta os oclusores tambem (a oclusao de ambiente calculada depois enxerga as duas partes)
+    int desloc = int(oclusores_.size());
+    oclusores_.insert(oclusores_.end(), o.oclusores_.begin(), o.oclusores_.end());
     v_.insert(v_.end(), o.v_.begin(), o.v_.end());
-    dono_.insert(dono_.end(), o.v_.size(), -1);
+    for (int d : o.dono_) dono_.push_back(d < 0 ? -1 : d + desloc);
 }

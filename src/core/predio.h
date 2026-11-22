@@ -39,6 +39,7 @@ struct PortaPredio {
 
 struct Planta {
     std::vector<PecaPredio> pecas;
+    std::vector<PecaPredio> casca;        // versao simples (longe, Baixo, sombras): volume, telhado, janelas escuras
     std::vector<CaixaGirada> paredes;     // colisao (local); o vao da porta fica livre
     std::vector<CaixaGirada> pisos;       // pisos andaveis (topo = y1)
     std::vector<Vao> vaos;
@@ -62,3 +63,17 @@ struct Lote {
 Planta gerarPredio(const Lote& l);
 // triangulos que a planta vai gerar (orcamento): caixa 12, prisma 8, triangulo 1
 int triangulosPlanta(const Planta& p, bool comDetalhe = true);
+
+// porta e interior ja no mundo (o render guarda; o jogo abre/fecha e escurece o interior)
+struct PortaMundo {
+    Vec3f dobradica;            // mundo, no nivel do piso
+    float largura, altura, rot; // rot: giro da folha fechada (rotY)
+    float sentido = 1;          // para que lado abre (para dentro)
+    float abertura = 0;         // 0 fechada .. 1 aberta (90 graus)
+    bool querAberta = false;
+};
+struct InteriorMundo {
+    Vec3f centro, meia;  // centro no mundo; meia no espaco do predio
+    float rot;
+    Vec3f porta;         // centro do vao da porta (mundo)
+};

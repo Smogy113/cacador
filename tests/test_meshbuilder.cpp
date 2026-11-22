@@ -67,3 +67,28 @@ TEST_CASE("aoVertical escurece a base") {
     }
     CHECK(baixo < alto - 0.3f);
 }
+
+TEST_CASE("meshbuilder: oclusao respeita o giro (parede girada nao escurece o lado de dentro longe dela)") {
+    // parede fina girada 45 graus; um piso a 1,5 m dela (dentro da caixa alinhada da parede, fora da parede)
+    MeshBuilder m;
+    m.caixa({0, 1.5f, 0}, {6, 3, 0.2f}, 0.785f, {0.5f, 0.5f, 0.5f});
+    size_t n0 = m.verts().size();
+    m.caixa({-1.2f, 0.05f, -1.2f}, {0.3f, 0.1f, 0.3f}, 0.f, {0.5f, 0.5f, 0.5f});  // azulejo no chao, ~1,7 m da parede
+    m.calcularAO(nullptr, 16);
+    float topo = 0;
+    int n = 0;
+    for (size_t i = n0; i < m.verts().size(); i++)
+        if (m.verts()[i].normal.y > 0.9f) { topo += m.verts()[i].ao; n++; }
+    REQUIRE(n > 0);
+    CHECK(topo / n > 0.85f);
+}
+TEST_CASE("meshbuilder: caixa inclinada") {
+    MeshBuilder m;
+    m.caixaInclinada({0, 0, 0}, {2, 0.2f, 4}, 0.f, 0.5f, {1, 1, 1});
+    REQUIRE(m.verts().size() >= 36);
+    // a face de cima aponta para (0, cos, sen) da inclinacao
+    bool achou = false;
+    for (auto& v : m.verts())
+        if (std::abs(v.normal.y - std::cos(0.5f)) < 1e-3f && std::abs(v.normal.z - std::sin(0.5f)) < 1e-3f) achou = true;
+    CHECK(achou);
+}

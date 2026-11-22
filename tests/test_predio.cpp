@@ -148,3 +148,13 @@ TEST_CASE("predio: orcamento") {
         CHECK(triangulosPlanta(p, false) < triangulosPlanta(p));
     }
 }
+TEST_CASE("predio: casca simples e leve") {
+    for (auto& l : lotes()) {
+        Planta p = gerarPredio(l);
+        REQUIRE_FALSE(p.casca.empty());
+        int tris = 0;
+        for (auto& q : p.casca) tris += q.tipo == PecaPredio::Caixa ? 12 : (q.tipo == PecaPredio::Prisma ? 8 : 1);
+        CHECK(tris <= 320);
+        CHECK(tris * 3 <= triangulosPlanta(p, false) * 2);  // bem mais leve que o predio sem detalhes (1,5x)
+    }
+}

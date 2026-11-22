@@ -505,7 +505,9 @@ void Jogo::desenhar() {
     terrenoR_->desenhar(cam_, dv, luz_.material());
     perfil_.terminar();
     perfil_.comecar(P_CONSTRUCOES);
-    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 1);
+    // predios detalhados perto (Alto 35 m, Medio 30 m); Baixo so a casca
+    float distDetalhe = luz_.nivel() == Nivel::Alto ? 35.f : (luz_.nivel() == Nivel::Medio ? 30.f : -1e9f);
+    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 1, distDetalhe);
     perfil_.terminar();
     perfil_.comecar(P_ARVORES);
     cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 2);

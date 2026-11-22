@@ -325,6 +325,38 @@ Planta gerarPredio(const Lote& l) {
         k.caixa({xp, piso + 2.95f, D * 0.5f + 0.55f}, {0.06f, 0.06f, 1.1f}, MatPeca::Ferro, FERRO, false, true);
         k.caixa({xp, piso + 2.5f, D * 0.5f + 0.85f}, {0.07f, 0.65f, 0.85f}, MatPeca::Placa, cp, false, true);
     }
+    // ---------------- casca: volume + telhado + janelas escuras ----------------
+    {
+        std::vector<PecaPredio> c;
+        auto copia = [&](const PecaPredio& q) { PecaPredio r = q; r.forma = false; r.detalhe = false; c.push_back(r); };
+        PecaPredio vol;
+        vol.centro = {0, (piso - 1.5f + yT) * 0.5f, 0}, vol.tam = {W, yT - piso + 1.5f, D}, vol.mat = matParede, vol.cor = corParede;
+        c.push_back(vol);
+        for (auto& q : p.pecas) {
+            bool telhado = q.mat == MatPeca::Telhado && !q.soForma;
+            bool empena = q.tipo == PecaPredio::Triangulo;
+            bool chamine = q.mat == MatPeca::Pedra && q.forma && q.tam.y > yT - piso;
+            bool varanda = !med && q.mat == MatPeca::MadeiraEsc && q.forma;
+            bool fachadaFalsa = !med && q.mat == MatPeca::Madeira && q.forma && q.centro.y > yT;
+            if (telhado || empena || chamine || varanda || fachadaFalsa) copia(q);
+        }
+        for (auto& v : p.vaos) {  // janelas e porta como placas (2 triangulos) para fora; as janelas acendem a noite
+            Vec3f a = naFachada(v.lado, v.u0, v.v0, 0.01f, W, D), b = naFachada(v.lado, v.u1, v.v0, 0.01f, W, D);
+            Vec3f cc = naFachada(v.lado, v.u1, v.v1, 0.01f, W, D), d = naFachada(v.lado, v.u0, v.v1, 0.01f, W, D);
+            Vec3f n = normalLado(v.lado);
+            if (dot(cross(b - a, cc - a), n) < 0) std::swap(b, d);
+            for (int tq = 0; tq < 2; tq++) {
+                PecaPredio j;
+                j.tipo = PecaPredio::Triangulo;
+                j.a = a, j.b = tq ? cc : b, j.c = tq ? d : cc;
+                j.centro = (j.a + j.b + j.c) * (1.f / 3.f);
+                j.mat = v.porta ? MatPeca::Escuro : MatPeca::Vidro;
+                j.cor = v.porta ? MADEIRA_ESC : VIDRO;
+                c.push_back(j);
+            }
+        }
+        p.casca = std::move(c);
+    }
     return p;
 }
 
