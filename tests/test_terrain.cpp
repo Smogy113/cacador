@@ -47,6 +47,62 @@ TEST_CASE("rio tem água") {
             if (t.altura(x, z) < t.nivelAgua()) agua++;
     CHECK(agua > 500);
 }
+TEST_CASE("capim responde ao poco, trilha e cerca") {
+    RegioesCapim regioes;
+    regioes.pocos.push_back({0, 0, 0});
+    regioes.cercas.push_back({{20, 0, 0}, {20, 0, 12}});
+    AmbienteCapim campo = ambienteCapim(40, 20, 0.f, 0.f, regioes);
+    AmbienteCapim poco = ambienteCapim(3.f, 0.f, 0.f, 0.f, regioes);
+    AmbienteCapim trilha = ambienteCapim(40, 20, 1.f, 0.f, regioes);
+    AmbienteCapim cerca = ambienteCapim(20.7f, 6.f, 0.f, 0.f, regioes);
+    CHECK(campo.densidade == doctest::Approx(1.f));
+    CHECK(campo.altura == doctest::Approx(1.f));
+    CHECK(poco.densidade < campo.densidade);
+    CHECK(poco.altura < campo.altura * .5f);
+    CHECK(poco.inclinacao > campo.inclinacao);
+    CHECK(trilha.densidade < .1f);
+    CHECK(trilha.altura < .3f);
+    CHECK(cerca.altura > campo.altura * 1.6f);
+    CHECK(cerca.densidade == doctest::Approx(campo.densidade));
+    AmbienteCapim cercaNaTrilha = ambienteCapim(20.7f, 6.f, 1.f, 0.f, regioes);
+    CHECK(cercaNaTrilha.altura == doctest::Approx(trilha.altura));
+    CHECK(cercaNaTrilha.densidade == doctest::Approx(trilha.densidade));
+}
+
+TEST_CASE("capim filtra regioes sem perder cercas que cruzam blocos") {
+    RegioesCapim regioes;
+    regioes.pocos = {{-7, 0, 0}, {100, 0, 100}};
+    regioes.cercas = {{{-20, 0, 4}, {20, 0, 4}}, {{100, 0, 100}, {120, 0, 100}}};
+    RegioesCapim perto = regioes.proximas(0, 0, 8, 8);
+    REQUIRE(perto.pocos.size() == 1);
+    REQUIRE(perto.cercas.size() == 1);
+    AmbienteCapim original = ambienteCapim(4, 4, 0.f, 0.f, regioes);
+    AmbienteCapim filtrado = ambienteCapim(4, 4, 0.f, 0.f, perto);
+    CHECK(filtrado.altura == doctest::Approx(original.altura));
+    CHECK(filtrado.densidade == doctest::Approx(original.densidade));
+}
+
+TEST_CASE("margem umida escurece o capim sem afetar campo distante") {
+    Mapa m;
+    Terreno t(m, 1);
+    int margem = 0;
+    for (int x = -20; x <= 80; x += 5)
+        for (int z = -170; z <= -80; z++) {
+            float y = t.altura(float(x), float(z));
+            if (t.mascaraRio(float(x), float(z)) < .05f && y > t.nivelAgua() + .4f &&
+                t.umidadeMargem(float(x), float(z), y) > .1f) ++margem;
+        }
+    CHECK(margem > 10);
+    CHECK(t.umidadeMargem(500, 500, t.altura(500, 500)) == 0.f);
+    CHECK(t.umidadeMargem(60, -110, t.nivelAgua() + 4.f) == 0.f);
+    Rgb seca{.4f, .5f, .2f};
+    Rgb umida = corCapimUmido(seca, 1.f);
+    CHECK(umida.r < seca.r);
+    CHECK(umida.g < seca.g);
+    CHECK(umida.b < seca.b);
+    CHECK(corCapimUmido(seca, 0.f).g == doctest::Approx(seca.g));
+}
+
 TEST_CASE("normal aponta pra cima no plano") {
     auto m = lerMapa("lugar cidade A 0 0 0 60\n");
     Terreno t(m, 1);

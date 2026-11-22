@@ -27,6 +27,7 @@ Mesh Grama::montar(int bi, int bj) const {
     uint32_t rng = hash32(uint32_t(bi * 92821 + bj * 68917 + 7));
     int n = int(BLOCO * BLOCO * densidade_);
     float x0 = bi * BLOCO, z0 = bj * BLOCO;
+    RegioesCapim regioes = regioes_->proximas(x0, z0, x0 + BLOCO, z0 + BLOCO);
     std::vector<InteriorMundo> casas;
     for (auto casa : *interiores_) {
         // Folhas inclinadas ou balancando podem entrar pela borda do piso.
@@ -41,22 +42,27 @@ Mesh Grama::montar(int bi, int bj) const {
         float x = x0 + aleatorio01(rng) * BLOCO, z = z0 + aleatorio01(rng) * BLOCO;
         float r1 = aleatorio01(rng), r2 = aleatorio01(rng), r3 = aleatorio01(rng), r4 = aleatorio01(rng);
         if (!t.dentroDoJogavel(x, z)) continue;
-        float y = t.altura(x, z);
-        if (t.mascaraEstrada(x, z) > 0.3f || t.mascaraRio(x, z) > 0.05f || y < t.nivelAgua() + 0.3f) continue;
+        float y = t.altura(x, z), estrada = t.mascaraEstrada(x, z);
+        if (t.mascaraRio(x, z) > 0.05f || y < t.nivelAgua() + 0.3f) continue;
+        AmbienteCapim ambiente = ambienteCapim(x, z, estrada, 0.f, regioes);
+        uint32_t sorte = rng ^ 0x9e3779b9u;
+        if (ambiente.densidade < 1.f && aleatorio01(sorte) > ambiente.densidade) continue;
         Vec3f nn = t.normal(x, z);
         if (nn.y < 0.86f) continue;
+        ambiente.umidade = t.umidadeMargem(x, z, y);
         Rgb chao = corDoChao(t, x, z, nn.y);
-        if (!(chao.g > chao.r * 1.05f && chao.g > chao.b * 1.3f)) continue;  // so onde o chao e verde
+        if (!(chao.g > chao.r * 1.05f && chao.g > chao.b * 1.3f) && estrada < .03f && ambiente.umidade < .05f) continue;
         if (dentroDeInterior(casas, {x, y + 0.72f, z}) >= 0) continue;
         Vec3f livre = col_->resolver({x, y, z}, 0.25f);
         if (std::hypot(livre.x - x, livre.z - z) > 0.01f) continue;
-        // manchas: em uns lugares a grama e mais alta e mais clara
         float mancha = 0.5f + 0.5f * std::sin(x * 0.21f + std::sin(z * 0.17f) * 2.f) * std::cos(z * 0.13f);
-        float h = 0.18f + 0.32f * mancha + 0.18f * r1, w = 0.025f + 0.025f * r2;
-        float a = r3 * 6.2831f, inc = 0.05f + 0.2f * r4;
+        float h = (0.18f + 0.32f * mancha + 0.18f * r1) * ambiente.altura, w = 0.025f + 0.025f * r2;
+        float a = r3 * 6.2831f, inc = (0.05f + 0.2f * r4) * std::min(1.f, ambiente.altura * 1.7f) * ambiente.inclinacao;
         Vec3f lado{std::cos(a) * w, 0, std::sin(a) * w};
         Vec3f base{x, y - 0.02f, z}, ponta = base + Vec3f{std::sin(a + 1.57f) * inc, h, std::cos(a + 1.57f) * inc};
-        Rgb cb = chao * (0.7f + 0.15f * r2), cp = Rgb{chao.r * (1.05f + 0.35f * mancha), chao.g * (1.1f + 0.2f * mancha), chao.b * 0.9f};
+        chao = lerp(chao, Rgb{.30f, .40f, .18f}, std::max(smoothstep(.03f, .85f, estrada), ambiente.umidade));
+        Rgb cb = corCapimUmido(chao * (0.7f + 0.15f * r2), ambiente.umidade);
+        Rgb cp = corCapimUmido({chao.r * (1.05f + 0.35f * mancha), chao.g * (1.1f + 0.2f * mancha), chao.b * 0.9f}, ambiente.umidade);
         Vec3f vs[3] = {base - lado, base + lado, ponta};
         Rgb cs[3] = {cb, cb, cp};
         for (int v = 0; v < 3; v++) {

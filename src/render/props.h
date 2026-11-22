@@ -55,6 +55,7 @@ public:
     const std::vector<JanelaLuz>& janelas() const { return janelas_; }
     std::vector<PortaMundo>& portas() { return portas_; }
     const std::vector<InteriorMundo>& interiores() const { return interiores_; }
+    const RegioesCapim& regioesCapim() const { return regioesCapim_; }
 
 private:
     struct Pedaco {
@@ -77,6 +78,7 @@ private:
     std::vector<JanelaLuz> janelas_;
     std::vector<PortaMundo> portas_;
     std::vector<InteriorMundo> interiores_;
+    RegioesCapim regioesCapim_;
     const Terreno* ter_ = nullptr;
     const MundoColisao* col_ = nullptr;
     int n_ = 0;

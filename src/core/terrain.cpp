@@ -42,6 +42,43 @@ std::vector<Vec3f> catmull(const std::vector<Vec3f>& p, int sub) {
 }
 }  // namespace
 
+RegioesCapim RegioesCapim::proximas(float x0, float z0, float x1, float z1) const {
+    RegioesCapim resultado;
+    for (Vec3f p : pocos)
+        if (p.x >= x0 - 8.f && p.x <= x1 + 8.f && p.z >= z0 - 8.f && p.z <= z1 + 8.f)
+            resultado.pocos.push_back(p);
+    for (const CercaCapim& c : cercas)
+        if (std::max(c.inicio.x, c.fim.x) >= x0 - 3.f && std::min(c.inicio.x, c.fim.x) <= x1 + 3.f &&
+            std::max(c.inicio.z, c.fim.z) >= z0 - 3.f && std::min(c.inicio.z, c.fim.z) <= z1 + 3.f)
+            resultado.cercas.push_back(c);
+    return resultado;
+}
+
+AmbienteCapim ambienteCapim(float x, float z, float estrada, float umidade, const RegioesCapim& regioes) {
+    float poco = 0.f, cerca = 0.f;
+    for (Vec3f p : regioes.pocos) {
+        float dx = x - p.x, dz = z - p.z, distancia2 = dx * dx + dz * dz;
+        if (distancia2 < 64.f) poco = std::max(poco, 1.f - smoothstep(2.2f, 8.f, std::sqrt(distancia2)));
+    }
+    for (const CercaCapim& c : regioes.cercas) {
+        float dx = c.fim.x - c.inicio.x, dz = c.fim.z - c.inicio.z;
+        float tamanho2 = dx * dx + dz * dz;
+        float t = tamanho2 > 0.f ? clamp01(((x - c.inicio.x) * dx + (z - c.inicio.z) * dz) / tamanho2) : 0.f;
+        float px = x - c.inicio.x - dx * t, pz = z - c.inicio.z - dz * t;
+        float distancia2 = px * px + pz * pz;
+        if (distancia2 < 9.f) cerca = std::max(cerca, 1.f - smoothstep(.4f, 3.f, std::sqrt(distancia2)));
+    }
+    float trilha = smoothstep(.03f, .85f, estrada);
+    float pisoteio = std::max(trilha, poco);
+    float protegida = cerca * (1.f - pisoteio);
+    return {1.f - std::max(.93f * trilha, .72f * poco), (1.f + .8f * protegida) * (1.f - .75f * pisoteio),
+            1.f + poco, clamp01(umidade)};
+}
+
+Rgb corCapimUmido(Rgb cor, float umidade) {
+    return lerp(cor, {cor.r * .55f, cor.g * .72f, cor.b * .65f}, clamp01(umidade));
+}
+
 float Terreno::nivelAgua() const { return NIVEL_AGUA; }
 
 bool Terreno::dentroDoJogavel(float x, float z) const { return std::abs(x) <= 700.f && std::abs(z) <= 700.f; }
@@ -175,6 +212,13 @@ float Terreno::amostra(const std::vector<float>& g, float x, float z) const {
 float Terreno::altura(float x, float z) const { return amostra(alt_, x, z); }
 float Terreno::mascaraEstrada(float x, float z) const { return amostra(estrada_, x, z); }
 float Terreno::mascaraRio(float x, float z) const { return amostra(rio_, x, z); }
+
+float Terreno::umidadeMargem(float x, float z, float altura) const {
+    if (altura >= NIVEL_AGUA + 3.2f) return 0.f;
+    float agua = std::max({mascaraRio(x - 7.f, z), mascaraRio(x + 7.f, z),
+                           mascaraRio(x, z - 7.f), mascaraRio(x, z + 7.f)});
+    return agua * (1.f - smoothstep(NIVEL_AGUA + 1.2f, NIVEL_AGUA + 3.2f, altura));
+}
 
 Vec3f Terreno::normal(float x, float z) const {
     const float e = 1.f;

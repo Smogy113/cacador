@@ -40,6 +40,7 @@ struct Gerador {
     std::vector<JanelaLuz>* janelas = nullptr;
     std::vector<PortaMundo>* portas = nullptr;
     std::vector<InteriorMundo>* interiores = nullptr;
+    RegioesCapim* regioesCapim = nullptr;
     int proximoGrupo = 0;
 
     float r01() { return aleatorio01(rng); }
@@ -227,6 +228,7 @@ struct Gerador {
     }
 
     void cerca(Vec3f a, Vec3f c, Rgb cor = MADEIRA) {
+        regioesCapim->cercas.push_back({a, c});
         Vec3f d = c - a;
         float l = len(d);
         int n = std::max(1, int(l / 2.4f));
@@ -283,6 +285,7 @@ struct Gerador {
     }
 
     void poco(Vec3f p) {
+        regioesCapim->pocos.push_back(p);
         marcar({p, 0}, 2.4f, 1.6f);
         MeshBuilder& m = b(p);
         m.cilindro(p + Vec3f{0, -0.5f, 0}, 1.0f, 1.3f, 8, PEDRA);
@@ -961,6 +964,8 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
     janelas_.clear();
     portas_.clear();
     interiores_.clear();
+    regioesCapim_ = {};
+    g.regioesCapim = &regioesCapim_;
     g.formas = &formas_;
     g.janelas = &janelas_;
     g.portas = &portas_;
@@ -1041,23 +1046,31 @@ void Cenario::construirPerto(Pedaco& p) {
     // grama: tufos de 3 laminas (dos dois lados) no campo aberto, so nos pedacos perto do jogador
     if (ter_ && col_) {
         const Terreno& t = *ter_;
+        RegioesCapim regioes = regioesCapim_.proximas(p.centro.x - TAM * .5f, p.centro.z - TAM * .5f,
+                                                       p.centro.x + TAM * .5f, p.centro.z + TAM * .5f);
         uint32_t rng = hash32(uint32_t(p.centro.x * 7.f) * 73856093u ^ uint32_t(p.centro.z * 7.f) * 19349663u);
         for (float gz = -TAM * 0.5f; gz < TAM * 0.5f; gz += 2.2f)
             for (float gx = -TAM * 0.5f; gx < TAM * 0.5f; gx += 2.2f) {
                 float x = p.centro.x + gx + (aleatorio01(rng) - 0.5f) * 2.f, z = p.centro.z + gz + (aleatorio01(rng) - 0.5f) * 2.f;
                 if (aleatorio01(rng) > 0.75f || !t.dentroDoJogavel(x, z)) continue;
-                float y = t.altura(x, z);
-                if (t.mascaraEstrada(x, z) > 0.25f || t.mascaraRio(x, z) > 0.05f || y < t.nivelAgua() + 0.4f || t.normal(x, z).y < 0.88f) continue;
+                float y = t.altura(x, z), estrada = t.mascaraEstrada(x, z);
+                if (t.mascaraRio(x, z) > 0.05f || y < t.nivelAgua() + 0.4f) continue;
+                AmbienteCapim ambiente = ambienteCapim(x, z, estrada, 0.f, regioes);
+                uint32_t sorte = rng ^ 0x9e3779b9u;
+                if ((ambiente.densidade < 1.f && aleatorio01(sorte) > ambiente.densidade) || t.normal(x, z).y < 0.88f) continue;
+                ambiente.umidade = t.umidadeMargem(x, z, y);
                 if (dentroDeInterior(interiores_, {x, y + 0.60f, z}) >= 0) continue;
                 Vec3f base{x, y, z};
                 Vec3f r = col_->resolver(base, 0.35f);
                 if (std::hypot(r.x - x, r.z - z) > 0.01f) continue;  // nao nasce dentro de casa/cerca
-                float h = 0.28f + aleatorio01(rng) * 0.3f, verde = 0.85f + aleatorio01(rng) * 0.3f;
-                Rgb cor{0.36f * verde, 0.5f * verde, 0.2f * verde}, ponta{0.62f * verde, 0.66f * verde, 0.3f * verde};
+                float h = (0.28f + aleatorio01(rng) * 0.3f) * ambiente.altura, verde = 0.85f + aleatorio01(rng) * 0.3f;
+                Rgb cor = corCapimUmido({0.36f * verde, 0.5f * verde, 0.2f * verde}, ambiente.umidade);
+                Rgb ponta = corCapimUmido({0.62f * verde, 0.66f * verde, 0.3f * verde}, ambiente.umidade);
                 for (int k = 0; k < 3; k++) {
                     float a = aleatorio01(rng) * 6.2831f, l = 0.07f + aleatorio01(rng) * 0.05f;
                     Vec3f lado{std::cos(a) * l, 0, std::sin(a) * l};
-                    Vec3f top = base + Vec3f{std::sin(a + 1.3f) * h * 0.35f, h, std::cos(a + 1.3f) * h * 0.35f};
+                    Vec3f top = base + Vec3f{std::sin(a + 1.3f) * h * 0.35f * ambiente.inclinacao, h,
+                                             std::cos(a + 1.3f) * h * 0.35f * ambiente.inclinacao};
                     Rgb c = k == 1 ? ponta : cor;
                     total.triangulo(base - lado, base + lado, top, c);
                     total.triangulo(base + lado, base - lado, top, c);
