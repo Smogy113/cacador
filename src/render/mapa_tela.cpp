@@ -5,6 +5,7 @@
 #include "core/motion.h"
 #include "core/terrain.h"
 #include "render/estilo.h"
+#include "render/props.h"
 #include "render/shaders.h"
 #include "render/terrain_mesh.h"
 
@@ -28,7 +29,7 @@ void main() {
 Vector2 v2(float x, float y) { return {x, y}; }
 }  // namespace
 
-void MapaTela::carregar(const Terreno& t, const Mapa& m) {
+void MapaTela::carregar(const Terreno& t, const Mapa& m, const std::vector<EstruturaMapa>& estruturas) {
     meta_ = Terreno::META;
     lugares_ = m.lugares;
     const int N = 512;
@@ -50,6 +51,20 @@ void MapaTela::carregar(const Terreno& t, const Mapa& m) {
             auto c8 = [](float v) { return (unsigned char)std::clamp(v * 255.f, 0.f, 255.f); };
             px[j * N + i] = Color{c8(c.r), c8(c.g), c8(c.b), 255};
         }
+    // Uma textura compartilhada conserva o alinhamento com o relevo nos dois mapas.
+    ImageResize(&img, N * 3, N * 3);
+    float escala = img.width / (2 * meta_);
+    for (const auto& e : estruturas) {
+        float cx = (e.centro.x + meta_) * escala, cy = (e.centro.z + meta_) * escala;
+        float w = std::max(1.f, e.largura * escala / 2), d = std::max(1.f, e.profundidade * escala / 2);
+        float raio = std::hypot(w, d);
+        for (int y = std::max(0, int(cy - raio)); y < img.height && y <= cy + raio; ++y)
+            for (int x = std::max(0, int(cx - raio)); x < img.width && x <= cx + raio; ++x) {
+                Vec3f local = rotY({x + 0.5f - cx, 0, y + 0.5f - cy}, -e.rot);
+                float borda = std::min(w - std::abs(local.x), d - std::abs(local.z));
+                if (borda >= 0) ImageDrawPixel(&img, x, y, borda < 1 ? Color{57, 43, 35, 255} : Color{153, 83, 55, 255});
+            }
+    }
     tex_ = LoadTextureFromImage(img);
     UnloadImage(img);
     SetTextureFilter(tex_, TEXTURE_FILTER_BILINEAR);

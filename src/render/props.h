@@ -10,6 +10,11 @@
 #include "raylib.h"
 #include "render/lighting.h"
 
+struct EstruturaMapa {
+    Vec3f centro;
+    float largura, profundidade, rot;
+};
+
 struct Quadro {
     Vec3f pos;
     float yaw;
@@ -38,6 +43,7 @@ public:
     void descarregar();
 
     std::vector<LuzPontual> luzes;
+    std::vector<EstruturaMapa> estruturasMapa;
     std::vector<Quadro> quadros;
     std::vector<std::vector<Vec3f>> rotasNPC;  // pontos de passeio, um grupo por lugar
     std::vector<Vec3f> cavalos;                // onde os cavalos comecam (estabulos)

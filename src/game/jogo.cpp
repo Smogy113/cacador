@@ -24,7 +24,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     estilo::carregar();
     grama_.iniciar(*terreno_, col_, cenario_.interiores());
     nav_ = std::make_unique<Navegador>(*terreno_, &mapa_);
-    mapaTela_.carregar(*terreno_, mapa_);
+    mapaTela_.carregar(*terreno_, mapa_, cenario_.estruturasMapa);
     configurarGrama();
 
     // comeca na entrada de Pedrabranca, olhando para a ponte

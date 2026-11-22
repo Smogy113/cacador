@@ -30,6 +30,7 @@ struct Gerador {
     const Terreno& t;
     MundoColisao& col;
     std::vector<LuzPontual>& luzes;
+    std::vector<EstruturaMapa>& estruturas;
     uint32_t rng;
     std::map<int, MeshBuilder> constr;  // por pedaco
     std::map<int, MeshBuilder> predioDet, predioCasca;  // predios por pedaco: detalhados e simples (longe, Baixo, sombras)
@@ -93,6 +94,7 @@ struct Gerador {
             }
         return {mn, mx};
     }
+    void marcar(const Frame& f, float w, float d) { estruturas.push_back({f.o, w, d, f.rot}); }
     void ocupar(const Frame& f, float w, float d) { ocupado.push_back(pegada(f, w, d)); }
 
     // registra no "formas" so as pecas grandes que bloqueiam luz (parede, alicerce, telhado, chamine, muros)
@@ -217,6 +219,7 @@ struct Gerador {
             portas->push_back({f.P(pl.porta.dobradica.x, pl.porta.dobradica.y, pl.porta.dobradica.z), pl.porta.largura, pl.porta.altura,
                                f.rot + pl.porta.rotFechada, pl.porta.sentido});
         if (interiores) interiores->push_back({f.P(pl.interiorCentro.x, pl.interiorCentro.y, pl.interiorCentro.z), pl.interiorMeia, f.rot, portaC});
+        marcar(f, l.largura, l.profundidade);
         ocupar(f, l.largura + 1.2f, l.profundidade + (l.estilo == Estilo::Faroeste ? 4.5f : 1.5f));
         Vec3f e = f.P(pl.entrada.x, 0, pl.entrada.z);
         e.y = h(e.x, e.z);
@@ -247,6 +250,7 @@ struct Gerador {
         float l = len(d), ang = std::atan2(d.x, d.z);
         Vec3f m = (a + c) * 0.5f;
         float y = std::min(h(a.x, a.z), h(c.x, c.z));
+        marcar({m, ang}, esp, l);
         MeshBuilder& mb = b(m);
         registrar(mb, true);
         mb.caixa({m.x, y + alt / 2 - 1.f, m.z}, {esp, alt + 2.f, l}, ang, cor);
@@ -270,6 +274,7 @@ struct Gerador {
     void torre(Vec3f p, float raio, float alt, Rgb cor, bool telhado, Rgb corTelhado = ARDOSIA) {
         MeshBuilder& m = b(p);
         registrar(m, true);
+        marcar({p, 0}, 2 * raio, 2 * raio);
         m.cilindro(p + Vec3f{0, -2, 0}, raio, alt + 2, 8, cor);
         registrar(m, false);
         m.cilindro(p + Vec3f{0, alt, 0}, raio + 0.3f, 0.6f, 8, cor * 0.92f);
@@ -278,6 +283,7 @@ struct Gerador {
     }
 
     void poco(Vec3f p) {
+        marcar({p, 0}, 2.4f, 1.6f);
         MeshBuilder& m = b(p);
         m.cilindro(p + Vec3f{0, -0.5f, 0}, 1.0f, 1.3f, 8, PEDRA);
         m.cilindro(p + Vec3f{0, 0.75f, 0}, 0.8f, 0.02f, 8, Rgb{0.1f, 0.18f, 0.2f});
@@ -321,6 +327,7 @@ struct Gerador {
         // mercadorias
         for (int k = 0; k < 3; k++) caixa(m, f, {-0.7f + k * 0.7f, 1.05f, 0.5f}, {0.4f, 0.2f, 0.4f}, LONAS[(k + 2) % 5] * 0.9f, r(0, 1));
         colisaoRet(f, 0, 0, 2.5f, 1.8f, 2.4f);
+        marcar(f, 2.9f, 2.1f);
         ocupar(f, 2.6f, 2.0f);
     }
 };
@@ -464,6 +471,7 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
                 g.colisaoRet(f, 0, -e.d / 2, e.w, 0.4f, 3);
                 g.colisaoRet(f, -e.w / 2, 0, 0.4f, e.d, 3);
                 g.colisaoRet(f, e.w / 2, 0, 0.4f, e.d, 3);
+                g.marcar(f, e.w, e.d);
                 g.ocupar(f, e.w, e.d);
                 c.cavalos.push_back(f.P(0, 0, e.d / 2 + 2.5f));
                 g.tochaParede(f, -e.w / 2 - 0.2f, 2.4f, e.d / 2 + 0.1f);
@@ -505,6 +513,7 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
         g.barraca({piso(-5, 3), PI / 2}, LONAS[0]);
         g.barraca({piso(-5, -2), PI / 2}, LONAS[3]);
         Frame sino{piso(4, -4), 0};
+        g.marcar(sino, 3.2f, 2.3f);
         MeshBuilder& m = g.b(sino.o);
         for (float x : {-0.85f, 0.85f}) {
             g.caixa(m, sino, {x, 2.8f, 0}, {0.24f, 5.6f, 0.32f}, MADEIRA_ESC);
@@ -623,6 +632,7 @@ static void gerarCastelo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec
         for (int k = 0; k < 4; k++) g.caixa(m, fk, {-5.3f + k * 1.6f, 13.4f, 4.6f}, {0.8f, 0.9f, 0.8f}, pedraVelha);
         g.janela(m, fk, -3, 10.5f, 5.06f);
         g.colisaoRet(fk, 0, 0, 12, 10, 12);
+        g.marcar(fk, 12, 10);
         g.ocupar(fk, 12, 10);
     }
     // entulho
@@ -679,6 +689,7 @@ static void gerarAcampamento(Gerador& g, const Lugar& l, Cenario& c, std::vector
         m.prisma(f.P(0, 0.95f, 0), {3.6f, 1.9f, 3.0f}, f.rot, lona);
         g.caixa(m, f, {0, 0.95f, 1.52f}, {0.9f, 1.4f, 0.05f}, ESCURO);
         g.colisaoRet(f, 0, 0, 3.6f, 3, 2);
+        g.marcar(f, 3.6f, 3);
         g.ocupar(f, 3.6f, 3);
         rota.push_back(f.P(0, 0, -2.5f));
     }
@@ -809,6 +820,7 @@ static void gerarPonte(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f
     float meio = 8;
     while (meio < 30 && (g.t.mascaraRio(f.P(0, 0, meio).x, f.P(0, 0, meio).z) > 0.01f || g.t.mascaraRio(f.P(0, 0, -meio).x, f.P(0, 0, -meio).z) > 0.01f)) meio += 1;
     meio += 3;
+    g.marcar(f, 4.2f, meio * 2);
     float yTab = g.t.nivelAgua() + 1.6f;
     MeshBuilder& m = g.b(f.o);
     // tabuleiro em rampas: sobe da margem ate o meio
@@ -943,7 +955,8 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
     col_ = &col;
     n_ = int(std::ceil(2 * Terreno::META / TAM));
     p_.assign(n_ * n_, Pedaco{});
-    Gerador g{t, col, luzes, semente, {}, {}, {}, n_, {}};
+    estruturasMapa.clear();
+    Gerador g{t, col, luzes, estruturasMapa, semente, {}, {}, {}, n_, {}};
     formas_.clear();
     janelas_.clear();
     portas_.clear();

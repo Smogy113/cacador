@@ -5,12 +5,13 @@
 #include "raylib.h"
 
 class Terreno;
+struct EstruturaMapa;
 
 // Mapa na tela: minimapa redondo no canto (gira com a camera) e mapa grande (tecla M),
 // pintados a partir do terreno (relevo sombreado, rio, estradas, tom de papel) com a rota.
 class MapaTela {
 public:
-    void carregar(const Terreno& t, const Mapa& m);
+    void carregar(const Terreno& t, const Mapa& m, const std::vector<EstruturaMapa>& estruturas);
     void descarregar();
     static constexpr float RAIO_MINI = 105.f;
     static Vector2 centroMini() { return {GetScreenWidth() - RAIO_MINI - 30.f, GetScreenHeight() - RAIO_MINI - 30.f}; }
