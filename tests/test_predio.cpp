@@ -158,3 +158,31 @@ TEST_CASE("predio: casca simples e leve") {
         CHECK(tris * 3 <= triangulosPlanta(p, false) * 2);  // bem mais leve que o predio sem detalhes (1,5x)
     }
 }
+
+// ---------------- portas ----------------
+static PortaMundo portaTeste() {
+    PortaMundo p;
+    p.dobradica = {10, 0, 5};
+    p.largura = 1.1f, p.altura = 2.15f, p.rot = 0.6f, p.sentido = 1;
+    return p;
+}
+TEST_CASE("porta: colisao da folha fechada bloqueia, aberta libera") {
+    PortaMundo p = portaTeste();
+    Vec3f meio = p.dobradica + rotY({p.largura * 0.5f, 0, 0}, p.rot);  // meio do vao
+    MundoColisao m;
+    m.definirDinamicas({folhaPorta(p)});
+    Vec3f q = meio + rotY({0, 0, 0.1f}, p.rot);  // encostado na porta fechada
+    CHECK(len(m.resolver(q, 0.3f) - q) > 0.1f);
+    p.abertura = 1.f;
+    m.definirDinamicas({folhaPorta(p)});
+    CHECK(len(m.resolver(meio, 0.3f) - meio) < 1e-4f);  // aberta: o vao fica livre
+    CHECK(m.raioLivre(meio + rotY({0, 1, 1}, p.rot), meio + rotY({0, 1, -1}, p.rot)));
+}
+TEST_CASE("porta: nao fecha com alguem no vao") {
+    PortaMundo p = portaTeste();
+    p.abertura = 1.f;
+    Vec3f meio = p.dobradica + rotY({p.largura * 0.5f, 0, 0}, p.rot);
+    CHECK_FALSE(portaPodeFechar(p, meio, 0.35f));
+    CHECK(portaPodeFechar(p, meio + rotY({0, 0, 2.f}, p.rot), 0.35f));   // longe, do lado de fora
+    CHECK_FALSE(portaPodeFechar(p, meio + rotY({0, 0, -0.5f}, p.rot), 0.35f));  // logo atras do vao, onde a folha passa
+}

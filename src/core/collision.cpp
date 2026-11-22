@@ -65,6 +65,28 @@ Vec3f MundoColisao::resolver(Vec3f p, float raio) const {
                     mexeu = true;
                 }
             }
+        auto empurra = [&](const CaixaGirada& b) {
+            if (p.y >= b.y1 - 0.3f || p.y + 1.8f < b.y0) return;
+            float lx, lz;
+            paraLocal(b, p.x, p.z, lx, lz);
+            float qx = std::clamp(lx, -b.meiaX, b.meiaX), qz = std::clamp(lz, -b.meiaZ, b.meiaZ);
+            float dx = lx - qx, dz = lz - qz, d = std::sqrt(dx * dx + dz * dz);
+            if (d >= raio) return;
+            if (d > 1e-5f) {
+                lx = qx + dx / d * raio;
+                lz = qz + dz / d * raio;
+            } else {
+                float e[4] = {lx + b.meiaX, b.meiaX - lx, lz + b.meiaZ, b.meiaZ - lz};
+                int k = int(std::min_element(e, e + 4) - e);
+                if (k == 0) lx = -b.meiaX - raio;
+                else if (k == 1) lx = b.meiaX + raio;
+                else if (k == 2) lz = -b.meiaZ - raio;
+                else lz = b.meiaZ + raio;
+            }
+            paraMundo(b, lx, lz, p.x, p.z);
+            mexeu = true;
+        };
+        for (auto& b : dinamicas_) empurra(b);
         for (int j = cj - 1; j <= cj + 1; j++)
             for (int i = ci - 1; i <= ci + 1; i++) {
                 auto it = gradeGirada_.find(chave(i, j));
@@ -99,7 +121,32 @@ Vec3f MundoColisao::resolver(Vec3f p, float raio) const {
     return p;
 }
 
+namespace {
+bool segmentoNaGirada(const CaixaGirada& c, Vec3f a, Vec3f b) {
+    float ax, az, bx, bz;
+    paraLocal(c, a.x, a.z, ax, az);
+    paraLocal(c, b.x, b.z, bx, bz);
+    float o[3] = {ax, a.y, az}, dd[3] = {bx - ax, b.y - a.y, bz - az};
+    float mn[3] = {-c.meiaX, c.y0, -c.meiaZ}, mx[3] = {c.meiaX, c.y1, c.meiaZ};
+    float tmin = 0, tmax = 1;
+    for (int e = 0; e < 3; e++) {
+        if (std::abs(dd[e]) < 1e-8f) {
+            if (o[e] < mn[e] || o[e] > mx[e]) return false;
+        } else {
+            float t1 = (mn[e] - o[e]) / dd[e], t2 = (mx[e] - o[e]) / dd[e];
+            if (t1 > t2) std::swap(t1, t2);
+            tmin = std::max(tmin, t1);
+            tmax = std::min(tmax, t2);
+            if (tmin > tmax) return false;
+        }
+    }
+    return true;
+}
+}  // namespace
+
 bool MundoColisao::raioLivre(Vec3f a, Vec3f b) const {
+    for (auto& c : dinamicas_)
+        if (segmentoNaGirada(c, a, b)) return false;
     Vec3f d = b - a;
     int i0 = int(std::floor(std::min(a.x, b.x) / CEL)), i1 = int(std::floor(std::max(a.x, b.x) / CEL));
     int j0 = int(std::floor(std::min(a.z, b.z) / CEL)), j1 = int(std::floor(std::max(a.z, b.z) / CEL));

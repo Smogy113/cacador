@@ -18,6 +18,8 @@ public:
     static constexpr float LIMITE = 700.f;
     void adicionar(AABB c);
     void adicionarGirada(const CaixaGirada& c);
+    // caixas que mudam a cada quadro (folhas de porta): substitui a lista inteira
+    void definirDinamicas(std::vector<CaixaGirada> v) { dinamicas_ = std::move(v); }
     // Empurra um circulo (raio, no plano xz) para fora das caixas e para dentro do mapa.
     Vec3f resolver(Vec3f pos, float raio) const;
     // Segmento a->b nao atravessa nenhuma caixa?
@@ -35,6 +37,6 @@ private:
     static constexpr float CEL = 32.f;
     long chave(int i, int j) const { return (long)i * 100003L + j; }
     std::vector<AABB> caixas_, pisos_;
-    std::vector<CaixaGirada> giradas_, pisosGirados_;
+    std::vector<CaixaGirada> giradas_, pisosGirados_, dinamicas_;
     std::unordered_map<long, std::vector<int>> grade_, gradeGirada_;
 };

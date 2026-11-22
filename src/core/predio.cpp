@@ -368,3 +368,23 @@ int triangulosPlanta(const Planta& p, bool comDetalhe) {
     }
     return n;
 }
+
+CaixaGirada folhaPorta(const PortaMundo& p) {
+    float ang = p.rot + p.abertura * PI * 0.5f * p.sentido;
+    Vec3f dir = rotY({1, 0, 0}, ang);
+    Vec3f c = p.dobradica + dir * (p.largura * 0.5f);
+    return {c, p.largura * 0.5f, 0.035f, ang, p.dobradica.y, p.dobradica.y + p.altura};
+}
+
+bool portaPodeFechar(const PortaMundo& p, Vec3f pos, float raio) {
+    // a folha varre de onde esta ate fechada: nenhuma posicao intermediaria pode tocar o circulo
+    for (int k = 0; k <= 8; k++) {
+        PortaMundo q = p;
+        q.abertura = p.abertura * float(k) / 8.f;
+        MundoColisao m;
+        m.definirDinamicas({folhaPorta(q)});
+        Vec3f r = m.resolver({pos.x, p.dobradica.y, pos.z}, raio);
+        if (std::abs(r.x - pos.x) + std::abs(r.z - pos.z) > 1e-4f) return false;
+    }
+    return true;
+}

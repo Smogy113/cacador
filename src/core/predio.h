@@ -77,3 +77,8 @@ struct InteriorMundo {
     float rot;
     Vec3f porta;         // centro do vao da porta (mundo)
 };
+
+// folha da porta no mundo (colisao), conforme o quanto esta aberta
+CaixaGirada folhaPorta(const PortaMundo& p);
+// a porta pode fechar sem bater em quem esta em "pos" (circulo de raio "raio")?
+bool portaPodeFechar(const PortaMundo& p, Vec3f pos, float raio);

@@ -1,4 +1,7 @@
 #include "game/jogo.h"
+#include "core/meshbuilder.h"
+#include "render/meshconv.h"
+#include "raymath.h"
 #include <algorithm>
 #include <cmath>
 #include "game/ui.h"
@@ -48,6 +51,20 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.cabeloLongo = true;
     r.chapeuAba = false;  // sem chapeu: cabelo penteado para tras
     modeloJogador_.carregarHeroi(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
+    {   // folha de porta: tabuas, travessas, dobradicas de ferro (dobradica na origem, folha ao longo de +x)
+        MeshBuilder m;
+        const Rgb tons[4] = {{0.36f, 0.25f, 0.16f}, {0.32f, 0.22f, 0.14f}, {0.39f, 0.27f, 0.17f}, {0.34f, 0.23f, 0.15f}};
+        for (int k = 0; k < 4; k++) m.caixa({0.1375f + k * 0.275f, 1.075f, 0}, {0.27f, 2.15f, 0.05f}, 0, tons[k]);
+        for (float y : {0.45f, 1.7f})
+            for (float z : {-0.035f, 0.035f}) m.caixa({0.55f, y, z}, {1.0f, 0.14f, 0.03f}, 0, Rgb{0.27f, 0.19f, 0.13f});
+        for (float y : {0.45f, 1.7f})
+            for (float z : {-0.055f, 0.055f}) m.caixa({0.3f, y, z}, {0.55f, 0.05f, 0.012f}, 0, Rgb{0.15f, 0.15f, 0.16f});
+        m.caixa({0.95f, 1.05f, 0.06f}, {0.05f, 0.16f, 0.03f}, 0, Rgb{0.15f, 0.15f, 0.16f});  // puxador
+        m.calcularAO(nullptr, 6);
+        malhaPorta_ = paraMesh(m);
+    }
+    if (op.portasAbertas)
+        for (auto& p : cenario_.portas()) p.querAberta = true, p.abertura = 1.f;
     if (op.semEntrada) modeloJogador_.esperarCabeca();
     // moradores: roupas variadas
     {
@@ -191,6 +208,7 @@ void Jogo::desenharInterface() {
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos)) desenharDica("", "Traga um cavalo: monte perto do corpo para levar");
         else if (quadroPerto_ >= 0) desenharDica("E", "ver recompensas");
         else if (cavaloPerto_ >= 0) desenharDica("E", "montar");
+        else if (portaPerto_ >= 0) desenharDica("E", cenario_.portas()[portaPerto_].querAberta ? "fechar a porta" : "abrir a porta");
         return;
     }
     desenharPausa(int(luz_.nivel()), VERSAO_JOGO);
@@ -206,6 +224,7 @@ Jogo::~Jogo() {
     for (auto& m : modelosCavalo_) m.descarregar();
     cenario_.descarregar();
     modeloJogador_.descarregar();
+    if (malhaPorta_.vertexCount > 0) UnloadMesh(malhaPorta_);
     sombra_.descarregar();
     terrenoR_.reset();
     luz_.descarregar();
@@ -318,8 +337,10 @@ void Jogo::atualizar(float dt) {
             rig_.ombroAlvo = 0.45f;
             cavaloPerto_ = -1;
             aoMontar();
+            e.interagir = false;
         }
     }
+    atualizarPortas(dt, montadoEm_ < 0 && e.interagir);
     atualizarCombate(dt, e);
     atualizarCabelo(dt);
     atualizarRota(dt);
@@ -479,6 +500,7 @@ void Jogo::desenhar() {
         luz_.comecarSombra(jogador_.pos);
         terrenoR_->desenharArea(jogador_.pos, a, luz_.materialSombra());
         cenario_.desenharArea(jogador_.pos, a, luz_.materialSombra());
+        desenharPortas(luz_.materialSombra(), 30.f);
         desenharAtores(luz_.materialSombra(), luz_.materialSombraPele(), false, a);
         luz_.terminarSombra();
         passePrincipal_ = true;
@@ -509,6 +531,7 @@ void Jogo::desenhar() {
     float distDetalhe = luz_.nivel() == Nivel::Alto ? 35.f : (luz_.nivel() == Nivel::Medio ? 30.f : -1e9f);
     cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 1, distDetalhe);
     perfil_.terminar();
+    desenharPortas(luz_.material(), 45.f);
     perfil_.comecar(P_ARVORES);
     cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 2);
     perfil_.terminar();
@@ -602,5 +625,54 @@ void Jogo::atualizarRota(float dt) {
         tempoRota_ = 2.f;
     } else if (!rota_.empty()) {
         rota_.front() = jogador_.pos;  // a linha sai sempre de onde o jogador esta
+    }
+}
+
+// Portas: a mais perto na frente do cacador abre/fecha com E (nao fecha com alguem no vao);
+// as folhas perto giram ate o alvo em ~0,4 s e entram na colisao como caixas dinamicas.
+void Jogo::atualizarPortas(float dt, bool interagir) {
+    auto& ps = cenario_.portas();
+    portaPerto_ = -1;
+    float melhor = 1.7f;
+    Vec3f frente = frenteDe(jogador_.yaw);
+    for (size_t i = 0; i < ps.size(); i++) {
+        const PortaMundo& p = ps[i];
+        Vec3f c = p.dobradica + rotY({p.largura * 0.5f, 0, 0}, p.rot);
+        Vec3f d{c.x - jogador_.pos.x, 0, c.z - jogador_.pos.z};
+        float dist = len(d);
+        if (dist >= melhor) continue;
+        if (dist > 0.8f && dot(frente, d * (1.f / dist)) < 0.25f) continue;  // de costas para a porta
+        melhor = dist;
+        portaPerto_ = int(i);
+    }
+    if (interagir && portaPerto_ >= 0) {
+        PortaMundo& p = ps[portaPerto_];
+        if (!p.querAberta) {
+            p.querAberta = true;
+            sons_.porta(true);
+        } else if (portaPodeFechar(p, jogador_.pos, RAIO_PESSOA)) {
+            p.querAberta = false;
+            sons_.porta(false);
+        }
+    }
+    std::vector<CaixaGirada> folhas;
+    for (auto& p : ps) {
+        float alvo = p.querAberta ? 1.f : 0.f;
+        if (p.abertura != alvo) p.abertura = alvo > p.abertura ? std::min(alvo, p.abertura + dt / 0.4f) : std::max(alvo, p.abertura - dt / 0.4f);
+        if (std::hypot(p.dobradica.x - jogador_.pos.x, p.dobradica.z - jogador_.pos.z) < 25.f) folhas.push_back(folhaPorta(p));
+    }
+    col_.definirDinamicas(std::move(folhas));
+}
+
+void Jogo::desenharPortas(Material& mat, float raio) {
+    if (malhaPorta_.vertexCount == 0) return;
+    Vec3f c{cam_.position.x, cam_.position.y, cam_.position.z};
+    for (auto& p : cenario_.portas()) {
+        if (std::hypot(p.dobradica.x - c.x, p.dobradica.z - c.z) > raio) continue;
+        float ang = p.rot + p.abertura * PI * 0.5f * p.sentido;
+        Matrix t = MatrixMultiply(MatrixMultiply(MatrixScale(p.largura / 1.1f, p.altura / 2.15f, 1.f), MatrixRotateY(ang)),
+                                  MatrixTranslate(p.dobradica.x, p.dobradica.y, p.dobradica.z));
+        DrawMesh(malhaPorta_, mat, t);
+        chamadasAtores_++;
     }
 }

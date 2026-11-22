@@ -148,6 +148,33 @@ std::vector<float> somGrilo() {
     }
     return a;
 }
+// Porta: rangido da dobradica (atrito: tom que sobe e desce com aspereza) e batida de madeira.
+std::vector<float> somRangido() {
+    Gerador g{4242u};
+    int n = int(TAXA * 0.7f);
+    std::vector<float> a(n);
+    float fase = 0;
+    for (int i = 0; i < n; i++) {
+        float t = float(i) / TAXA, u = t / 0.7f;
+        float f = 520.f + 260.f * std::sin(u * 7.f) + 90.f * std::sin(u * 31.f);
+        fase += PI2 * f / TAXA;
+        float atrito = 0.5f + 0.5f * std::sin(t * 2.f * PI2 * 38.f);  // "engasgos" do atrito
+        float env = std::sin(PI2 * 0.5f * u) * (0.6f + 0.4f * atrito);
+        a[i] = (std::sin(fase) * 0.6f + std::sin(fase * 2.03f) * 0.25f + g.ruido() * 0.15f) * env;
+    }
+    return a;
+}
+std::vector<float> somBatida() {
+    Gerador g{777u};
+    int n = int(TAXA * 0.45f);
+    std::vector<float> a(n);
+    for (int i = 0; i < n; i++) {
+        float t = float(i) / TAXA;
+        a[i] = (std::sin(PI2 * 95.f * t) * 0.8f + std::sin(PI2 * 180.f * t) * 0.3f) * std::exp(-t * 14.f) + g.ruido() * std::exp(-t * 60.f) * 0.6f;
+    }
+    abafar(a, 1800.f);
+    return a;
+}
 }  // namespace
 
 float Sons::rnd() {
@@ -169,12 +196,15 @@ void Sons::carregar() {
     vento_ = paraSom(v);
     passaro_ = paraSom(b);
     grilo_ = paraSom(g);
+    auto rg = somRangido(), bt = somBatida();
+    rangido_ = paraSom(rg);
+    batida_ = paraSom(bt);
 }
 
 void Sons::descarregar() {
     if (!ok_) return;
     for (auto& s : tiro_) UnloadSound(s);
-    for (Sound* s : {&passo_, &casco_, &recarga_, &vento_, &passaro_, &grilo_}) UnloadSound(*s);
+    for (Sound* s : {&passo_, &casco_, &recarga_, &vento_, &passaro_, &grilo_, &rangido_, &batida_}) UnloadSound(*s);
     ok_ = false;
 }
 
@@ -202,6 +232,13 @@ void Sons::recarga() {
     if (!ok_) return;
     SetSoundVolume(recarga_, 0.5f);
     PlaySound(recarga_);
+}
+void Sons::porta(bool abrindo) {
+    if (!ok_) return;
+    Sound& s = abrindo ? rangido_ : batida_;
+    SetSoundVolume(s, abrindo ? 0.35f : 0.5f);
+    SetSoundPitch(s, 0.9f + rnd() * 0.2f);
+    PlaySound(s);
 }
 void Sons::ambiente(float dt, float noite) {
     if (!ok_) return;

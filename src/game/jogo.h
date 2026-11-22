@@ -44,6 +44,7 @@ struct OpcoesJogo {
     bool semLuzPersonagem = false;
     bool semFoco = false;
     bool semParedes = false;
+    bool portasAbertas = false;  // capturas: todas as portas abertas
     int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
     bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
     bool mirar = false;    // segura a mira (screenshots)
@@ -81,7 +82,12 @@ private:
     Corpo jogador_{};
     RigCamera rig_;
     ModeloHumano modeloJogador_;
-    bool luzParedesPronta_ = false;  // atlas da luz das paredes (feito no primeiro quadro)
+    bool luzParedesPronta_ = false;
+    // portas dos predios: a mais perto (E abre/fecha), malha da folha e animacao
+    int portaPerto_ = -1;
+    Mesh malhaPorta_{};
+    void atualizarPortas(float dt, bool interagir);
+    void desenharPortas(Material& mat, float raio);  // atlas da luz das paredes (feito no primeiro quadro)
     Populacao populacao_;
     std::vector<ModeloHumano> roupasNpc_;
     std::vector<Cavalo> cavalos_;

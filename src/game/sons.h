@@ -14,12 +14,13 @@ public:
     void passo(float vol);
     void casco(float vol);
     void recarga();
+    void porta(bool abrindo);  // rangido ao abrir, batida ao fechar
     // chamado todo quadro: noite 0..1, dt
     void ambiente(float dt, float noite);
 
 private:
     bool ok_ = false;
-    Sound tiro_[4]{}, passo_{}, casco_{}, recarga_{}, vento_{}, passaro_{}, grilo_{};
+    Sound tiro_[4]{}, passo_{}, casco_{}, recarga_{}, vento_{}, passaro_{}, grilo_{}, rangido_{}, batida_{};
     int prox_ = 0;
     float tPassaro_ = 3, tGrilo_ = 1;
     unsigned semente_ = 12345;

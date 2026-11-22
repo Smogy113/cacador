@@ -1113,8 +1113,11 @@ void Cenario::desenharArea(Vec3f centro, float raio, Material& mat) {
     for (auto& p : p_) {
         if (std::hypot(p.centro.x - centro.x, p.centro.z - centro.z) > raio + p.raio) continue;
         if (p.temConstr) DrawMesh(p.construcoes, mat, id);
-        for (auto& Q : p.q)
-            if (Q.tem) DrawMesh(Q.casca, mat, id);  // sombras: a casca dos predios basta (bem mais leve)
+        for (auto& Q : p.q) {  // sombras: casca (leve); perto, o predio detalhado (o sol entra pelos vaos)
+            if (!Q.tem) continue;
+            bool perto = std::hypot(Q.centro.x - centro.x, Q.centro.z - centro.z) < 25.f + TAM * 0.36f;
+            DrawMesh(perto ? Q.det : Q.casca, mat, id);
+        }
         if (p.temPerto) DrawMesh(p.arvPerto, mat, id);
         else if (p.temLonge) DrawMesh(p.arvLonge, mat, id);
     }
