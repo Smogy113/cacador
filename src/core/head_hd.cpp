@@ -210,10 +210,17 @@ namespace loft {
 void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
     MalhaPele& m = k.m;
     // malha da escultura (volume anatomico), gerada uma vez e reaproveitada por todos (so muda a escala)
-    static const sdf::MalhaSup escHeroi = sdf::malhar(0.0026f);  // ~37 mil vertices
+    static const auto alta = []() -> const sdf::MalhaSup& { static const auto m = sdf::malhar(0.0026f); return m; };  // ~37 mil vertices
     static const sdf::MalhaSup escNpc = sdf::malhar(0.0038f);    // ~17 mil vertices
-    const sdf::MalhaSup& esc = vis.heroi ? escHeroi : escNpc;
-    auto W = [&](Vec3f p) { return Vec3f{p.x * s * ms, p.y * s, p.z * s * ms}; };
+    const sdf::MalhaSup& esc = vis.heroi && !vis.cacadorDeFronteira ? alta() : escNpc;
+    auto W = [&](Vec3f p) {
+        if (vis.cacadorDeFronteira) {
+            float frente = smoothstep(0.025f, 0.075f, p.z);
+            float maxilar = g(p.y, 1.623f, 0.020f);
+            p.x *= 1.f + 0.18f * maxilar;
+            p.z += frente * (0.009f * maxilar + 0.008f * g(p.y, 1.683f, 0.019f) * g(p.x, 0.f, 0.014f));
+        }
+        return Vec3f{p.x * s * ms, p.y * s, p.z * s * ms}; };
     auto Wn = [&](Vec3f n) { return normalizar({n.x / (s * ms), n.y / s, n.z / (s * ms)}); };
     auto ossos = [&](float y, VertPele& v) {
         if (y < 1.585f) {
@@ -409,10 +416,10 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
     // atravessam o topo em diagonal, formando um topete baixo com volume.
     for (int camada = 0; camada < (simples ? 1 : 2); ++camada) {
         bool base = camada == 0;
-        int quantidade = simples ? 26 : base ? 32 : 35;
+        int quantidade = simples ? 18 : base ? 22 : 24;
         for (int k = 0; k < quantidade; ++k) {
             float u = (k + 0.5f + 0.42f * (rnd() - 0.5f)) / quantidade * 2.f - 1.f;
-            float lado = u < -0.30f ? -1.f : 1.f;
+            float lado = u < -0.04f ? -1.f : 1.f;
             float th = u * 102.f;
             float altura = lerp(22.f, 10.f, smoothstep(0.25f, 1.f, std::abs(u)));
             float alvo = lado * (142.f + 31.f * std::abs(u) + 5.f * rnd());
@@ -432,7 +439,7 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
             }
             Vec3f inicio = pts.back().p, fora = normalizar({inicio.x, 0, inicio.z - centro.z});
             Vec3f transversal = cross(fora, Vec3f{0, 1, 0});
-            float nuca = lerp(1.566f, 1.617f, rnd());
+            float nuca = lerp(1.605f, 1.641f, rnd());
             for (int i = 1; i <= cauda; ++i) {
                 float t = float(i) / cauda;
                 Vec3f p = inicio + Vec3f{0, (nuca - inicio.y) * t, 0}
@@ -441,15 +448,16 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
                 pts.push_back({p, lerp(0.14f, 1.f, t * t)});
             }
             float tom = (base ? 0.77f : 1.02f) * lerp(0.91f, 1.18f, rnd());
-            fita(pts, (simples ? 0.016f : 0.011f) * lerp(0.78f, 1.28f, rnd()), tom, base);
+            fita(pts, (simples ? 0.020f : 0.016f) * lerp(0.78f, 1.28f, rnd()), tom, base);
         }
     }
 
     // Mechas curtas na frente, saindo da risca e caindo diagonalmente sobre a tempora.
     for (int k = 0; k < (simples ? 7 : 12); ++k) {
         float u = rnd();
-        float th0 = lerp(-31.f, -11.f, u);
-        float th1 = lerp(36.f, 81.f, u);
+        float lado = k % 2 ? 1.f : -1.f;
+        float th0 = lado * lerp(2.f, 15.f, u);
+        float th1 = lado * lerp(48.f, 94.f, u);
         std::vector<Amostra> pts;
         for (int i = 0; i <= 10; ++i) {
             float t = i / 10.f;

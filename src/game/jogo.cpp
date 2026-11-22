@@ -37,16 +37,17 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     cam_.fovy = 60.f;
     cam_.projection = CAMERA_PERSPECTIVE;
     Visual r;
-    r.casaco = {0.36f, 0.26f, 0.18f};
+    r.casaco = {0.30f, 0.18f, 0.11f};
     r.calca = {0.24f, 0.21f, 0.2f};
     r.camisa = {0.72f, 0.66f, 0.55f};
     r.chapeu = {0.2f, 0.15f, 0.11f};
     r.pele = {0.78f, 0.58f, 0.45f};
-    r.lenco = {0.55f, 0.12f, 0.1f};
+    r.lenco = {0.66f, 0.054f, 0.037f};
     r.cabelo = {0.27f, 0.2f, 0.14f};  // castanho com mechas mais claras
     r.barba = false;  // rosto limpo (pedido do usuario)
     r.equipamento = !op.estudio;
     r.heroi = true;
+    r.cacadorDeFronteira = true;
     r.revolver = !op.estudio;
     r.cabeloLongo = true;
     r.chapeuAba = false;  // sem chapeu: cabelo penteado para tras

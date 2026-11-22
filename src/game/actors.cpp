@@ -14,6 +14,7 @@ void ModeloHumano::carregar(const Proporcoes& p, const Visual& v) {
 
 void ModeloHumano::carregarHeroi(const Proporcoes& p, const Visual& v) {
     carregar(p, v);
+    if (v.cacadorDeFronteira) return;  // a silhueta vem da malha animada
 #if !defined(PLATFORM_WEB)
     Visual sp = v;
     sp.semPeleCabeca = true;

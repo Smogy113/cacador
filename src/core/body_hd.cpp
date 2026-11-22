@@ -273,6 +273,11 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             k.material = MAT_TECIDO;
             k.tubo(suavizar(an2, 3), Q(32), {0, 0, 1}, false, false, [&](int, float ang, Vec3f& p, Vec3f la, Vec3f fr, float& ao) -> Rgb {
                 float baixo = clamp01((1.0f * s - p.y) / (0.45f * s));
+                if (vis.cacadorDeFronteira) {
+                    p.x *= 1.f + 0.22f * baixo;
+                    p.z -= 0.024f * s * baixo;
+                    p.y -= 0.050f * s * baixo;
+                }
                 float dobra = std::sin(ang * 9.f + 1.3f) * 0.6f + std::sin(ang * 5.f + 0.4f) * 0.4f;
                 p = p + (la * std::cos(ang) + fr * std::sin(ang)) * (0.008f * s * dobra * baixo);
                 ao = 0.88f + 0.12f * (dobra * 0.5f + 0.5f);
@@ -282,7 +287,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             for (size_t t = idxIni; t < m.idx.size(); t += 3) {
                 Vec3f c3 = (m.v[m.idx[t]].pos + m.v[m.idx[t + 1]].pos + m.v[m.idx[t + 2]].pos) * (1.f / 3.f);
                 bool meu = lado == 0 ? c3.x >= -0.001f : c3.x <= 0.001f;
-                bool frente = c3.z > 0.1f * s && std::abs(c3.x) < 0.05f * s;
+                bool frente = c3.z > 0.1f * s && std::abs(c3.x) < (vis.cacadorDeFronteira ? 0.125f : 0.05f) * s;
                 if (meu && !frente) novos.insert(novos.end(), {m.idx[t], m.idx[t + 1], m.idx[t + 2]});
             }
             m.idx.resize(idxIni);

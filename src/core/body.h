@@ -20,6 +20,7 @@ struct Visual {
     bool sobretudo = true, chapeuAba = true, barba = false;
     bool equipamento = false;  // bandoleira, besta nas costas e laco (so no modelo HD)
     bool revolver = false;     // revolver na mao direita
+    bool cacadorDeFronteira = false;  // perfil esculpido e roupa do protagonista
     bool cabeloLongo = false;  // mechas compridas ate a nuca, com fisica (o heroi)
     bool heroi = false;        // cabeca esculpida em resolucao maxima (o jogador); os outros usam celulas maiores
     bool semPeleCabeca = false;  // a pele esculpida da cabeca nao entra (desenhada por raymarching); olhos, cilios e cabelo sim
