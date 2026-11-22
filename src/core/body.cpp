@@ -34,16 +34,21 @@ Esqueleto esqueletoHumano(const Proporcoes& p) {
 
 Esqueleto esqueletoHumanoBase(const Proporcoes& p) {
     Esqueleto e = esqueletoHumano(p);
-    float s = p.altura / 1.8f, o = p.ombros * s;
-    auto P = [&](float x, float y, float z) { return Vec3f{x, y*s, z*s}; };
+    float s = p.altura / 1.8f;
+    auto P = [&](float x, float y, float z) {
+        float alto = smoothstep(1.16f, 1.45f, y);
+        float pelve = 1.f - smoothstep(.91f, 1.22f, y);
+        float largura = p.massa * (1.f + (p.ombros - 1.f) * alto + (p.quadril - 1.f) * pelve);
+        return Vec3f{x * largura * s, y * s, z * p.massa * s};
+    };
     e.poseA = true;
     for (int lado = 0; lado < 2; ++lado) {
         float sx = lado == 0 ? 1.f : -1.f;
         int b = lado == 0 ? BRACO_E : BRACO_D, ab = lado == 0 ? ANTEBRACO_E : ANTEBRACO_D;
         int m = lado == 0 ? MAO_E : MAO_D;
-        e.ossos[b] = {PEITO, P(sx*.194f*o, 1.441f, .020f), P(sx*.366f*o, 1.244f, .020f)};
-        e.ossos[ab] = {b, P(sx*.366f*o, 1.244f, .020f), P(sx*.503f*o, 1.114f, .023f)};
-        e.ossos[m] = {ab, P(sx*.503f*o, 1.114f, .023f), P(sx*.620f*o, .995f, .025f)};
+        e.ossos[b] = {PEITO, P(sx*.194f, 1.441f, .020f), P(sx*.366f, 1.244f, .020f)};
+        e.ossos[ab] = {b, P(sx*.366f, 1.244f, .020f), P(sx*.535f, 1.075f, .050f)};
+        e.ossos[m] = {ab, P(sx*.535f, 1.075f, .050f), P(sx*.660f, .950f, .050f)};
     }
     return e;
 }

@@ -21,22 +21,21 @@ void influencias(Vec3f p, VertPele& v) {
         v.peso = clamp01(wa);
     };
 
-    // Os bracos da base ja estao em A-pose. O limite acompanha a lateral do
-    // tronco para nao capturar peitoral, grande dorsal ou trapezio.
-    float limiteBraco = y > 1.42f ? .205f : lerp(.155f, .245f, clamp01((1.42f - y) / .36f));
-    if (ax > limiteBraco && y > .88f) {
+    float limiteBraco = .205f + .55f * std::max(0.f, 1.38f - y);
+    float transicaoBraco = smoothstep(limiteBraco - .05f, limiteBraco + .05f, ax);
+    if (transicaoBraco > 0.f && y > .65f) {
         const bool esquerda = p.x > 0;
         const int braco = esquerda ? BRACO_E : BRACO_D;
         const int antebraco = esquerda ? ANTEBRACO_E : ANTEBRACO_D;
         const int mao = esquerda ? MAO_E : MAO_D;
         Vec3f q{ax, y, p.z};
         const Vec3f ombro{.194f, 1.441f, .020f}, cotovelo{.366f, 1.244f, .020f};
-        const Vec3f pulso{.503f, 1.114f, .023f}, dedos{.620f, .995f, .025f};
+        const Vec3f pulso{.535f, 1.075f, .050f}, dedos{.660f, .950f, .050f};
         float t1 = projecao(q, ombro, cotovelo);
         float t2 = projecao(q, cotovelo, pulso);
         float t3 = projecao(q, pulso, dedos);
-        if (t1 < .86f && ax < .43f)
-            pesos(braco, PEITO, smoothstep(0.f, .22f, t1));
+        if (transicaoBraco < 1.f || (t1 < .86f && ax < .43f))
+            pesos(braco, PEITO, transicaoBraco * smoothstep(0.f, .22f, t1));
         else if (t2 < .82f && ax < .51f)
             pesos(antebraco, braco, smoothstep(.02f, .32f, t2));
         else
@@ -44,18 +43,18 @@ void influencias(Vec3f p, VertPele& v) {
         return;
     }
 
-    if (y < 1.02f && ax > .018f) {
+    if (y < 1.02f) {
         const bool esquerda = p.x > 0;
         const int coxa = esquerda ? COXA_E : COXA_D;
         const int canela = esquerda ? CANELA_E : CANELA_D;
         const int pe = esquerda ? PE_E : PE_D;
         if (y < .14f) pesos(pe, canela, smoothstep(.13f, .055f, y));
         else if (y < .54f) pesos(canela, coxa, smoothstep(.51f, .25f, y));
-        else pesos(coxa, QUADRIL, smoothstep(1.01f, .86f, y));
+        else pesos(coxa, QUADRIL, smoothstep(1.01f, .86f, y) * smoothstep(0.f, .06f, ax));
         return;
     }
 
-    if (y < 1.07f) pesos(QUADRIL, COLUNA, smoothstep(1.07f, .97f, y));
+    if (y < 1.07f) pesos(QUADRIL, COLUNA, 1.f);
     else if (y < 1.28f) pesos(COLUNA, QUADRIL, smoothstep(1.09f, 1.22f, y));
     else if (y < 1.51f) pesos(PEITO, COLUNA, smoothstep(1.28f, 1.41f, y));
     else if (y < 1.60f) pesos(PESCOCO, PEITO, smoothstep(1.50f, 1.58f, y));
@@ -72,16 +71,23 @@ MalhaPele corpoHumanoBase(const Proporcoes& pr, const Visual& vis) {
     for (uint32_t i = 0; i < HUMANO_VERTICES; ++i) {
         Vec3f p{HUMANO_POS[i*3] * .0001f, HUMANO_POS[i*3+1] * .0001f,
                 HUMANO_POS[i*3+2] * .0001f};
-        // O molde original abre as canelas e traz os punhos para a frente.
-        // Esta correcao de repouso aproxima a A-pose reta usada para roupa e rig.
         float ax0 = std::abs(p.x);
-        float limiteBraco0 = p.y > 1.42f ? .205f : lerp(.155f, .245f, clamp01((1.42f - p.y) / .36f));
-        if (ax0 > limiteBraco0 && p.y > .88f)
-            p.z -= smoothstep(.36f, .50f, ax0) * .19f;
-        if (p.y < .96f && ax0 > .03f) {
+        float limiteBraco = .205f + .55f * std::max(0.f, 1.38f - p.y);
+        float mascaraBraco = smoothstep(limiteBraco - .05f, limiteBraco + .05f, ax0);
+        float lado = p.x > 0.f ? 1.f : -1.f;
+        Vec3f eixo{lado * .70710678f, -.70710678f, 0.f};
+        Vec3f cotovelo{lado * .366f, 1.244f, .020f};
+        float aoLongo = dot(p - cotovelo, eixo), profundidade = p.z - cotovelo.z;
+        float angulo = .70f * mascaraBraco * smoothstep(-.01f, .12f, aoLongo);
+        float seno = std::sin(angulo), cosseno = std::cos(angulo);
+        p = p + eixo * (aoLongo * cosseno + profundidade * seno - aoLongo);
+        p.z += profundidade * cosseno - aoLongo * seno - profundidade;
+        if (p.y < .96f && ax0 > .03f && mascaraBraco < 1.f) {
             float fechar = .09f * (1.f - smoothstep(.08f, .96f, p.y)) * smoothstep(.03f, .08f, ax0);
-            p.x -= std::copysign(fechar, p.x);
+            p.x -= std::copysign(fechar * (1.f - mascaraBraco), p.x);
         }
+        VertPele& v = m.v[i];
+        influencias(p, v);
         float cabeca = smoothstep(1.50f, 1.64f, p.y);
         float alto = smoothstep(1.16f, 1.45f, p.y) * (1.f - cabeca);
         float pelve = 1.f - smoothstep(.91f, 1.22f, p.y);
@@ -90,12 +96,10 @@ MalhaPele corpoHumanoBase(const Proporcoes& pr, const Visual& vis) {
         p.x *= largura;
         p.z *= massaCorpo;
 
-        VertPele& v = m.v[i];
         v.pos = p * s;
         v.cor = vis.pele;
         v.ao = 1.f;
         v.material = MAT_PELE;
-        influencias(p, v);
     }
     // O hm08 ja modela a esclera dentro das palpebras. Uma pequena calota na
     // frente acrescenta iris/pupila sem recortar nem duplicar a face.
