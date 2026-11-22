@@ -50,6 +50,32 @@ TEST_CASE("base humana: A-pose no estúdio e braços baixos na animação") {
     CHECK(baixo.y < 1.20f);
 }
 
+TEST_CASE("base humana: topo do deltoide acompanha o braco ao baixar") {
+    const Proporcoes proporcoes{1.82f, 1.07f, 1.f, 1.10f};
+    MalhaPele malha = corpoHumanoBase(proporcoes, {});
+    Esqueleto esqueleto = esqueletoHumanoBase(proporcoes);
+    std::vector<Mat4> matrizes;
+    calcularMatrizes(esqueleto, poseParado(esqueleto, 0.f), matrizes);
+
+    for (float lado : {-1.f, 1.f}) {
+        float queda = 0.f;
+        int vertices = 0;
+        for (size_t i = 0; i < HUMANO_VERTICES; ++i) {
+            // Seleciona o topo do ombro na malha fonte, antes dos ajustes de proporcao.
+            float x = lado * HUMANO_POS[3 * i] * .0001f;
+            float y = HUMANO_POS[3 * i + 1] * .0001f;
+            if (x < .214f || x > .26f || y < 1.455f) continue;
+            const VertPele& v = malha.v[i];
+            Vec3f animado = matrizes[v.osso[0]].ponto(v.pos) * v.peso
+                          + matrizes[v.osso[1]].ponto(v.pos) * (1.f - v.peso);
+            queda += matrizes[PEITO].ponto(v.pos).y - animado.y;
+            ++vertices;
+        }
+        REQUIRE(vertices > 0);
+        CHECK(queda / vertices > .015f);
+    }
+}
+
 TEST_CASE("base humana: ombros nao esticam nas poses de jogo") {
     Visual visual;
     visual.corpoBase = true;

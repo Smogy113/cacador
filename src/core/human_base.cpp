@@ -23,7 +23,12 @@ void influencias(Vec3f p, VertPele& v) {
 
     float limiteBraco = .205f + .55f * std::max(0.f, 1.38f - y);
     float transicaoBraco = smoothstep(limiteBraco - .05f, limiteBraco + .05f, ax);
-    if (transicaoBraco > 0.f && y > .65f) {
+    // O topo do deltoide acompanha o braco. A transicao se inclina para fora
+    // na axila, onde o peito e as costas precisam continuar presos ao tronco.
+    float faixaOmbro = smoothstep(1.35f, 1.44f, y);
+    float lateralOmbro = ax - .85f * std::max(0.f, 1.435f - y);
+    float pesoDeltoide = faixaOmbro * smoothstep(.125f, .254f, lateralOmbro);
+    if ((transicaoBraco > 0.f || pesoDeltoide > 0.f) && y > .65f) {
         const bool esquerda = p.x > 0;
         const int braco = esquerda ? BRACO_E : BRACO_D;
         const int antebraco = esquerda ? ANTEBRACO_E : ANTEBRACO_D;
@@ -35,7 +40,7 @@ void influencias(Vec3f p, VertPele& v) {
         float t2 = projecao(q, cotovelo, pulso);
         float t3 = projecao(q, pulso, dedos);
         if (transicaoBraco < 1.f || (t1 < .86f && ax < .43f))
-            pesos(braco, PEITO, transicaoBraco * smoothstep(0.f, .22f, t1));
+            pesos(braco, PEITO, lerp(transicaoBraco * smoothstep(0.f, .22f, t1), 1.f, pesoDeltoide));
         else if (t2 < .82f && ax < .51f)
             pesos(antebraco, braco, smoothstep(.02f, .32f, t2));
         else
@@ -88,6 +93,11 @@ MalhaPele corpoHumanoBase(const Proporcoes& pr, const Visual& vis) {
         }
         VertPele& v = m.v[i];
         influencias(p, v);
+        // Uma queda suave entre o trapezio e a lateral do ombro na malha de repouso.
+        float deltoide = smoothstep(.10f, .235f, ax0) * smoothstep(1.32f, 1.455f, p.y)
+                         * (1.f - smoothstep(1.48f, 1.59f, p.y));
+        p.y -= .016f * deltoide;
+        p.x -= std::copysign(.007f * deltoide, p.x);
         float cabeca = smoothstep(1.50f, 1.64f, p.y);
         float alto = smoothstep(1.16f, 1.45f, p.y) * (1.f - cabeca);
         float pelve = 1.f - smoothstep(.91f, 1.22f, p.y);
