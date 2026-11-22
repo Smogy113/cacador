@@ -366,6 +366,39 @@ Planta gerarPredio(const Lote& l) {
         g.centro = vol.centro, g.tam = vol.tam, g.forma = true, g.soForma = true, g.grossa = true;
         p.pecas.push_back(g);
     }
+    if (tipo == TipoPredio::Casa && p.interiorMeia.x >= 2.2f && p.interiorMeia.z >= 2.f) {
+        // Os moveis ocupam os cantos dos fundos, fora do giro da porta.
+        float lado = l.semente % 2 ? 1.f : -1.f;
+        float cama = lado * (p.interiorMeia.x - 0.72f);
+        float mesa = -lado * (p.interiorMeia.x - 0.90f);
+        float fundo = -p.interiorMeia.z + 0.12f;
+        Rgb tecido = VENEZIANAS[(l.semente >> 2) % 5];
+        Rgb linho{0.83f, 0.76f, 0.60f};
+        auto objeto = [&](float x, float y, float z, Vec3f tam, Rgb cor) {
+            k.caixa({x, piso + y, fundo + z}, tam, MatPeca::Placa, cor, false, true);
+        };
+        objeto(cama, 0.22f, 1.03f, {1.12f, 0.38f, 2.02f}, MADEIRA_ESC);
+        objeto(cama, 0.47f, 1.03f, {1.08f, 0.14f, 1.98f}, linho);
+        objeto(cama, 0.55f, 1.39f, {1.10f, 0.08f, 1.28f}, tecido);
+        objeto(cama, 0.60f, 0.30f, {0.78f, 0.12f, 0.40f}, linho);
+        k.colisao({cama, 0, fundo + 1.03f}, 0.56f, 1.01f, piso, piso + 0.6f);
+
+        objeto(mesa, 0.78f, 0.60f, {1.48f, 0.09f, 0.86f}, PISO);
+        for (float x : {-0.62f, 0.62f})
+            for (float z : {0.28f, 0.92f})
+                objeto(mesa + x, 0.37f, z, {0.09f, 0.74f, 0.09f}, MADEIRA_ESC);
+        objeto(mesa - 0.35f, 0.86f, 0.64f, {0.27f, 0.07f, 0.36f}, tecido);
+        objeto(mesa + 0.35f, 0.92f, 0.53f, {0.07f, 0.19f, 0.07f}, linho);
+        k.colisao({mesa, 0, fundo + 0.60f}, 0.74f, 0.43f, piso, piso + 0.83f);
+
+        objeto(mesa, 0.43f, 1.50f, {0.76f, 0.09f, 0.39f}, PISO);
+        for (float x : {-0.27f, 0.27f})
+            objeto(mesa + x, 0.19f, 1.50f, {0.09f, 0.38f, 0.31f}, MADEIRA_ESC);
+        k.colisao({mesa, 0, fundo + 1.50f}, 0.38f, 0.20f, piso, piso + 0.48f);
+        objeto(0, 0.014f, 1.35f, {1.22f, 0.025f, 1.86f}, tecido);
+        for (float z : {0.55f, 2.15f})
+            objeto(0, 0.030f, z, {1.18f, 0.01f, 0.06f}, linho);
+    }
     return p;
 }
 
