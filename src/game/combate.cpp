@@ -348,7 +348,16 @@ Pose Jogo::poseDoJogador(const Esqueleto& ej) const {
         }
         return m;
     }
-    return jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseParado(ej, tempo_);
+    if (pesoPassada_ < 0.005f) return poseParado(ej, tempo_);
+    Pose passo = poseAndar(ej, passada_, std::max(jogador_.vel, VEL_ANDAR));
+    if (pesoPassada_ < 0.995f) {
+        Pose repouso = poseParado(ej, tempo_);
+        for (size_t i = 0; i < passo.rot.size(); ++i)
+            passo.rot[i] = repouso.rot[i] + (passo.rot[i] - repouso.rot[i]) * pesoPassada_;
+        passo.raiz = repouso.raiz + (passo.raiz - repouso.raiz) * pesoPassada_;
+        apoiarNoChao(ej, passo);
+    }
+    return passo;
 }
 
 void Jogo::desenharCombatentes(Material& matPele, bool sombraBolha, float distMax) {

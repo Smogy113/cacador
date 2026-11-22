@@ -323,11 +323,15 @@ void Jogo::atualizar(float dt) {
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
         interagirCacada(e);
         if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
+        Vec3f antes = jogador_.pos;
         moverAPe(jogador_, e, rig_.yaw, dt * dbg_.velJogador, *terreno_, col_);
         if (mira_ > 0.5f) jogador_.yaw = rig_.yaw;
-        passada_ += dt * jogador_.vel * fasePorMetro(jogador_.vel);
-        if (int(passada_ / 3.14159f) != passoAntes_) {  // um som por passo
-            passoAntes_ = int(passada_ / 3.14159f);
+        float distancia = std::hypot(jogador_.pos.x - antes.x, jogador_.pos.z - antes.z);
+        float alvo = distancia > dt * 0.08f ? 1.f : 0.f;
+        pesoPassada_ += (alvo - pesoPassada_) * (1.f - std::exp(-dt * 14.f));
+        passada_ += distancia * fasePorMetro(jogador_.vel);
+        if (int((passada_ + 1.5708f) / 3.14159f) != passoAntes_) {  // um som por passo
+            passoAntes_ = int((passada_ + 1.5708f) / 3.14159f);
             if (jogador_.vel > 0.1f) sons_.passo(jogador_.vel > 3.f ? 0.55f : 0.35f, dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0);
         }
         for (size_t i = 0; i < cavalos_.size(); i++)

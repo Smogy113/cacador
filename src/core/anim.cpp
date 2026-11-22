@@ -148,6 +148,8 @@ Pose poseAndar(const Esqueleto& e, float f, float v) {
     float s = std::sin(f), c = std::cos(f);
     p.rot[QUADRIL].y = s * (0.08f + 0.06f * w) * andar;
     p.rot[QUADRIL].z = c * (0.07f - 0.03f * w) * andar;
+    p.raiz.x = -c * lerp(0.022f, 0.009f, w) * andar;
+    p.rot[PESCOCO].z = -c * 0.018f * andar;
     p.rot[COLUNA].z = -c * 0.04f * andar;
     // tronco e ombros giram contra a bacia; a cabeca olha para a frente
     p.rot[COLUNA].y = -s * 0.07f * andar;
@@ -158,15 +160,15 @@ Pose poseAndar(const Esqueleto& e, float f, float v) {
     p.rot[CABECA].x = -(0.03f + 0.12f * w) * andar;
     // bracos: balancam contra a perna do mesmo lado; cotovelo dobra mais quando o braco vai a frente
     for (int lado = 0; lado < 2; lado++) {
-        float qPerna = (lado == 0 ? cE : cD);                  // < 0 = perna do mesmo lado a frente
-        float ombro = qPerna * lerp(0.55f, 0.9f, w) - 0.05f;   // perna a frente -> braco atras
+        float faseBraco = f + (lado ? 3.14159f : 0.f);
+        float balanco = std::sin(faseBraco - 0.12f);
         int b = lado ? BRACO_D : BRACO_E, a = lado ? ANTEBRACO_D : ANTEBRACO_E, mo = lado ? MAO_D : MAO_E;
         float sx = lado ? 1.f : -1.f;
-        p.rot[b].x = -ombro * andar;
-        p.rot[b].z = sx * (0.07f + 0.05f * w);
-        float frente = std::max(0.f, ombro);
-        p.rot[a].x = -(lerp(0.3f, 1.25f, w) + frente * lerp(0.5f, 0.25f, w)) * std::max(andar, 0.4f);
-        p.rot[mo].x = -0.12f;
+        p.rot[b].x = (lerp(0.37f, 0.78f, w) * balanco + 0.03f) * andar;
+        p.rot[b].z = sx * (0.07f + 0.025f * std::cos(faseBraco));
+        float avanco = 0.5f - 0.5f * std::sin(faseBraco - 0.36f);
+        p.rot[a].x = -(lerp(0.20f, 0.95f, w) + 0.35f * avanco) * andar;
+        p.rot[mo].x = (-0.08f + 0.07f * std::cos(faseBraco - 0.38f)) * andar;
     }
     // pe de apoio travado no chao (como nas animacoes com captura de movimento): o tornozelo anda para
     // tras exatamente o que o corpo anda para a frente; quadril e joelho por cinematica inversa

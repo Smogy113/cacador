@@ -99,6 +99,7 @@ private:
     float tempoTotal_ = 0;
     SombraBolha sombra_;
     float passada_ = 0;
+    float pesoPassada_ = 0;
     bool pausado_ = false, sair_ = false;
     Entrada lerEntrada();
     void atualizarCamera(float dt, const Entrada& e);
