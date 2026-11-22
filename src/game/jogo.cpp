@@ -505,7 +505,10 @@ void Jogo::desenhar() {
     terrenoR_->desenhar(cam_, dv, luz_.material());
     perfil_.terminar();
     perfil_.comecar(P_CONSTRUCOES);
-    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes());
+    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 1);
+    perfil_.terminar();
+    perfil_.comecar(P_ARVORES);
+    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 2);
     perfil_.terminar();
     perfil_.comecar(P_GRAMA);
     luz_.definirRaioGrama(grama_.raio());
@@ -529,9 +532,7 @@ void Jogo::desenhar() {
         Vec3f heroi = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.3f : 1.5f, 0};
         luz_.definirFoco(len(heroi - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z}));
     }
-    perfil_.comecar(P_POS);
-    if (luz_.usaPos()) luz_.terminarPos(cam_);
-    perfil_.terminar();
+    if (luz_.usaPos()) luz_.terminarPos(cam_, &perfil_);
     dbg_.msDesenharCPU = dbg_.msDesenharCPU * 0.9f + float(GetTime() - t0) * 1000.f * 0.1f;
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_ + grama_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_ + grama_.chamadas();

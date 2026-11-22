@@ -994,9 +994,11 @@ void Cenario::atualizar(Vec3f foco, float tempo, int maxConstrucoes) {
     }
 }
 
-void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr) {
-    tris_ = 0;
-    chamadas_ = 0;
+void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr, int partes) {
+    if (partes & 1) {  // a contagem recomeca na primeira parte do quadro
+        tris_ = 0;
+        chamadas_ = 0;
+    }
     Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
     float meio = std::acos(std::cos(cam.fovy * 0.5f * 1.9f * DEG2RAD));
     Matrix id = MatrixIdentity();
@@ -1010,11 +1012,12 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Materi
             float ang = std::acos(std::clamp(Vector3DotProduct(Vector3Scale(v, 1.f / d), fwd), -1.f, 1.f));
             if (ang - std::asin(std::min(1.f, p.raio / d)) > meio) continue;
         }
-        if (p.temConstr) {
+        if (p.temConstr && (partes & 1)) {
             DrawMesh(p.construcoes, matConstr ? *matConstr : mat, id);
             tris_ += p.construcoes.triangleCount;
             chamadas_++;
         }
+        if (!(partes & 2)) continue;
         bool perto = dh < DIST_PERTO && p.temPerto;
         if (perto) {
             p.usoPerto = tempo_;

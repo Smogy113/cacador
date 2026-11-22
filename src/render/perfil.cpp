@@ -6,8 +6,9 @@
 #endif
 
 const char* PerfilGPU::nome(ParteQuadro p) {
-    static const char* n[N_PARTES] = {"Luz das paredes", "Sombras", "Terreno", "Construções e árvores", "Grama",
-                                      "Personagens", "Céu e nuvens", "Efeitos", "Pós-processamento"};
+    static const char* n[N_PARTES] = {"Luz das paredes", "Sombras", "Terreno", "Construções", "Árvores", "Grama",
+                                      "Personagens", "Céu e nuvens", "Efeitos", "Pós: brilho (recorte)", "Pós: raios de sol", "Pós: brilho (desfoque)",
+                                      "Pós: oclusão (SSAO)", "Pós: foco", "Pós: junção final"};
     return n[p];
 }
 

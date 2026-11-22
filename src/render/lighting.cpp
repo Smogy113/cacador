@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include "core/noise.h"
+#include "render/perfil.h"
 #include "render/shaders.h"
 #include "raymath.h"
 #include "rlgl.h"
@@ -418,9 +419,12 @@ static void desenharTela(RenderTexture2D& origem, int w, int h) {
     DrawTexturePro(origem.texture, {0, 0, float(origem.texture.width), float(-origem.texture.height)}, {0, 0, float(w), float(h)}, {0, 0}, 0, WHITE);
 }
 
-void Iluminacao::terminarPos(const Camera3D& cam) {
+void Iluminacao::terminarPos(const Camera3D& cam, PerfilGPU* perfil) {
+    auto comecar = [&](ParteQuadro p) { if (perfil) perfil->comecar(p); };
+    auto terminar = [&]() { if (perfil) perfil->terminar(); };
     EndTextureMode();
     int mw = largPos_ / 2, mh = altPos_ / 2;
+    comecar(P_POS_BRILHO);
     // 1) partes claras da cena (meia resolucao)
     BeginTextureMode(meiaA_);
     BeginShaderMode(brilho_);
@@ -429,6 +433,8 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     desenharTela(cena_, mw, mh);
     EndShaderMode();
     EndTextureMode();
+    terminar();
+    comecar(P_POS_RAIOS);
     // 2) raios de luz a partir do sol
     bool raios = false;
     if (ef_.raiosDeLuz && !dbg.semRaios && sol_.y > -0.02f) {
@@ -457,6 +463,8 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
             raios = true;
         }
     }
+    terminar();
+    comecar(P_POS_BRILHO_DESF);
     // 3) desfoca o brilho (horizontal e vertical, 2 vezes)
     for (int k = 0; k < 2 && ef_.bloom && !dbg.semBloom; k++) {
         float dh[2] = {1.f / mw * (k + 1), 0}, dv[2] = {0, 1.f / mh * (k + 1)};
@@ -473,6 +481,8 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
         EndShaderMode();
         EndTextureMode();
     }
+    terminar();
+    comecar(P_POS_SSAO);
     // 3b) oclusao de ambiente em tela (meia resolucao, desfocada)
     bool ao = ef_.ssao && cenaComProfundidade_ && !dbg.semSSAO;
     if (ao) {
@@ -500,6 +510,8 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
             EndTextureMode();
         }
     }
+    terminar();
+    comecar(P_POS_FOCO);
     // 3c) camera de cinema (Alto): copia desfocada da cena para a profundidade de campo
     bool cinema = nivel_ == Nivel::Alto && cenaComProfundidade_;
     bool foco = cinema && !dbg.semFoco;
@@ -531,6 +543,8 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
             EndTextureMode();
         }
     }
+    terminar();
+    comecar(P_POS_JUNTA);
     // 4) junta tudo na tela
     BeginShaderMode(junta_);
     {
@@ -564,6 +578,7 @@ void Iluminacao::terminarPos(const Camera3D& cam) {
     if (ao) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texAO"), aoA_.texture);
     desenharTela(cena_, GetScreenWidth(), GetScreenHeight());
     EndShaderMode();
+    terminar();
 }
 
 void Iluminacao::comecarSombraPerto(Vec3f centro) {
@@ -689,6 +704,8 @@ void Iluminacao::prepararLuzParedes(const std::vector<FormaCena>& fs) {
     setF(litParede_, "usarAtlas", 1.f);
     pertoFace_.assign(fs.size(), {});
     feita_.assign(fs.size() * 4, 0);
+    solFace_.assign(fs.size() * 4, Vec3f{});
+    corFace_.assign(fs.size() * 4, Vec3f{});
     fila_.clear();
     cursor_ = 0;
     luzParedeOk_ = true;
@@ -701,6 +718,12 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
     if (!luzParedeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes) return;
     const auto& fs = *formasLuz_;
     // faces no raio de 70 m; as que entram agora vao para a frente da fila
+    // luz que faz sombra (como comecarSombra) e cor do sol do quadro
+    Vec3f dir = sol_.y > 0.05f ? sol_ : lua_;
+    if (dir.y < 0.05f) dir = {0.3f, 0.9f, 0.2f};
+    dir = normalizar(dir);
+    Rgb cs = paleta_.sol * smoothstep(-0.05f, 0.12f, sol_.y);
+    Vec3f csv{cs.r, cs.g, cs.b};
     std::vector<int> novas, saindo;
     std::vector<std::pair<float, int>> fila;  // ja calculadas, pela distancia
     for (size_t i = 0; i < fs.size(); i++) {
@@ -715,8 +738,10 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
                 feita_[f] = 0;
                 continue;
             }
-            if (feita_[f]) fila.push_back({d, f});
-            else novas.push_back(f);
+            if (!feita_[f]) { novas.push_back(f); continue; }
+            // so refaz se o sol andou (> ~0,3 grau) ou mudou de cor desde o calculo desta face
+            Vec3f dc = corFace_[f] - csv;
+            if (dot(solFace_[f], dir) < 0.999986f || std::abs(dc.x) + std::abs(dc.y) + std::abs(dc.z) > 0.015f) fila.push_back({d, f});
         }
     }
     if (!saindo.empty()) {
@@ -731,13 +756,8 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
         EndTextureMode();
     }
     if (novas.empty() && fila.empty()) return;
-    // as mais perto da camera sao refeitas todo quadro (acompanham o sol sem atraso); o resto em rodizio
+    // as desatualizadas mais perto da camera primeiro
     std::sort(fila.begin(), fila.end());
-    // luz que faz sombra (como comecarSombra) e cor do sol do quadro
-    Vec3f dir = sol_.y > 0.05f ? sol_ : lua_;
-    if (dir.y < 0.05f) dir = {0.3f, 0.9f, 0.2f};
-    dir = normalizar(dir);
-    Rgb cs = paleta_.sol * smoothstep(-0.05f, 0.12f, sol_.y);
     Shader sh = luzParede_;
     float d3[3] = {dir.x, dir.y, dir.z}, s3[3] = {sol_.x, sol_.y, sol_.z}, c3[3] = {cs.r, cs.g, cs.b};
     SetShaderValue(sh, GetShaderLocation(sh, "dirSombra"), d3, SHADER_UNIFORM_VEC3);
@@ -751,14 +771,7 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
         for (int i = 0; i < 12; i++) loc[i] = GetShaderLocation(sh, nomes[i]);
     }
     std::vector<int> escolhidas(novas.begin(), novas.begin() + std::min<size_t>(novas.size(), size_t(porQuadro)));
-    const int pertoSempre = 20;
-    for (int n = 0; n < int(fila.size()) && n < pertoSempre && int(escolhidas.size()) < porQuadro; n++) escolhidas.push_back(fila[n].second);
-    int resto = int(fila.size()) - pertoSempre;
-    if (resto > 0) {
-        int vagas = porQuadro - int(escolhidas.size());
-        for (int n = 0; n < vagas && n < resto; n++) escolhidas.push_back(fila[pertoSempre + (cursor_ + n) % resto].second);
-        cursor_ = (cursor_ + std::max(vagas, 0)) % size_t(resto);
-    }
+    for (int n = 0; n < int(fila.size()) && int(escolhidas.size()) < porQuadro; n++) escolhidas.push_back(fila[n].second);
     int ultimaForma = -1;
     for (int pass = 0; pass < 2; pass++) {
         if (pass == 1 && nivel_ != Nivel::Alto) break;  // o rebote so aparece no Alto
@@ -809,7 +822,11 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
         EndShaderMode();
         EndTextureMode();
     }
-    for (int f : escolhidas) feita_[f] = 1;
+    for (int f : escolhidas) {
+        feita_[f] = 1;
+        solFace_[f] = dir;
+        corFace_[f] = csv;
+    }
 }
 
 std::vector<Shader> Iluminacao::personagens() const {

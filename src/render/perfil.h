@@ -1,7 +1,10 @@
 #pragma once
 // Cronometro da placa de video (consultas GL_TIME_ELAPSED) por parte do quadro, para o painel F1.
 // Le o resultado de 2 quadros atras (sem travar a placa). So no PC; na web nao mede nada.
-enum ParteQuadro { P_LUZ_PAREDES, P_SOMBRAS, P_TERRENO, P_CONSTRUCOES, P_GRAMA, P_ATORES, P_CEU, P_EFEITOS, P_POS, N_PARTES };
+enum ParteQuadro {
+    P_LUZ_PAREDES, P_SOMBRAS, P_TERRENO, P_CONSTRUCOES, P_ARVORES, P_GRAMA, P_ATORES, P_CEU, P_EFEITOS,
+    P_POS_BRILHO, P_POS_RAIOS, P_POS_BRILHO_DESF, P_POS_SSAO, P_POS_FOCO, P_POS_JUNTA, N_PARTES
+};
 
 class PerfilGPU {
 public:

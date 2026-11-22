@@ -29,7 +29,8 @@ public:
     static constexpr float TAM = 64.f;
     void construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, uint32_t semente);
     void atualizar(Vec3f foco, float tempo, int maxConstrucoes = 4);
-    void desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr = nullptr);  // matConstr: construcoes
+    // matConstr: construcoes; partes: 1 construcoes, 2 arvores, 3 ambas
+    void desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr = nullptr, int partes = 3);
     void desenharArea(Vec3f centro, float raio, Material& mat);  // passe de sombra
     void descarregar();
 

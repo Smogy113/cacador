@@ -71,7 +71,7 @@ public:
     bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) && posOk_; }
     const Efeitos& efeitosNivel() const { return ef_; }
     void comecarPos();
-    void terminarPos(const Camera3D& cam);
+    void terminarPos(const Camera3D& cam, class PerfilGPU* perfil = nullptr);
 
 private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
@@ -85,6 +85,7 @@ private:
     std::vector<std::array<RetAtlas, 4>> atlas_;
     std::vector<std::vector<int>> pertoFace_;  // formas perto de cada forma (calculado uma vez)
     std::vector<uint8_t> feita_;               // por face (forma*4+k): ja calculada desde que entrou no raio
+    std::vector<Vec3f> solFace_, corFace_;     // sol (direcao e cor) com que cada face foi calculada
     std::vector<int> fila_;                    // faces no raio, em rodizio
     size_t cursor_ = 0;
     RenderTexture2D luz1_{}, luz2_{};
