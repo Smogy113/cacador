@@ -31,8 +31,9 @@ Start-Process .\cacador.exe -ArgumentList '--benchmark --qualidade alto' -Wait -
 
 ## Medição de referência
 
-Uma comparação do trajeto em `--benchmark --frames 3 --qualidade alto` usou Mesa llvmpipe,
-1280×720 e 144 amostras por versão. A base contém o mesmo código de medição aplicado à versão 0.26.0.
+A comparação da etapa de otimização até o commit `80ccaec` usou
+`--benchmark --frames 3 --qualidade alto`, Mesa llvmpipe, 1280×720 e 144 amostras por versão.
+A base contém o mesmo código de medição aplicado à versão 0.26.0.
 
 | Trajeto no Alto | Base | Otimizado |
 | --- | ---: | ---: |
@@ -63,3 +64,20 @@ animar vento e granulação.
   com sol e à noite. Os quadros logo após um teleporte mostram o custo de atualizar o atlas.
 - Sombras e materiais em `src/render/shaders.cpp`. Preserve as amostras, distâncias e fórmulas
   dos efeitos. Procure primeiro operações repetidas e cálculos cujo peso na imagem seja zero.
+
+## Iluminação do nível Alto
+
+- O mapa de sombras é compartilhado por terreno, construções, personagens e grama. As
+  leituras de profundidade localizam os bloqueadores e o filtro de comparação da GPU suaviza
+  as bordas. O custo da grama fica em uma leitura filtrada por fragmento. O atlas de paredes
+  fornece oclusão e luz rebatida.
+- Os fachos reaproveitam o mapa de sombras e marcham em meia resolução até a profundidade da
+  primeira superfície. A oclusão em tela também usa a profundidade para preservar silhuetas.
+  Use as seções **Sombras**, **Pós: raios de sol** e **Pós: oclusão** do F1 ao comparar custos.
+- Para conferir a contraluz na floresta no Alto, use
+  `--pos -382 -249 --yaw 85 --hora 7.25 --pitch 6`. Na cidade, use
+  `--pos 320 345 --yaw 90 --hora 12` para ver sombras de bancas e personagens na grama.
+  Na margem do rio, use `--pos 83 -100 --yaw -120 --hora 18.25 --pitch 14`.
+
+Com `--benchmark --frames 40 --qualidade alto`, em 1280×720 no llvmpipe, a cidade passou de
+303,82 para 305,70 ms em média por quadro. A floresta passou de 259,24 para 238,69 ms.

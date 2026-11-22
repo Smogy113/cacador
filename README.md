@@ -33,9 +33,11 @@ Abra `cacador.exe` (a pasta `data/` precisa estar ao lado dele).
 | R | recarregar o revólver (6 balas) |
 | Esc | pausa (lá dentro: 1/2/3 trocam a qualidade gráfica, Q sai) |
 
-Qualidade gráfica: **Baixo** (PC fraco), **Médio** (sombras suaves) e **Alto** (sombras suaves,
-oclusão de ambiente em tela, brilho em volta das luzes e raios de sol). Em todos os níveis há luz
-rebatida do chão e contorno de luz do céu. Na primeira vez o jogo escolhe um nível pela placa de vídeo e
+O nível **Baixo** atende PCs modestos. O **Médio** usa sombras suaves e o **Alto** usa
+sombras filtradas, oclusão de contato em tela e fachos de sol recortados pela geometria. No
+Alto a sombra começa mais firme junto ao objeto e ganha penumbra conforme se afasta dele.
+A água tem ondulações no reflexo do céu, do sol e da lua. Em todos os níveis há luz rebatida
+do chão e preenchimento do céu. Na primeira vez o jogo escolhe um nível pela placa de vídeo e
 salva em `config.txt`.
 
 **O caçador de perto (0.18):** no Médio e no Alto, a cabeça do caçador não é feita de triângulos:
@@ -49,8 +51,9 @@ aberração cromática sutil nas bordas.
 **Paredes (0.19):** no Médio e no Alto, as paredes das casas têm relevo desenhado pixel a pixel
 (tábuas com frestas, pedra com argamassa funda, reboco rachado e descascado mostrando a pedra) e luz
 traçada contra as construções de verdade: escuro sob o beiral e junto ao alicerce e, à noite, a
-janela acesa clareando a parede. No Alto ainda há sombra suave do sol traçada contra casas e
-telhados, sombra de cada tábua e pedra, e a luz que uma parede ensolarada rebate na casa em frente.
+janela acesa clareando a parede. No Alto, as sombras diretas seguem o mapa do cenário e o
+atlas guarda a oclusão de ambiente e a luz que uma parede ensolarada rebate na casa em frente.
+As tábuas e pedras também fazem sombra no próprio relevo.
 
 **Casas e disparos (0.20):** use E perto de uma porta para entrar nos prédios. A câmera se aproxima
 em cômodos fechados e a lanterna continua útil à noite. Os passos mudam sobre o piso das casas,

@@ -232,6 +232,7 @@ uniform vec4 luzPos[8];   // xyz + raio
 uniform vec3 luzCor[8];
 uniform int numLuzes;
 uniform float noite;
+uniform float tempoVento;
 uniform float descartarPerto;
 uniform float raioGrama;
 uniform float neblinaBaixa;
@@ -243,6 +244,16 @@ uniform vec3 dirSombra;
 
 uniform float texelMetros;  // tamanho de um texel do mapa de sombras, em metros
 uniform vec3 corChao;       // cor media do chao (luz rebatida)
+#if !defined(GL_ES)
+uniform float iluminacaoAlta;
+uniform float usarFiltroSombra;
+uniform sampler2DShadow texSombraFiltrada;
+uniform vec3 passoSombraX;
+uniform vec3 passoSombraY;
+uniform float metrosProfSombra;
+#else
+const float iluminacaoAlta = 0.0;
+#endif
 
 #ifdef PERSONAGEM
 uniform float argila;
@@ -278,9 +289,50 @@ const vec2 discoSombra[12] = vec2[12](
     vec2(0.790564001, 0.288689852), vec2(-0.822432637, 0.339516312),
     vec2(0.396443814, -0.847249866), vec2(0.293014765, 0.934064090));
 #endif
-float gGrama = 0.0;  // fragmento de grama: sombra com 1 amostra (sao muitas folhas sobrepostas)
+float gGrama = 0.0;  // uma leitura de sombra por fragmento da grama
+#if !defined(GL_ES)
+float sombraFiltrada(vec3 p, vec3 n) {
+    float nl = dot(n, dirSombra);
+    if (nl <= 0.0 && gGrama < 0.5) return 0.0;
+    // A projecao da luz e ortografica. Corrige a profundidade de cada amostra
+    // no plano da superficie, para a penumbra acompanhar encostas e paredes.
+    vec3 q = (matLuz * vec4(p + n * (0.2 * texelMetros), 1.0)).xyz * 0.5 + 0.5;
+    float borda = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));
+    if (borda <= 0.0 || q.z <= 0.0 || q.z >= 1.0) return 1.0;
+
+    vec2 grad = vec2(dot(n, passoSombraX), dot(n, passoSombraY)) / max(nl, 0.22);
+    float z = q.z - 0.000018 - 0.65 * (abs(grad.x) + abs(grad.y));
+    float peso = smoothstep(0.0, 0.08, borda);
+    if (gGrama > 0.5) return mix(1.0, TEX(texSombraFiltrada, vec3(q.xy, z)), peso);
+
+    float separacao = 0.0, bloqueadores = 0.0;
+    for (int i = 0; i < 8; i++) {
+        vec2 desloc = discoBloq[i] * 4.0;
+        float d = z + dot(grad, desloc) - TEX(texSombra, q.xy + desloc * texelSombra).r;
+        separacao += max(d, 0.0);
+        bloqueadores += float(d > 0.0);
+    }
+    if (bloqueadores == 0.0) return mix(1.0, TEX(texSombraFiltrada, vec3(q.xy, z)), peso);
+    float dist = separacao / bloqueadores * metrosProfSombra;
+#ifdef PERSONAGEM
+    if (usarSombraPerto > 0.5 && dist < 0.8) return 1.0;
+#endif
+    // Quanto mais distante o bloqueador, maior a fonte aparente no mapa.
+    // Cada leitura faz quatro comparacoes bilineares na GPU.
+    float raio = clamp(dist * 0.032 / texelMetros, 0.8, 7.0);
+    float vis = 0.0;
+    for (int i = 0; i < 8; i++) {
+        vec2 desloc = discoBloq[i] * raio;
+        vis += TEX(texSombraFiltrada, vec3(q.xy + desloc * texelSombra, z + dot(grad, desloc)));
+    }
+    return mix(1.0, vis * 0.125, peso);
+}
+#endif
 float sombraEm(vec3 p, vec3 n) {
     if (usarSombra < 0.5) return 1.0;
+#if !defined(GL_ES)
+    if (usarFiltroSombra > 0.5) return sombraFiltrada(p, n);
+#endif
     float nl = clamp(dot(n, dirSombra), 0.0, 1.0);
     if (nl <= 0.0) return 0.0;
     vec4 pl = matLuz * vec4(p + n * (0.05 + 0.2 * (1.0 - nl)), 1.0);
@@ -742,6 +794,9 @@ void main() {
     }
 #endif
     vec3 n = normalize(normalMundo);
+#if !defined(GL_ES)
+    vec3 normalSuperficie = n;
+#endif
     vec3 albedo = pow(cor.rgb, vec3(2.2));
     float ao = extra.x;
     vec3 paraCam = posCamera - posMundo;
@@ -966,16 +1021,29 @@ void main() {
 #else
     float fInt = 1.0;
 #endif
-    vec3 luz = mix(ambChao, ambCeu, hemi) * ao * fInt;
+    vec3 luzAmbiente = mix(ambChao, ambCeu, hemi);
+    if (iluminacaoAlta > 0.5 && fInt < 0.999) {
+        // Preenchimento difuso das aberturas ao dia, mais forte perto da porta.
+        float dia = smoothstep(-0.04, 0.22, dirSol.y);
+        float preenchimento = dia * (0.15 + 0.32 * max(fInt - 0.26, 0.0));
+        luzAmbiente += ambCeu * preenchimento;
+        fInt += (1.0 - fInt) * 0.08 * dia;
+    }
+    vec3 luz = luzAmbiente * ao * fInt;
     if (fInt < 0.999) luz += vec3(1.0, 0.72, 0.48) * 0.14 * noite * ao;  // dentro, a noite: vela/lareira
     // sol e lua (com sombra)
+#if !defined(GL_ES)
+    vec3 normalSombra = usarFiltroSombra > 0.5 ? normalSuperficie : n;
+#else
+    vec3 normalSombra = n;
+#endif
 #ifdef PAREDES
-    // Onde o atlas cobre toda a sombra, o mapa PCSS teria peso zero.
-    bool usaSombraAtlas = paredes > 1.5 && guardada;
-    float sombra = usaSombraAtlas && alcance >= 1.0 ? smoothstep(0.08, 0.92, luz1.r) : sombraEm(posMundo, n);
+    // Com o filtro de profundidade ativo, o atlas fornece oclusao e luz rebatida.
+    bool usaSombraAtlas = paredes > 1.5 && guardada && usarFiltroSombra < 0.5;
+    float sombra = usaSombraAtlas && alcance >= 1.0 ? smoothstep(0.08, 0.92, luz1.r) : sombraEm(posMundo, normalSombra);
     if (usaSombraAtlas && alcance < 1.0) sombra = mix(sombra, smoothstep(0.08, 0.92, luz1.r), alcance);
 #else
-    float sombra = sombraEm(posMundo, n);
+    float sombra = sombraEm(posMundo, normalSombra);
 #endif
 #ifdef PERSONAGEM
 #ifdef RAYMARCH
@@ -1016,6 +1084,10 @@ void main() {
 #endif
     float ndl = dot(n, dirSol);
     float difSol = mix(max(ndl, 0.0), clamp((ndl + 0.45) / 1.45, 0.0, 1.0), sss);
+    if (iluminacaoAlta > 0.5 && gGrama > 0.5) {
+        float contraluz = max(dot(-v, dirSol), 0.0);
+        difSol += 0.18 * contraluz * contraluz * (1.0 - 0.5 * max(ndl, 0.0));
+    }
     if (kk > 0.5) {  // cabelo: a luz depende da direcao do fio, nao da normal
         float TL = dot(Tcab, dirSol);
         difSol = mix(sqrt(max(1.0 - TL * TL, 0.0)) * 0.55, max(ndl, 0.0), 0.45) * smoothstep(-0.35, 0.2, ndl);
@@ -1024,7 +1096,8 @@ void main() {
     luz += corLua * max(dot(n, dirLua), 0.0) * sombra;
     // luz rebatida: o chao iluminado pelo sol devolve luz colorida para cima
     float solNoChao = max(dirSol.y, 0.0);
-    luz += corSol * corChao * solNoChao * (0.5 - 0.5 * n.y) * 0.9 * ao * fInt;
+    float reboteChao = iluminacaoAlta > 0.5 ? mix(0.38, 1.0, sombra) : 1.0;
+    luz += corSol * corChao * solNoChao * (0.5 - 0.5 * n.y) * 0.9 * ao * fInt * reboteChao;
     // contorno: o ceu "abraca" as bordas (luz indireta)
     float borda = pow(1.0 - max(dot(n, v), 0.0), 3.0);
     luz += ambCeu * borda * 0.25 * (1.0 - abs(n.y)) * ao * fInt;
@@ -1126,12 +1199,26 @@ void main() {
 
     if (extra.y > 0.5 && extra.y < 1.5) {
         // agua: reflete o ceu (fresnel) + brilho do sol
-        vec3 r = reflect(-v, n);
-        float fres = pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.8 + 0.1;
-        vec3 ceu = mix(corNeblina, ambCeu * 2.2, clamp(r.y * 2.0, 0.0, 1.0));
+        vec3 na = n;
+        if (iluminacaoAlta > 0.5) {
+            vec2 p = posMundo.xz;
+            float fase = sin(dot(p, vec2(0.56, 0.37)) - tempoVento * 0.52);
+            float onda = sin(dot(p, vec2(2.1, 1.7)) - tempoVento * 1.9 + fase * 1.25);
+            float transversal = sin(dot(p, vec2(-3.5, 2.9)) - tempoVento * 2.3);
+            float fina = sin(dot(p, vec2(6.6, -2.2)) - tempoVento * 3.1 + fase);
+            vec2 incl = vec2(0.019, 0.015) * onda + vec2(-0.024, 0.020) * transversal;
+            incl += vec2(0.015, -0.005) * fina * (1.0 - smoothstep(20.0, 55.0, dist));
+            na = normalize(n + vec3(incl.x, 0.0, incl.y));
+        }
+        vec3 r = reflect(-v, na);
+        float nv = 1.0 - clamp(dot(na, v), 0.0, 1.0);
+        float fres = iluminacaoAlta > 0.5 ? 0.02 + 0.98 * pow(nv, 5.0) : pow(nv, 4.0) * 0.8 + 0.1;
+        float alturaReflexo = iluminacaoAlta > 0.5 ? smoothstep(0.0, 0.72, r.y) : clamp(r.y * 2.0, 0.0, 1.0);
+        vec3 ceu = mix(corNeblina, ambCeu * 2.2, alturaReflexo);
         c = mix(c, ceu, fres);
-        c += corSol * pow(max(dot(r, dirSol), 0.0), 120.0) * 1.5;
-        c += corLua * pow(max(dot(r, dirLua), 0.0), 80.0) * 1.0;
+        float reflexoLuz = iluminacaoAlta > 0.5 ? sombra : 1.0;
+        c += corSol * pow(max(dot(r, dirSol), 0.0), 120.0) * 1.5 * reflexoLuz;
+        c += corLua * pow(max(dot(r, dirLua), 0.0), 80.0) * reflexoLuz;
     }
 
     float f = neblinaFator(dist);
@@ -1164,6 +1251,7 @@ uniform float noite;
 uniform vec3 posCamera;
 uniform float tempoVento;
 uniform float passosNuvem;   // 0 = nuvens planas (Baixo); 12 Medio; 24 Alto
+uniform float iluminacaoAlta;
 float hash(vec3 p) {
     p = fract(p * 0.3183099 + 0.1);
     p *= 17.0;
@@ -1200,7 +1288,8 @@ void main() {
     vec3 c = mix(ceuHorizonte, ceuTopo, pow(h, 0.55));
     // brilho e disco do sol
     float s = max(dot(d, dirSol), 0.0);
-    c += corSol * (pow(s, 8.0) * 0.12 + pow(s, 200.0) * 0.6 + smoothstep(0.9993, 0.9996, s) * 6.0);
+    float disco = iluminacaoAlta > 0.5 ? smoothstep(0.999976, 0.999990, s) : smoothstep(0.9993, 0.9996, s);
+    c += corSol * (pow(s, 8.0) * 0.12 + pow(s, 200.0) * 0.6 + disco * 6.0);
     // lua
     float l = max(dot(d, dirLua), 0.0);
     c += vec3(0.7, 0.75, 0.9) * (smoothstep(0.9990, 0.9993, l) * 1.6 + pow(l, 60.0) * 0.05) * noite;
@@ -1215,7 +1304,8 @@ void main() {
         float cosSol = dot(d, dirSol);
         float g = 0.55;  // espalhamento para a frente: borda prateada contra o sol
         float fase = mix(1.0, (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosSol, 1.5), 0.5);
-        vec3 luzSol = corSol * 1.6;
+        if (iluminacaoAlta > 0.5) fase = min(fase, 2.7);
+        vec3 luzSol = corSol * (iluminacaoAlta > 0.5 ? 1.05 : 1.6);
         vec3 ambCeuN = mix(ceuHorizonte, ceuTopo, 0.6) * 0.9 + vec3(0.6, 0.65, 0.8) * 0.06 * noite;
         float T = 1.0;
         vec3 acc = vec3(0.0);
@@ -1422,13 +1512,14 @@ uniform vec2 faceTam;     // largura, altura (m)
 uniform vec4 faceRet;     // retangulo no atlas (texels, com borda)
 uniform float metroTexel;
 uniform float saida;      // 0: sombra e oclusao; 1: rebote
+uniform float calcularSombra;
 )" CENA_SDF R"(
 void main() {
     vec2 t = gl_FragCoord.xy - faceRet.xy - 1.0;            // texel dentro da face (a borda repete a beirada)
     vec2 m = clamp(t * metroTexel, vec2(0.0), faceTam);
     vec3 p = faceO + faceU * m.x + vec3(0.0, m.y, 0.0);
     if (saida < 0.5) {
-        float sc = dot(faceN, dirSombra) > 0.0 ? sombraCena(p + faceN * 0.03, dirSombra) : 0.0;
+        float sc = calcularSombra > 0.5 && dot(faceN, dirSombra) > 0.0 ? sombraCena(p + faceN * 0.03, dirSombra) : 0.0;
         FRAG = vec4(sc, oclusaoCena(p + faceN * 0.02, faceN), 0.0, 1.0);
     } else {
         vec3 r = dot(corSol, corSol) > 0.0 ? reboteCena(p + faceN * 0.03, faceN, normalize(cross(vec3(0.0, 1.0, 0.0), faceN))) : vec3(0.0);
@@ -1449,14 +1540,19 @@ void main() {
 )";
 // copia do fundo para a profundidade de campo: so o que esta longe entra (alfa = peso), para o
 // heroi e o que esta perto nao "vazarem" sobre o fundo desfocado (halo)
-const char* FS_LONGE = R"(
+#define PROFUNDIDADE_CAMERA R"(
+uniform vec2 profCena;  // m10 e m14 da matriz de projecao ativa
+float profLinear(float d) {
+    return profCena.y / (d * 2.0 - 1.0 + profCena.x);
+}
+)"
+const char* FS_LONGE = PROFUNDIDADE_CAMERA R"(
 uniform sampler2D texture0;
 uniform sampler2D texProf;
 uniform float distFoco;
 void main() {
     vec3 c = TEX(texture0, fragTexCoord).rgb;
-    float z = TEX(texProf, fragTexCoord).r * 2.0 - 1.0;
-    float dist = (2.0 * 0.1 * 1000.0) / (1000.0 + 0.1 - z * (1000.0 - 0.1));
+    float dist = profLinear(TEX(texProf, fragTexCoord).r);
     float w = smoothstep(distFoco + 12.0, distFoco + 25.0, dist);
     FRAG = vec4(c * w, w);
 }
@@ -1518,7 +1614,46 @@ void main() {
     FRAG = vec4(c * (forca / 40.0), 1.0);
 }
 )";
-const char* FS_JUNTA = R"(
+// Espalhamento do sol no ar. A marcha termina na primeira superficie da cena.
+const char* FS_RAIOS_VOLUME = PROFUNDIDADE_CAMERA R"(
+uniform sampler2D texProf;
+uniform sampler2DShadow texSombraFiltrada;
+uniform mat4 invCameraVP;
+uniform mat4 matLuz;
+uniform vec3 posCamera;
+uniform vec3 dirSol;
+uniform vec3 corRaio;
+uniform float alcanceVolume;
+
+void main() {
+    float z = TEX(texProf, fragTexCoord).r;
+    vec4 fim = invCameraVP * vec4(fragTexCoord * 2.0 - 1.0, z * 2.0 - 1.0, 1.0);
+    vec3 raio = fim.xyz / fim.w - posCamera;
+    float distancia = length(raio);
+    vec3 dir = raio / max(distancia, 0.001);
+    float alcance = min(distancia, alcanceVolume);
+    float passo = alcance * 0.1;
+
+    vec3 q = (matLuz * vec4(posCamera, 1.0)).xyz * 0.5 + 0.5;
+    vec3 dq = (matLuz * vec4(dir * passo, 0.0)).xyz * 0.5;
+    q += dq * 0.5;
+    float queda = exp(-max(dir.y, 0.0) * passo * 0.06);
+    float peso = sqrt(queda), luz = 0.0;
+    for (int i = 0; i < 10; i++) {
+        luz += TEX(texSombraFiltrada, q) * peso;
+        q += dq;
+        peso *= queda;
+    }
+    // Henyey-Greenstein com g=0,6, limitado para conter o brilho perto do disco.
+    float fase = min(3.0, 0.64 / pow(1.36 - 1.2 * dot(dir, dirSol), 1.5));
+    float dens = mix(0.00235, 0.0009, smoothstep(0.15, 0.75, dirSol.y));
+    float espalhamento = min(luz * passo * dens * fase, 0.16);
+    float prof = profLinear(z) * (alcance / max(distancia, 0.001));
+    FRAG = vec4(espalhamento * corRaio, clamp(prof / alcanceVolume, 0.0, 1.0));
+}
+)";
+
+const char* FS_JUNTA = PROFUNDIDADE_CAMERA R"(
 uniform sampler2D texture0;
 uniform sampler2D texBrilho;
 uniform sampler2D texRaios;
@@ -1526,6 +1661,13 @@ uniform sampler2D texAO;
 uniform float forcaBrilho;
 uniform float usarRaios;
 uniform float usarAO;
+uniform float alcanceAO;
+#if !defined(GL_ES)
+uniform float usarVolume;
+uniform float alcanceVolume;
+#else
+const float usarVolume = 0.0;
+#endif
 uniform vec2 posSol;
 uniform float aspecto;
 uniform vec3 corRaio;
@@ -1543,24 +1685,39 @@ void main() {
     vec3 c = TEX(texture0, fragTexCoord).rgb;
     if (usarGrao > 0.5) {  // aberracao: vermelho e azul se separam um pouco nas bordas da tela
         vec2 dc = fragTexCoord - 0.5;
-        vec2 off = dc * dot(dc, dc) * 4.3 * texelTela.x;
+        vec2 off = dc * dot(dc, dc) * 1.8 * texelTela.x;
         c.r = TEX(texture0, fragTexCoord + off).r;
         c.b = TEX(texture0, fragTexCoord - off).b;
     }
+    float prof = 0.0;
+    if (usarFoco > 0.5 || usarAO > 0.5 || usarVolume > 0.5)
+        prof = profLinear(TEX(texProf, fragTexCoord).r);
     if (usarFoco > 0.5) {  // o fundo distante desfoca; o heroi e o que esta perto dele nunca
-        float z = TEX(texProf, fragTexCoord).r * 2.0 - 1.0;
-        float dist = (2.0 * 0.1 * 1000.0) / (1000.0 + 0.1 - z * (1000.0 - 0.1));
-        float coc = smoothstep(distFoco + 25.0, distFoco + 150.0, dist) * forcaFoco;
+        float coc = smoothstep(distFoco + 25.0, distFoco + 150.0, prof) * forcaFoco;
         vec4 bf = TEX(texDesfoque, fragTexCoord);  // fundo desfocado, pre-multiplicado pelo peso (alfa)
         if (bf.a > 0.02) c = mix(c, bf.rgb / bf.a, coc * smoothstep(0.02, 0.35, bf.a));
     }
-    if (usarAO > 0.5) c *= TEX(texAO, fragTexCoord).r;
+    if (usarAO > 0.5 && prof < alcanceAO) {
+        vec2 ao = TEX(texAO, fragTexCoord).rg;
+        float peso = 1.0 - smoothstep(0.3, 1.2, abs(prof - ao.g * alcanceAO));
+        c *= mix(1.0, ao.r, peso);
+    }
     if (forcaBrilho > 0.0) c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
     if (usarRaios > 0.5) {
-        c += TEX(texRaios, fragTexCoord).rgb;
+        vec4 raio = TEX(texRaios, fragTexCoord);
+#if !defined(GL_ES)
+        if (usarVolume > 0.5) {
+            // Evita que o facho da meia resolucao vaze sobre silhuetas em primeiro plano.
+            float peso = 1.0 - smoothstep(0.4, 1.8, raio.a * alcanceVolume - prof);
+            c = sqrt(c * c + raio.rgb * peso);
+        } else
+#endif
+            c += raio.rgb;
+    }
+    if (usarRaios > 0.5 && all(greaterThanEqual(posSol, vec2(0.0))) && all(lessThanEqual(posSol, vec2(1.0)))) {
         // reflexos da lente: o sol visivel deixa "fantasmas" na linha que passa pelo centro da tela
         vec3 solTela = TEX(texture0, clamp(posSol, 0.001, 0.999)).rgb;
-        float vis = smoothstep(0.75, 0.98, dot(solTela, vec3(0.33))) * step(0.0, posSol.x) * step(posSol.x, 1.0) * step(0.0, posSol.y) * step(posSol.y, 1.0);
+        float vis = smoothstep(0.75, 0.98, dot(solTela, vec3(0.33)));
         vec2 eixo = vec2(0.5) - posSol;
         for (int k = 0; k < 4; k++) {
             float fk = k == 0 ? 0.45 : (k == 1 ? 0.9 : (k == 2 ? 1.35 : 1.75));
@@ -1568,24 +1725,23 @@ void main() {
             vec3 ck = k == 0 ? vec3(0.9, 0.6, 0.3) : (k == 1 ? vec3(0.4, 0.8, 0.5) : (k == 2 ? vec3(0.7, 0.5, 0.9) : vec3(0.3, 0.5, 0.9)));
             vec2 g = (fragTexCoord - (posSol + eixo * fk)) * vec2(aspecto, 1.0);
             float dg = length(g);
-            c += ck * corRaio * 0.06 * vis * smoothstep(rk, rk * 0.6, dg);
+            c += ck * corRaio * 0.035 * vis * (1.0 - smoothstep(rk * 0.6, rk, dg));
         }
         vec2 h = (fragTexCoord - posSol) * vec2(aspecto, 1.0);  // halo em volta do sol
-        c += corRaio * vis * 0.12 * exp(-length(h) * 6.0);
+        c += corRaio * vis * 0.065 * exp(-length(h) * 6.0);
     }
-    // cor de cinema: um pouco mais quente e contrastada (sombras mais fundas)
+    // Contraste suave para manter detalhes na sombra e no ceu claro.
     c = clamp(c, 0.0, 1.0);
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
-    c = clamp(mix(vec3(lum), c, 1.12), 0.0, 1.0);
-    c = c * c * (3.0 - 2.0 * c) * 0.35 + c * 0.65;
-    c *= vec3(1.03, 1.0, 0.95);
+    c = mix(vec3(lum), c, 0.92);
+    c = mix(c, c * c * (3.0 - 2.0 * c), 0.17);
     // vinheta suave
     vec2 v = fragTexCoord - 0.5;
-    c *= 1.0 - dot(v, v) * 0.35;
+    c *= 1.0 - dot(v, v) * 0.15;
     if (usarGrao > 0.5) {  // granulacao de filme: fina, mais visivel nos meios-tons
         float g = hashJ(fragTexCoord / texelTela + fract(tempo * 7.31) * 113.0) - 0.5;
         float lum2 = dot(c, vec3(0.3, 0.59, 0.11));
-        c += g * 0.045 * (1.0 - abs(lum2 - 0.5) * 1.4);
+        c += g * 0.019 * (1.0 - abs(lum2 - 0.5) * 1.4);
     }
     FRAG = vec4(c, 1.0);
 }
@@ -1683,25 +1839,22 @@ void main() {
 )";
 
 // ---------- oclusao de ambiente em tela (SSAO) ----------
-const char* FS_SSAO = R"(
+const char* FS_SSAO = PROFUNDIDADE_CAMERA R"(
 uniform sampler2D texture0;   // profundidade da cena
 uniform vec2 texel;           // 1 / resolucao da profundidade
 uniform float escalaProj;     // pixels por metro a 1 m de distancia
 uniform vec2 tanMeio;         // tan(fov/2) * (aspecto, 1)
-float linear(float d) {
-    float z = d * 2.0 - 1.0;
-    return (2.0 * 0.1 * 1000.0) / (1000.0 + 0.1 - z * (1000.0 - 0.1));
-}
-vec3 posVista(vec2 uv) {
-    float z = linear(TEX(texture0, uv).r);
+uniform float alcanceAO;
+vec3 posVista(vec2 uv, float z) {
     return vec3((uv * 2.0 - 1.0) * tanMeio * z, -z);
 }
+vec3 posVista(vec2 uv) { return posVista(uv, profLinear(TEX(texture0, uv).r)); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
     vec2 uv = fragTexCoord;
-    float d0 = TEX(texture0, uv).r;
-    if (d0 >= 0.99999) { FRAG = vec4(1.0); return; }
-    vec3 P = posVista(uv);
+    float z0 = profLinear(TEX(texture0, uv).r);
+    if (z0 >= alcanceAO) { FRAG = vec4(1.0); return; }
+    vec3 P = posVista(uv, z0);
     // normal reconstruida pelos vizinhos (usa o lado com menor salto de profundidade)
     vec2 t3 = texel * 3.0;
     vec3 px1 = posVista(uv + vec2(t3.x, 0.0)) - P, px2 = P - posVista(uv - vec2(t3.x, 0.0));
@@ -1710,7 +1863,6 @@ void main() {
     vec3 dy = abs(py1.z) < abs(py2.z) ? py1 : py2;
     vec3 n = normalize(cross(dx, dy));
     if (n.z < 0.0) n = -n;
-    float z0 = -P.z;
     float raio = min(0.7 * escalaProj / z0, 80.0);
     float giro = hash(uv * 913.7) * 6.2831;
     float soma = 0.0;
@@ -1722,7 +1874,28 @@ void main() {
         float alcance = 1.0 - smoothstep(0.7, 1.4, dist);
         soma += max(0.0, dot(v, n) - 0.03 * z0) / (dot(v, v) + 0.02) * alcance;
     }
-    float ao = clamp(1.0 - soma * (1.2 / 12.0), 0.0, 1.0);
-    FRAG = vec4(vec3(ao * ao), 1.0);
+    float ao = clamp(1.0 - soma * (1.05 / 12.0), 0.0, 1.0);
+    float peso = 1.0 - smoothstep(18.0, alcanceAO, z0);
+    FRAG = vec4(mix(1.0, ao * ao, peso), z0 / alcanceAO, 0.0, 1.0);
+}
+)";
+
+// O canal verde guarda a profundidade da amostra. O desfoque respeita silhuetas.
+const char* FS_BLUR_AO = R"(
+uniform sampler2D texture0;
+uniform vec2 direcao;
+uniform float alcanceAO;
+void main() {
+    vec2 centro = TEX(texture0, fragTexCoord).rg;
+    if (centro.g >= 1.0) { FRAG = vec4(1.0); return; }
+    float soma = centro.r * 0.4, pesos = 0.4;
+    for (int i = -2; i <= 2; i++) {
+        if (i == 0) continue;
+        vec2 a = TEX(texture0, fragTexCoord + direcao * float(i)).rg;
+        float w = (abs(float(i)) == 1.0 ? 0.24 : 0.06) * (1.0 - smoothstep(0.2, 1.0, abs(a.g - centro.g) * alcanceAO));
+        soma += a.r * w;
+        pesos += w;
+    }
+    FRAG = vec4(soma / pesos, centro.g, 0.0, 1.0);
 }
 )";

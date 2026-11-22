@@ -73,10 +73,14 @@ public:
     bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) && posOk_; }
     const Efeitos& efeitosNivel() const { return ef_; }
     void comecarPos();
+    void comecarPassePrincipal();  // depois de BeginMode3D
+    void terminarPassePrincipal(); // depois do pos-processamento
     void terminarPos(const Camera3D& cam, float tempoGrao, class PerfilGPU* perfil = nullptr);
 
 private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);
+    bool usaFiltroSombra() const { return nivel_ == Nivel::Alto && sombraOk_ && samplerSombra_ != 0; }
+    void desenharRaiosVolume(const Camera3D& cam, float intensidade);
     void liberarEfeitos();
     void assarMateriais();
     RenderTexture2D texMat_[4]{};  // material das paredes (alturas, fatores de cor, pesos) e dos telhados
@@ -97,7 +101,8 @@ private:
     void liberarLuzParedes();
     void limparLuzParedes();  // apaga o atlas (alfa 0) e manda recalcular tudo
     std::vector<Shader> personagens_, sombreados_;  // preenchidos quando os shaders sao carregados
-    Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blur4_{}, longe_{};
+    Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blurAO_{}, blur4_{}, longe_{};
+    Shader raiosVolume_{};
     Shader pele_{}, profPele_{}, cabeca_{}, litParede_{};
     bool paredeOk_ = false;
     bool cabecaOk_ = false;
@@ -112,6 +117,9 @@ private:
     float distFoco_ = 4.f;
     bool cenaComProfundidade_ = false;
     Matrix luzVP_{};
+    Matrix invCameraVP_{};
+    float profCena_[2]{};
+    unsigned int samplerSombra_ = 0;
     bool sombraOk_ = false, posOk_ = false;
     int largPos_ = 0, altPos_ = 0;
     Efeitos ef_{};

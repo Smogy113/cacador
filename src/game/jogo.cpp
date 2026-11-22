@@ -537,6 +537,7 @@ void Jogo::desenhar() {
     if (luz_.usaPos()) luz_.comecarPos();
     ClearBackground(BLACK);
     BeginMode3D(cam_);
+    luz_.comecarPassePrincipal();
     float dv = luz_.efeitos().distanciaVisao;
     perfil_.comecar(P_TERRENO);
     luz_.modoHorizonte(dv - 40.f);
@@ -579,6 +580,7 @@ void Jogo::desenhar() {
         float tempoGrao = op_.semEntrada ? tempo_ : float(GetTime());
         luz_.terminarPos(cam_, tempoGrao, &perfil_);
     }
+    luz_.terminarPassePrincipal();
     dbg_.msDesenharCPU = dbg_.msDesenharCPU * 0.9f + float(GetTime() - t0) * 1000.f * 0.1f;
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_ + grama_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_ + grama_.chamadas();

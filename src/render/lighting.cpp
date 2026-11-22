@@ -8,8 +8,17 @@
 #include "render/shaders.h"
 #include "raymath.h"
 #include "rlgl.h"
+#if !defined(PLATFORM_WEB)
+#include "external/glad.h"
+#endif
 
 namespace {
+constexpr float ALCANCE_AO = 48.f;
+#if !defined(PLATFORM_WEB)
+// Slot livre nas malhas e acima dos slots que a raylib usa nos efeitos de tela.
+constexpr int UNIDADE_SOMBRA_FILTRADA = 11;
+constexpr float ALCANCE_VOLUME = 56.f;
+#endif
 void setV3(Shader s, const char* nome, Vec3f v) {
     float f[3] = {v.x, v.y, v.z};
     SetShaderValue(s, GetShaderLocation(s, nome), f, SHADER_UNIFORM_VEC3);
@@ -161,6 +170,7 @@ void Iluminacao::carregar(Nivel nivel) {
     raios_ = carregarShaderPos(FS_RAIOS);
     junta_ = carregarShaderPos(FS_JUNTA);
     ssao_ = carregarShaderPos(FS_SSAO);
+    blurAO_ = carregarShaderPos(FS_BLUR_AO);
     blur4_ = carregarShaderPos(FS_BLUR4);
     longe_ = carregarShaderPos(FS_LONGE);
     lit_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(lit_, "texSombra");
@@ -194,6 +204,10 @@ void Iluminacao::carregar(Nivel nivel) {
         personagens_.push_back(cabeca_);
         sombreados_.push_back(cabeca_);
     }
+#if !defined(PLATFORM_WEB)
+    for (Shader sh : sombreados_)
+        SetShaderValue(sh, GetShaderLocation(sh, "texSombraFiltrada"), &UNIDADE_SOMBRA_FILTRADA, SHADER_UNIFORM_INT);
+#endif
     carregado_ = true;
     }
     if (paredeOk_ && nivel_ != Nivel::Baixo && !materiaisAssados_) {
@@ -203,6 +217,24 @@ void Iluminacao::carregar(Nivel nivel) {
     if (ef_.sombras) {
         sombraRT_ = criarMapaSombra(ef_.resolucaoSombra);
         sombraOk_ = sombraRT_.id > 0;
+#if !defined(PLATFORM_WEB)
+        if (nivel_ == Nivel::Alto && sombraOk_ && !samplerSombra_ && glGenSamplers) {
+            glGenSamplers(1, &samplerSombra_);
+            if (samplerSombra_) {
+                glSamplerParameteri(samplerSombra_, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glSamplerParameteri(samplerSombra_, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glSamplerParameteri(samplerSombra_, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glSamplerParameteri(samplerSombra_, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glSamplerParameteri(samplerSombra_, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+                glSamplerParameteri(samplerSombra_, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+                raiosVolume_ = carregarShaderPos(FS_RAIOS_VOLUME);
+                if (raiosVolume_.id == rlGetShaderIdDefault()) raiosVolume_ = {};
+                if (raiosVolume_.id)
+                    SetShaderValue(raiosVolume_, GetShaderLocation(raiosVolume_, "texSombraFiltrada"),
+                                   &UNIDADE_SOMBRA_FILTRADA, SHADER_UNIFORM_INT);
+            }
+        }
+#endif
         sombraPertoRT_ = criarMapaSombra(1024);
         sombraPertoOk_ = sombraPertoRT_.id > 0;
         if (sombraPertoOk_) {
@@ -257,7 +289,13 @@ void Iluminacao::carregar(Nivel nivel) {
 void Iluminacao::descarregar() {
     if (!carregado_) return;
     liberarEfeitos();
-    for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_, blur4_, longe_}) UnloadShader(sh);
+#if !defined(PLATFORM_WEB)
+    if (raiosVolume_.id) UnloadShader(raiosVolume_);
+    raiosVolume_ = {};
+    if (samplerSombra_) glDeleteSamplers(1, &samplerSombra_);
+    samplerSombra_ = 0;
+#endif
+    for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_, blurAO_, blur4_, longe_}) UnloadShader(sh);
     if (cabecaOk_) {
         for (int i = 0; i < 12; i++) matCabeca_.maps[i].texture = Texture2D{};  // as texturas sao de outros donos
         UnloadShader(cabeca_);
@@ -299,10 +337,26 @@ void Iluminacao::uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noi
 }
 
 void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const std::vector<LuzPontual>& todas, Vec3f foco, float tempo) {
+    // A nova cena e os mapas de sombra precisam estar prontos antes dos passes do quadro.
+    if (usaPos() && (GetScreenWidth() != largPos_ || GetScreenHeight() != altPos_)) carregar(nivel_);
     paleta_ = relogio.paleta();
     sol_ = relogio.direcaoSol();
     lua_ = relogio.direcaoLua();
     noite_ = relogio.intensidadeTochas();
+
+    bool alto = false;
+#if !defined(PLATFORM_WEB)
+    alto = nivel_ == Nivel::Alto;
+#endif
+    if (alto) {
+        float dia = smoothstep(-0.04f, 0.24f, sol_.y);
+        Rgb sol = paleta_.sol;
+        paleta_.sol = lerp(sol, {sol.r, sol.g * 0.84f + sol.r * 0.16f, sol.b * 0.84f + sol.r * 0.16f}, dia) * 0.88f;
+        Rgb ceu = paleta_.ambienteCeu;
+        paleta_.ambienteCeu = lerp(ceu, {ceu.r * 0.8f, ceu.g * 0.91f, ceu.b * 0.99f}, dia);
+        paleta_.ambienteChao = paleta_.ambienteChao * lerp(1.f, 0.88f, dia);
+        paleta_.grading = lerp(paleta_.grading, {1.f, 1.f, 1.f}, 0.65f);
+    }
 
     // A selecao e o tremor das luzes sao iguais para todos os materiais.
     std::vector<const LuzPontual*> ord;
@@ -335,6 +389,14 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
         setRgb(sh, "corLua", Rgb{0.10f, 0.13f, 0.22f} * (luaAcima * noite_));
         setF(sh, "noite", noite_);
         setRgb(sh, "corChao", Rgb{0.10f, 0.15f, 0.05f});
+#if !defined(PLATFORM_WEB)
+        setF(sh, "iluminacaoAlta", alto ? 1.f : 0.f);
+        setF(sh, "usarFiltroSombra", usaFiltroSombra() ? 1.f : 0.f);
+        if (alto && !usaSombras()) {
+            setF(sh, "usarSombra", 0.f);
+            setF(sh, "usarSombraPerto", 0.f);
+        }
+#endif
 
         if (n) {
             SetShaderValueV(sh, GetShaderLocation(sh, "luzPos"), pos, SHADER_UNIFORM_VEC4, n);
@@ -351,6 +413,7 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     setF(ceu_, "noite", noite_);
     setV3(ceu_, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
     setF(ceu_, "tempoVento", tempo);
+    setF(ceu_, "iluminacaoAlta", alto ? 1.f : 0.f);
     float pn = nivel_ == Nivel::Alto ? 22.f : (nivel_ == Nivel::Medio ? 12.f : 0.f);
     if (dbg.passosNuvem >= 0) pn = dbg.passosNuvem;
     setF(ceu_, "passosNuvem", dbg.semNuvens ? -1.f : pn);
@@ -414,7 +477,16 @@ void Iluminacao::comecarSombra(Vec3f centro) {
     BeginTextureMode(sombraRT_);
     ClearBackground(WHITE);
     BeginMode3D(cl);
-    luzVP_ = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
+    Matrix projecao = rlGetMatrixProjection();
+    luzVP_ = MatrixMultiply(rlGetMatrixModelview(), projecao);
+    if (usaFiltroSombra()) {
+        float profundidadePorMetro = -0.5f * projecao.m10;
+        for (Shader sh : sombreados_) {
+            setV3(sh, "passoSombraX", dirX * (texel * profundidadePorMetro));
+            setV3(sh, "passoSombraY", dirY * (texel * profundidadePorMetro));
+            setF(sh, "metrosProfSombra", 1.f / profundidadePorMetro);
+        }
+    }
 }
 
 void Iluminacao::terminarSombra() {
@@ -428,12 +500,64 @@ void Iluminacao::terminarSombra() {
 }
 
 void Iluminacao::comecarPos() {
-    if (GetScreenWidth() != largPos_ || GetScreenHeight() != altPos_) carregar(nivel_);  // janela mudou de tamanho
     BeginTextureMode(cena_);
+}
+
+void Iluminacao::comecarPassePrincipal() {
+#if !defined(PLATFORM_WEB)
+    if (cenaComProfundidade_) {
+        Matrix projecao = rlGetMatrixProjection();
+        profCena_[0] = projecao.m10;
+        profCena_[1] = projecao.m14;
+        if (usaSombras() && usaFiltroSombra() && !dbg.semRaios)
+            invCameraVP_ = MatrixInvert(MatrixMultiply(rlGetMatrixModelview(), projecao));
+    }
+    if (!usaSombras() || !usaFiltroSombra()) return;
+    // A mesma textura e lida sem filtro no slot do material para procurar bloqueadores.
+    rlActiveTextureSlot(UNIDADE_SOMBRA_FILTRADA);
+    rlEnableTexture(sombraRT_.depth.id);
+    glBindSampler(UNIDADE_SOMBRA_FILTRADA, samplerSombra_);
+    rlActiveTextureSlot(0);
+#endif
+}
+
+void Iluminacao::terminarPassePrincipal() {
+#if !defined(PLATFORM_WEB)
+    if (!usaSombras() || !usaFiltroSombra()) return;
+    glBindSampler(UNIDADE_SOMBRA_FILTRADA, 0);
+    rlActiveTextureSlot(UNIDADE_SOMBRA_FILTRADA);
+    rlDisableTexture();
+    rlActiveTextureSlot(0);
+#endif
 }
 
 static void desenharTela(RenderTexture2D& origem, int w, int h) {
     DrawTexturePro(origem.texture, {0, 0, float(origem.texture.width), float(-origem.texture.height)}, {0, 0, float(w), float(h)}, {0, 0}, 0, WHITE);
+}
+
+void Iluminacao::desenharRaiosVolume(const Camera3D& cam, float intensidade) {
+#if !defined(PLATFORM_WEB)
+    Shader sh = raiosVolume_;
+    BeginTextureMode(raiosRT_);
+    BeginShaderMode(sh);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    BeginBlendMode(BLEND_CUSTOM);
+    SetShaderValueTexture(sh, GetShaderLocation(sh, "texProf"), cena_.depth);
+    SetShaderValueMatrix(sh, GetShaderLocation(sh, "invCameraVP"), invCameraVP_);
+    SetShaderValueMatrix(sh, GetShaderLocation(sh, "matLuz"), luzVP_);
+    SetShaderValue(sh, GetShaderLocation(sh, "profCena"), profCena_, SHADER_UNIFORM_VEC2);
+    setV3(sh, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
+    setV3(sh, "dirSol", sol_);
+    setRgb(sh, "corRaio", paleta_.sol * intensidade);
+    setF(sh, "alcanceVolume", ALCANCE_VOLUME);
+    desenharTela(cena_, raiosRT_.texture.width, raiosRT_.texture.height);
+    EndBlendMode();
+    EndShaderMode();
+    EndTextureMode();
+#else
+    (void)cam;
+    (void)intensidade;
+#endif
 }
 
 void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* perfil) {
@@ -456,6 +580,8 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
     comecar(P_POS_RAIOS);
     // 2) raios de luz a partir do sol
     bool raios = false;
+    bool volume = false;
+    posSolTela_[0] = posSolTela_[1] = -1.f;
     if (ef_.raiosDeLuz && !dbg.semRaios && sol_.y > -0.02f) {
         Vector3 ps{cam.position.x + sol_.x * 300, cam.position.y + sol_.y * 300, cam.position.z + sol_.z * 300};
         Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
@@ -464,6 +590,15 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
             Vector2 t = GetWorldToScreenEx(ps, cam, largPos_, altPos_);
             posSolTela_[0] = t.x / largPos_;
             posSolTela_[1] = 1.f - t.y / altPos_;
+        }
+        bool podeUsarVolume = raiosVolume_.id && cenaComProfundidade_ && usaSombras() && usaFiltroSombra();
+        if (podeUsarVolume) {
+            float intensidade = smoothstep(-0.3f, 0.08f, olhaSol) * smoothstep(0.05f, 0.16f, sol_.y);
+            if (intensidade > 0.f) {
+                desenharRaiosVolume(cam, intensidade);
+                volume = true;
+            }
+        } else if (olhaSol > 0.05f) {
             // fachos fortes com o sol baixo (manha e fim de tarde), mais suaves ao meio-dia
             float forca = (0.75f * (1.f - smoothstep(0.25f, 0.8f, sol_.y)) + 0.25f) * smoothstep(0.05f, 0.45f, olhaSol);
             float asp = float(largPos_) / float(altPos_), up = cenaComProfundidade_ ? 1.f : 0.f;
@@ -481,6 +616,7 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
             EndTextureMode();
             raios = true;
         }
+        raios |= volume;
     }
     terminar();
     comecar(P_POS_BRILHO_DESF);
@@ -511,6 +647,8 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
         float escala = altPos_ / (2.f * std::tan(cam.fovy * 0.5f * DEG2RAD));
         SetShaderValue(ssao_, GetShaderLocation(ssao_, "texel"), tx, SHADER_UNIFORM_VEC2);
         SetShaderValue(ssao_, GetShaderLocation(ssao_, "escalaProj"), &escala, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(ssao_, GetShaderLocation(ssao_, "profCena"), profCena_, SHADER_UNIFORM_VEC2);
+        setF(ssao_, "alcanceAO", ALCANCE_AO);
         float th = std::tan(cam.fovy * 0.5f * DEG2RAD);
         float tm[2] = {th * float(largPos_) / float(altPos_), th};
         SetShaderValue(ssao_, GetShaderLocation(ssao_, "tanMeio"), tm, SHADER_UNIFORM_VEC2);
@@ -522,9 +660,10 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
             RenderTexture2D& de = k == 0 ? aoA_ : aoB_;
             RenderTexture2D& para = k == 0 ? aoB_ : aoA_;
             BeginTextureMode(para);
-            BeginShaderMode(blur_);
-            SetShaderValue(blur_, GetShaderLocation(blur_, "direcao"), d, SHADER_UNIFORM_VEC2);
-            DrawTexturePro(de.texture, {0, 0, float(mw), float(mh)}, {0, 0, float(mw), float(mh)}, {0, 0}, 0, WHITE);
+            BeginShaderMode(blurAO_);
+            setF(blurAO_, "alcanceAO", ALCANCE_AO);
+            SetShaderValue(blurAO_, GetShaderLocation(blurAO_, "direcao"), d, SHADER_UNIFORM_VEC2);
+            desenharTela(de, mw, mh);
             EndShaderMode();
             EndTextureMode();
         }
@@ -539,6 +678,7 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
         ClearBackground(BLANK);
         BeginShaderMode(longe_);
         SetShaderValue(longe_, GetShaderLocation(longe_, "distFoco"), &distFoco_, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(longe_, GetShaderLocation(longe_, "profCena"), profCena_, SHADER_UNIFORM_VEC2);
         SetShaderValueTexture(longe_, GetShaderLocation(longe_, "texProf"), cena_.depth);
         rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // grava o alfa como esta (sem misturar)
         BeginBlendMode(BLEND_CUSTOM);
@@ -577,12 +717,15 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
         SetShaderValue(junta_, GetShaderLocation(junta_, "forcaFoco"), &forca, SHADER_UNIFORM_FLOAT);
         SetShaderValue(junta_, GetShaderLocation(junta_, "tempo"), &tempoGrao, SHADER_UNIFORM_FLOAT);
         SetShaderValue(junta_, GetShaderLocation(junta_, "texelTela"), tx, SHADER_UNIFORM_VEC2);
-        if (foco) {
+        if (foco || ao || volume) {
+            SetShaderValue(junta_, GetShaderLocation(junta_, "profCena"), profCena_, SHADER_UNIFORM_VEC2);
             SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texProf"), cena_.depth);
+        }
+        if (foco) {
             SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texDesfoque"), focoA_.texture);
         }
     }
-    float fb = bloom ? 0.65f : 0.f, ur = raios ? 1.f : 0.f;
+    float fb = bloom ? 0.42f : 0.f, ur = raios ? 1.f : 0.f;
     float aspJ = float(largPos_) / float(altPos_);
     Vector3 crJ{paleta_.sol.r, paleta_.sol.g, paleta_.sol.b};
     SetShaderValue(junta_, GetShaderLocation(junta_, "posSol"), posSolTela_, SHADER_UNIFORM_VEC2);
@@ -590,11 +733,18 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
     SetShaderValue(junta_, GetShaderLocation(junta_, "corRaio"), &crJ, SHADER_UNIFORM_VEC3);
     SetShaderValue(junta_, GetShaderLocation(junta_, "forcaBrilho"), &fb, SHADER_UNIFORM_FLOAT);
     SetShaderValue(junta_, GetShaderLocation(junta_, "usarRaios"), &ur, SHADER_UNIFORM_FLOAT);
+#if !defined(PLATFORM_WEB)
+    setF(junta_, "usarVolume", volume ? 1.f : 0.f);
+    if (volume) setF(junta_, "alcanceVolume", ALCANCE_VOLUME);
+#endif
     if (bloom) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texBrilho"), meiaA_.texture);
     if (raios) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texRaios"), raiosRT_.texture);
     float ua = ao ? 1.f : 0.f;
     SetShaderValue(junta_, GetShaderLocation(junta_, "usarAO"), &ua, SHADER_UNIFORM_FLOAT);
-    if (ao) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texAO"), aoA_.texture);
+    if (ao) {
+        setF(junta_, "alcanceAO", ALCANCE_AO);
+        SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texAO"), aoA_.texture);
+    }
     desenharTela(cena_, GetScreenWidth(), GetScreenHeight());
     EndShaderMode();
     terminar();
@@ -793,6 +943,7 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
     SetShaderValue(sh, GetShaderLocation(sh, "dirSombra"), d3, SHADER_UNIFORM_VEC3);
     SetShaderValue(sh, GetShaderLocation(sh, "dirSol"), s3, SHADER_UNIFORM_VEC3);
     SetShaderValue(sh, GetShaderLocation(sh, "corSol"), c3, SHADER_UNIFORM_VEC3);
+    setF(sh, "calcularSombra", usaFiltroSombra() ? 0.f : 1.f);
     static int loc[12] = {-2};
     static unsigned int locShader = 0;
     if (locShader != sh.id) {
