@@ -74,7 +74,7 @@ public:
     bool usaPos() const { return (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) && posOk_; }
     const Efeitos& efeitosNivel() const { return ef_; }
     void comecarPos();
-    void terminarPos(const Camera3D& cam, class PerfilGPU* perfil = nullptr);
+    void terminarPos(const Camera3D& cam, float tempoGrao, class PerfilGPU* perfil = nullptr);
 
 private:
     void uniformesComuns(Shader s, const Paleta& p, Vec3f sol, float noite);

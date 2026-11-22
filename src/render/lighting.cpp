@@ -419,7 +419,7 @@ static void desenharTela(RenderTexture2D& origem, int w, int h) {
     DrawTexturePro(origem.texture, {0, 0, float(origem.texture.width), float(-origem.texture.height)}, {0, 0, float(w), float(h)}, {0, 0}, 0, WHITE);
 }
 
-void Iluminacao::terminarPos(const Camera3D& cam, PerfilGPU* perfil) {
+void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* perfil) {
     auto comecar = [&](ParteQuadro p) { if (perfil) perfil->comecar(p); };
     auto terminar = [&]() { if (perfil) perfil->terminar(); };
     EndTextureMode();
@@ -548,7 +548,7 @@ void Iluminacao::terminarPos(const Camera3D& cam, PerfilGPU* perfil) {
     // 4) junta tudo na tela
     BeginShaderMode(junta_);
     {
-        float uf = foco ? 1.f : 0.f, ug = cinema && !dbg.semGrao ? 1.f : 0.f, t = float(GetTime());
+        float uf = foco ? 1.f : 0.f, ug = cinema && !dbg.semGrao ? 1.f : 0.f;
         // mais desfoque com a camera perto do heroi (close, mira); de longe quase nada
         float forca = 0.35f + 0.5f * (1.f - smoothstep(1.2f, 4.5f, distFoco_));
         float tx[2] = {1.f / largPos_, 1.f / altPos_};
@@ -556,7 +556,7 @@ void Iluminacao::terminarPos(const Camera3D& cam, PerfilGPU* perfil) {
         SetShaderValue(junta_, GetShaderLocation(junta_, "usarGrao"), &ug, SHADER_UNIFORM_FLOAT);
         SetShaderValue(junta_, GetShaderLocation(junta_, "distFoco"), &distFoco_, SHADER_UNIFORM_FLOAT);
         SetShaderValue(junta_, GetShaderLocation(junta_, "forcaFoco"), &forca, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(junta_, GetShaderLocation(junta_, "tempo"), &t, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(junta_, GetShaderLocation(junta_, "tempo"), &tempoGrao, SHADER_UNIFORM_FLOAT);
         SetShaderValue(junta_, GetShaderLocation(junta_, "texelTela"), tx, SHADER_UNIFORM_VEC2);
         if (foco) {
             SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texProf"), cena_.depth);

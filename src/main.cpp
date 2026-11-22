@@ -4,7 +4,9 @@ extern "C" __declspec(dllimport) int __stdcall MessageBoxA(void* janela, const c
 #endif
 #include <cstdio>
 #include <cstdlib>
+#include <numeric>
 #include <string>
+#include <vector>
 #include "game/jogo.h"
 #include "raylib.h"
 #if defined(PLATFORM_WEB)
@@ -17,7 +19,7 @@ struct Opcoes {
     bool qualidadeDada = false;
     bool benchmark = false;
     std::string screenshot;
-    int frames = 30;
+    int frames = 0;
     OpcoesJogo jogo;
 };
 
@@ -27,7 +29,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         std::string a = argv[i];
         auto prox = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : "0"; };
         if (a == "--screenshot") { o.screenshot = prox(); o.jogo.congelarHora = true; o.jogo.semEntrada = true; }
-        else if (a == "--frames") o.frames = std::atoi(prox());
+        else if (a == "--frames") o.frames = std::max(1, std::atoi(prox()));
         else if (a == "--hora") o.jogo.hora = (float)std::atof(prox());
         else if (a == "--pos") { o.jogo.temPos = true; o.jogo.x = (float)std::atof(prox()); o.jogo.z = (float)std::atof(prox()); }
         else if (a == "--girar-camera") o.jogo.girarCamera = (float)std::atof(prox());
@@ -65,7 +67,8 @@ static Jogo* g_jogo = nullptr;
 static int g_frame = 0;
 
 static void quadro() {
-    float dt = GetFrameTime();
+    // Capturas e benchmark simulam o mesmo tempo de jogo em qualquer maquina.
+    float dt = g_op.jogo.semEntrada ? 1.f / 60.f : GetFrameTime();
     if (dt > 0.1f) dt = 0.1f;
     g_jogo->atualizar(dt);
     BeginDrawing();
@@ -76,9 +79,72 @@ static void quadro() {
     g_frame++;
 }
 
+struct Medicao {
+    std::vector<double> tempos;
+    size_t maxTriangulos = 0, somaTriangulos = 0;
+    int maxChamadas = 0;
+    size_t somaChamadas = 0;
+
+    void medirQuadro() {
+        double inicio = GetTime();
+        quadro();
+        tempos.push_back((GetTime() - inicio) * 1000.0);
+        size_t t = g_jogo->triangulos();
+        int c = g_jogo->chamadas();
+        maxTriangulos = std::max(maxTriangulos, t);
+        maxChamadas = std::max(maxChamadas, c);
+        somaTriangulos += t;
+        somaChamadas += c;
+    }
+
+    void imprimir(const char* cena) {
+        std::sort(tempos.begin(), tempos.end());
+        size_t n = tempos.size();
+        auto percentil = [&](size_t p) { return tempos[(p * n + 99) / 100 - 1]; };
+        double media = std::accumulate(tempos.begin(), tempos.end(), 0.0) / n;
+        std::printf("%s: quadro ms media=%.2f p50=%.2f p95=%.2f max=%.2f | FPS medio=%.1f\n",
+                    cena, media, percentil(50), percentil(95), tempos.back(), 1000.0 / media);
+        std::printf("%s: triangulos max=%zu media=%zu | chamadas max=%d media=%zu | quadros=%zu\n",
+                    cena, maxTriangulos, somaTriangulos / n, maxChamadas, somaChamadas / n, n);
+    }
+};
+
+static void rodarBenchmark() {
+    const auto* placa = glGetString(0x1F01);  // GL_RENDERER
+    std::printf("benchmark: placa=%s | %dx%d | nivel=%s\n", placa ? (const char*)placa : "?", GetRenderWidth(),
+                GetRenderHeight(), nomeNivel(g_op.jogo.nivel));
+    int porCena = g_op.frames ? g_op.frames : 12;
+    auto medirCena = [&](Medicao& medicao) {
+        for (int i = 0; i < 3; i++) quadro();  // aquece shaders e o atlas de luz
+        for (int i = 0; i < porCena; i++) medicao.medirQuadro();
+    };
+    Medicao trajeto;
+    if (g_op.jogo.temPos || g_op.jogo.tiroteio || g_op.jogo.estudio) {
+        medirCena(trajeto);
+        trajeto.imprimir("benchmark");
+        return;
+    }
+    // Cidade, vilarejo, ponte, floresta, castelo, acampamento e mina, em quatro horas do dia.
+    const float pontos[][3] = {{320, 345, 0}, {320, 345, 90}, {316, 352, 200}, {230, 260, 45}, {-60, 60, 30}, {60, -100, 200},
+                               {-420, -230, 0}, {-420, -230, 120}, {-150, -440, 200}, {330, -400, 230}, {-470, 545, 220}, {0, 0, 300}};
+    for (float hora : {8.f, 12.f, 18.5f, 22.f})
+        for (const auto& ponto : pontos) {
+            g_jogo->teleportar(ponto[0], ponto[1], ponto[2], hora);
+            medirCena(trajeto);
+        }
+    trajeto.imprimir("benchmark");
+
+    g_jogo->prepararTiroteio(true);  // alvo e tres capangas
+    Medicao tiroteio;
+    for (int i = 0; i < 60; i++) tiroteio.medirQuadro();
+    tiroteio.imprimir("tiroteio");
+}
+
 int main(int argc, char** argv) {
     g_op = lerArgs(argc, argv);
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+    unsigned int flags = FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE;
+    if (!g_op.benchmark) flags |= FLAG_VSYNC_HINT;
+    SetConfigFlags(flags);
     InitWindow(1280, 720, "Caçador");
     if (g_op.screenshot.empty() && !g_op.benchmark) InitAudioDevice();  // sons gerados por codigo
     if (!IsWindowReady()) {
@@ -88,7 +154,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "Nao foi possivel abrir a janela (OpenGL 3.3 necessario)\n");
         return 1;
     }
-    SetTargetFPS(60);
+    if (!g_op.benchmark) SetTargetFPS(60);
     SetExitKey(KEY_NULL);
 #if !defined(PLATFORM_WEB)
     // data/ e config.txt ficam ao lado do executavel
@@ -111,34 +177,7 @@ int main(int argc, char** argv) {
     g_jogo = new Jogo(g_op.jogo);
     std::printf("carregamento=%.2fs\n", GetTime() - t0);
     if (g_op.benchmark) {
-        // trajeto fixo: cidade, vilarejo, ponte, floresta, castelo, acampamento, mina; 4 horas do dia
-        const float pontos[][3] = {{320, 345, 0}, {320, 345, 90}, {316, 352, 200}, {230, 260, 45}, {-60, 60, 30}, {60, -100, 200},
-                                   {-420, -230, 0}, {-420, -230, 120}, {-150, -440, 200}, {330, -400, 230}, {-470, 545, 220}, {0, 0, 300}};
-        const float horas[] = {8, 12, 18.5f, 22};
-        size_t maxT = 0, somaT = 0;
-        int maxC = 0, somaC = 0, n = 0;
-        for (float h : horas)
-            for (auto& p : pontos) {
-                g_jogo->teleportar(p[0], p[1], p[2], h);
-                for (int f = 0; f < 3; f++) quadro();
-                size_t t = g_jogo->triangulos();
-                int c = g_jogo->chamadas();
-                maxT = std::max(maxT, t); maxC = std::max(maxC, c);
-                somaT += t; somaC += c; n++;
-            }
-        // tiroteio: o cartaz mais caro (alvo + 3 capangas atirando, claroes), ~3 s de jogo
-        g_jogo->prepararTiroteio(true);
-        size_t maxTT = 0;
-        int maxCT = 0;
-        for (int f = 0; f < 60; f++) {
-            quadro();
-            maxTT = std::max(maxTT, g_jogo->triangulos());
-            maxCT = std::max(maxCT, g_jogo->chamadas());
-        }
-        maxT = std::max(maxT, maxTT);
-        maxC = std::max(maxC, maxCT);
-        std::printf("tiroteio: triangulos max=%zu | chamadas max=%d\n", maxTT, maxCT);
-        std::printf("benchmark: triangulos max=%zu media=%zu | chamadas max=%d media=%d | quadros=%d\n", maxT, somaT / n, maxC, somaC / n, n);
+        rodarBenchmark();
         delete g_jogo;
         CloseWindow();
         return 0;
@@ -148,7 +187,7 @@ int main(int argc, char** argv) {
 #else
     while (!WindowShouldClose() && !g_jogo->querSair()) {
         quadro();
-        if (!g_op.screenshot.empty() && g_frame >= g_op.frames) {
+        if (!g_op.screenshot.empty() && g_frame >= (g_op.frames ? g_op.frames : 30)) {
             Image img = LoadImageFromScreen();
             ExportImage(img, g_op.screenshot.c_str());
             g_jogo->imprimirPerfil();

@@ -577,7 +577,7 @@ void Jogo::desenhar() {
         Vec3f heroi = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.3f : 1.5f, 0};
         luz_.definirFoco(len(heroi - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z}));
     }
-    if (luz_.usaPos()) luz_.terminarPos(cam_, &perfil_);
+    if (luz_.usaPos()) luz_.terminarPos(cam_, op_.semEntrada ? tempo_ : float(GetTime()), &perfil_);
     dbg_.msDesenharCPU = dbg_.msDesenharCPU * 0.9f + float(GetTime() - t0) * 1000.f * 0.1f;
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_ + grama_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_ + grama_.chamadas();
