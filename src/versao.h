@@ -1,3 +1,3 @@
 #pragma once
 // Versao do jogo (sobe a cada entrega: MAIOR.MENOR.CORRECAO)
-#define VERSAO_JOGO "0.20.1"
+#define VERSAO_JOGO "0.21.0"

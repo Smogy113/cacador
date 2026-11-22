@@ -496,7 +496,26 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
 
 static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f>& rota) {
     Vec3f centro{l.x, g.h(l.x, l.z), l.z};
-    g.poco(centro + Vec3f{3, 0, 2});
+    auto piso = [&](float dx, float dz) {
+        return Vec3f{l.x + dx, g.h(l.x + dx, l.z + dz), l.z + dz};
+    };
+    g.poco(piso(3, 2));
+    if (l.nome == "Pedrabranca") {
+        // Bancas voltadas para o corredor central da feira.
+        g.barraca({piso(-5, 3), PI / 2}, LONAS[0]);
+        g.barraca({piso(-5, -2), PI / 2}, LONAS[3]);
+        Frame sino{piso(4, -4), 0};
+        MeshBuilder& m = g.b(sino.o);
+        for (float x : {-0.85f, 0.85f}) {
+            g.caixa(m, sino, {x, 2.8f, 0}, {0.24f, 5.6f, 0.32f}, MADEIRA_ESC);
+        }
+        g.caixa(m, sino, {0, 5.35f, 0}, {2.3f, 0.28f, 0.38f}, MADEIRA);
+        m.prisma(sino.P(0, 5.95f, 0), {3.2f, 1.1f, 2.3f}, 0, TELHA_M);
+        Rgb bronze{0.57f, 0.38f, 0.16f};
+        m.cilindro(sino.P(0, 4.25f, 0), 0.43f, 0.82f, 10, bronze);
+        m.cilindro(sino.P(0, 4.13f, 0), 0.57f, 0.15f, 10, bronze);
+        g.colisaoRet(sino, 0, 0, 2.f, 0.45f, 5.6f);
+    }
     g.ocupado.push_back({{l.x - 7, 0, l.z - 7}, {l.x + 7, 0, l.z + 7}});
     rota.push_back(centro + Vec3f{-2, 0, -3});
     int feitas = 0;

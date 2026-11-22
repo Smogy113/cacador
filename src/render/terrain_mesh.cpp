@@ -59,7 +59,11 @@ Rgb corDoChao(const Terreno& t, float x, float z, float ny) {
     c = c * (0.92f + r2 * 0.12f);
     // terra da estrada
     Rgb terra{0.55f, 0.42f, 0.28f};
-    c = mix(c, terra * (0.95f + r2 * 0.1f), t.mascaraEstrada(x, z) * 0.95f);
+    float estrada = t.mascaraEstrada(x, z);
+    Rgb acostamento = mix(seca, terra, 0.45f);
+    c = mix(c, acostamento, smoothstep(0.04f, 0.55f, estrada));
+    Rgb trilha = mix(terra, Rgb{0.69f, 0.55f, 0.38f}, r1);
+    c = mix(c, trilha * (0.90f + r2 * 0.18f), smoothstep(0.42f, 0.94f, estrada));
     // margem/areia perto da agua
     Rgb lama{0.45f, 0.40f, 0.30f};
     c = mix(c, lama, smoothstep(t.nivelAgua() + 1.4f, t.nivelAgua() + 0.3f, h));
