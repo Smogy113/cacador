@@ -422,7 +422,7 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
             float lado = u < -0.04f ? -1.f : 1.f;
             float th = u * 102.f;
             float altura = lerp(22.f, 10.f, smoothstep(0.25f, 1.f, std::abs(u)));
-            float alvo = lado * (142.f + 31.f * std::abs(u) + 5.f * rnd());
+            float alvo = lado * (165.f - 74.f * std::abs(u) + 5.f * rnd());
             float onda = 0.003f + 0.005f * rnd();
             float fase = rnd() * 6.2831853f;
             int arco = simples ? 8 : 10, cauda = simples ? 4 : 6;
@@ -439,11 +439,11 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
             }
             Vec3f inicio = pts.back().p, fora = normalizar({inicio.x, 0, inicio.z - centro.z});
             Vec3f transversal = cross(fora, Vec3f{0, 1, 0});
-            float nuca = lerp(1.605f, 1.641f, rnd());
+            float nuca = lerp(1.587f, 1.615f, rnd());
             for (int i = 1; i <= cauda; ++i) {
                 float t = float(i) / cauda;
                 Vec3f p = inicio + Vec3f{0, (nuca - inicio.y) * t, 0}
-                        + fora * (t * (0.007f + t * t * 0.019f))
+                        + fora * (t * (0.009f + t * t * 0.027f))
                         + transversal * (t * onda * std::sin(t * 8.f + fase));
                 pts.push_back({p, lerp(0.14f, 1.f, t * t)});
             }
@@ -462,7 +462,7 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
         for (int i = 0; i <= 10; ++i) {
             float t = i / 10.f;
             float ang = lerp(th0, th1, t);
-            float altura = lerp(47.f + 12.f * u, 4.f + 13.f * u, t) + 14.f * std::sin(3.14159265f * t);
+            float altura = lerp(47.f + 12.f * u, -10.f + 16.f * u, t) + 14.f * std::sin(3.14159265f * t);
             float volume = lerp(0.009f, 0.007f, t) + 0.017f * std::sin(3.14159265f * t);
             pts.push_back({naCabeca(direcao(ang, altura), volume), 0.49f * smoothstep(0.2f, 1.f, t)});
         }

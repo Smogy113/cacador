@@ -153,6 +153,13 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
         std::vector<Anel> no = {An({0.02f * s, 1.535f * s, 0.085f * s}, .016f, .012f, PESCOCO, PEITO, .5f), An({0.03f * s, 1.5f * s, 0.095f * s}, .022f, .01f, PEITO, PEITO, 1),
                                 An({0.035f * s, 1.45f * s, 0.105f * s}, .03f, .006f, PEITO, PEITO, 1)};
         k.material = MAT_TECIDO;
+        if (vis.cacadorDeFronteira) {
+            // Lenco triangular caindo do pescoco sobre o peito.
+            no = {An({0, 1.54f*s, .069f*s}, .078f, .018f, PESCOCO, PEITO, .4f),
+                  An({0, 1.49f*s, .093f*s}, .094f, .021f, PEITO, PEITO, 1),
+                  An({-.012f*s, 1.42f*s, .121f*s}, .055f, .015f, PEITO, PEITO, 1),
+                  An({-.030f*s, 1.35f*s, .133f*s}, .008f, .006f, PEITO, PEITO, 1)};
+        }
         k.tubo(no, 8, {0, 0, 1}, true, true, cor(vis.lenco * 0.9f), 0.005f * s, 0.004f * s);
     }
 
@@ -274,7 +281,7 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             k.tubo(suavizar(an2, 3), Q(32), {0, 0, 1}, false, false, [&](int, float ang, Vec3f& p, Vec3f la, Vec3f fr, float& ao) -> Rgb {
                 float baixo = clamp01((1.0f * s - p.y) / (0.45f * s));
                 if (vis.cacadorDeFronteira) {
-                    p.x *= 1.f + 0.22f * baixo;
+                    p.x *= 1.f + 0.43f * baixo;
                     p.z -= 0.024f * s * baixo;
                     p.y -= 0.050f * s * baixo;
                 }
@@ -287,7 +294,9 @@ MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
             for (size_t t = idxIni; t < m.idx.size(); t += 3) {
                 Vec3f c3 = (m.v[m.idx[t]].pos + m.v[m.idx[t + 1]].pos + m.v[m.idx[t + 2]].pos) * (1.f / 3.f);
                 bool meu = lado == 0 ? c3.x >= -0.001f : c3.x <= 0.001f;
-                bool frente = c3.z > 0.1f * s && std::abs(c3.x) < (vis.cacadorDeFronteira ? 0.125f : 0.05f) * s;
+                bool frente = c3.z > 0.1f * s && std::abs(c3.x) < 0.05f * s;
+                if (vis.cacadorDeFronteira)
+                    frente = c3.z > 0.025f * s && std::abs(c3.x) < (0.10f + 0.12f * clamp01((s - c3.y) / (0.5f * s))) * s;
                 if (meu && !frente) novos.insert(novos.end(), {m.idx[t], m.idx[t + 1], m.idx[t + 2]});
             }
             m.idx.resize(idxIni);

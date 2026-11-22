@@ -782,8 +782,8 @@ void main() {
                     tinta = max(tinta, step(rr, pel * 0.95) * smoothstep(0.16, 0.06, d));
                 }
                 albedo = mix(albedo, albedo * vec3(0.5, 0.49, 0.53), pel * 0.75);    // sombra da barba feita
-                albedo = mix(albedo, albedo * (sob ? 0.18 : 0.3), tinta * (sob ? 0.95 : 0.75) * pel);  // os pelinhos
-                nr = relevo(nr, pr, vec3(1800.0), 0.08 * pel);
+                albedo = mix(albedo, albedo * (sob ? 0.18 : 0.3), mix(tinta, 0.28, smoothstep(0.8, 2.8, dist)) * (sob ? 0.95 : 0.75) * pel);  // os pelinhos
+                nr = relevo(nr, pr, vec3(1800.0), 0.08 * pel * (1.0 - smoothstep(0.8, 2.8, dist)));
             }
             if (tanRep.z > 0.5) {
                 // rugas finas por pixel (coordenadas do rosto, em metros)
