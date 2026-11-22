@@ -135,7 +135,7 @@ void desenharDica(const char* t, const std::string& acao) {
     float W = float(GetScreenWidth()), H = float(GetScreenHeight()), tam = 24;
     float wt = (t && *t) ? std::max(tam * 1.1f, largura(Fonte::Forte, t, tam * 0.8f) + tam * 0.6f) + 12 : 0;
     float w = wt + largura(Fonte::Texto, acao, tam), x = W / 2 - w / 2, y = H - 92;
-    faixa(W / 2, y - 10, w + 220, 50, 0.8f);
+    faixa(W / 2, y - 4, w + 46, 35, 0.68f);
     if (wt > 0) tecla(t, x, y, tam);
     texto(Fonte::Texto, acao, x + wt, y - 1, tam, MARFIM);
 }
@@ -143,32 +143,25 @@ void desenharDica(const char* t, const std::string& acao) {
 // ---------------- HUD do tiroteio ----------------
 void desenharHud(float vida01, int balas, bool recarregando, int dinheiro, bool mirando, float marca, bool matou, Vector2 mini, float raio) {
     int W = GetScreenWidth(), H = GetScreenHeight();
-    // vida: arco no lado esquerdo do minimapa
-    float ini = 120.f, fim = 240.f, r0 = raio + 9, r1 = raio + 15;
-    DrawRing(mini, r0, r1, ini, fim, 48, Color{20, 14, 10, 170});
-    Color cv = vida01 < 0.35f ? SANGUE : MARFIM;
-    DrawRing(mini, r0 + 1, r1 - 1, fim - (fim - ini) * std::clamp(vida01, 0.f, 1.f), fim, 48, cv);
-    // balas: cartuchos acima do minimapa
-    float bx = mini.x - raio + 6, by = mini.y - raio - 40;
-    for (int k = 0; k < 6; k++) {
-        Color c = k < balas ? OURO : Color{60, 50, 40, 180};
-        Rectangle cart{bx + k * 14.f, by, 8, 22};
-        DrawRectangleRounded({cart.x, cart.y + 7, cart.width, 15}, 0.2f, 4, c);
-        DrawRectangleRounded({cart.x + 1, cart.y, cart.width - 2, 9}, 0.9f, 6, k < balas ? Color{176, 132, 80, 255} : Color{50, 42, 34, 180});
-    }
-    if (recarregando) texto(Fonte::Texto, "recarregando", bx + 6 * 14.f + 8, by, 19, MARFIM_ESC);
+    // A vida fica junto da navegacao; a municao tem seu proprio canto.
+    float x = mini.x - raio, y = mini.y + raio + 8;
+    DrawRectangle(int(x - 1), int(y - 1), int(2 * raio + 2), 5, Color{24, 21, 18, 220});
+    DrawRectangle(int(x), int(y), int(2 * raio * std::clamp(vida01, 0.f, 1.f)), 3,
+                  vida01 < 0.35f ? SANGUE : MARFIM);
+    float direita = W - 30.f, base = H - 30.f;
+    DrawRectangleGradientH(int(direita - 164), int(base - 59), 164, 58,
+                           Color{20, 18, 15, 0}, Color{20, 18, 15, 158});
     char buf[48];
     std::snprintf(buf, sizeof buf, "%d pratas", dinheiro);
-    texto(Fonte::Forte, buf, mini.x + raio, by - 34, 26, MARFIM, DIR);
-    // mira: ponto com quatro tracinhos finos
+    texto(Fonte::Texto, buf, direita - 9, base - 62, 20, MARFIM, DIR);
+    std::snprintf(buf, sizeof buf, "%d", balas);
+    texto(Fonte::Forte, buf, direita - 44, base - 41, 36, MARFIM, DIR);
+    texto(Fonte::Texto, "/ 6", direita - 9, base - 32, 22, MARFIM, DIR);
+    if (recarregando) texto(Fonte::Forte, "Recarregando", direita, base - 88, 21, MARFIM, DIR);
     float cx = W * 0.5f, cy = H * 0.5f;
     if (mirando) {
-        Color c = comAlfa(MARFIM, 0.9f);
-        DrawCircleV({cx, cy}, 1.6f, c);
-        for (int k = 0; k < 4; k++) {
-            float ax = k == 0 ? 1.f : (k == 1 ? -1.f : 0.f), ay = k == 2 ? 1.f : (k == 3 ? -1.f : 0.f);
-            DrawLineEx({cx + ax * 6, cy + ay * 6}, {cx + ax * 13, cy + ay * 13}, 1.5f, c);
-        }
+        DrawCircleV({cx, cy}, 2.6f, Color{25, 22, 18, 190});
+        DrawCircleV({cx, cy}, 1.5f, MARFIM);
     }
     if (marca > 0) {
         Color c = matou ? SANGUE : MARFIM;
@@ -178,9 +171,9 @@ void desenharHud(float vida01, int balas, bool recarregando, int dinheiro, bool 
 }
 
 void desenharBussola(float yaw, bool temObj, float pos, float dist) {
-    float W = float(GetScreenWidth()), largura_ = 460, cx = W / 2, y = 34;
+    float W = float(GetScreenWidth()), largura_ = std::min(340.f, W * 0.44f), cx = W / 2, y = 34;
     const float campo = 1.6f;
-    faixa(cx, y - 14, largura_ + 120, 44, 0.3f);
+    DrawLineEx({cx, y + 8}, {cx, y + 13}, 2.f, MARFIM);
     linha(cx, y + 8, largura_, comAlfa(MARFIM, 0.7f));
     for (int k = -16; k <= 16; k++) {  // riscos a cada 11,25 graus, mais fracos nas pontas
         float f = 0.5f + anguloRelativo(yaw, float(k) * 0.19635f) / campo;
@@ -195,7 +188,7 @@ void desenharBussola(float yaw, bool temObj, float pos, float dist) {
         if (f < 0.03f || f > 0.97f) continue;
         float a = 1.f - std::abs(f - 0.5f) * 1.6f;
         Color c = p.t[0] == 'N' ? Color{214, 80, 58, 255} : MARFIM;
-        texto(Fonte::Forte, p.t, cx - largura_ / 2 + f * largura_, y - 22, 24, comAlfa(c, a), CENTRO);
+        texto(Fonte::Forte, p.t, cx - largura_ / 2 + f * largura_, y - 18, 20, comAlfa(c, a), CENTRO);
     }
     if (!temObj) return;
     float f = std::clamp(pos, 0.f, 1.f), x = cx - largura_ / 2 + f * largura_;

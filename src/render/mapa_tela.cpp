@@ -82,7 +82,7 @@ void MapaTela::desenharMini(Vec3f jog, float yawJ, float yawC, const std::vector
     Vec3f fr = frenteDe(yawC), dir{-std::cos(yawC), 0, std::sin(yawC)};
     float centro[2] = {(jog.x + meta_) / (2 * meta_), (jog.z + meta_) / (2 * meta_)};
     float vd[2] = {dir.x, dir.z}, vf[2] = {fr.x, fr.z}, esc = RAIO_MUNDO / (2 * meta_);
-    DrawCircle(int(cx), int(cy), R + 4, Color{24, 17, 11, 220});
+    DrawCircle(int(cx), int(cy), R + 2, Color{24, 17, 11, 220});
     BeginShaderMode(redondo_);
     SetShaderValue(redondo_, GetShaderLocation(redondo_, "centro"), centro, SHADER_UNIFORM_VEC2);
     SetShaderValue(redondo_, GetShaderLocation(redondo_, "direita"), vd, SHADER_UNIFORM_VEC2);
@@ -124,9 +124,9 @@ void MapaTela::desenharMini(Vec3f jog, float yawJ, float yawC, const std::vector
     // norte na borda
     bool dn;
     Vector2 n = tela(jog + Vec3f{0, 0, -1000}, dn);
-    DrawRing({cx, cy}, R + 1, R + 2.5f, 0, 360, 72, estilo::comAlfa(estilo::OURO, 0.85f));
-    DrawCircle(int(n.x), int(n.y), 11, Color{24, 17, 11, 235});
-    estilo::texto(estilo::Fonte::Forte, "N", n.x, n.y - 11, 20, Color{214, 80, 58, 255}, estilo::CENTRO, false);
+    DrawRing({cx, cy}, R + 1, R + 1.8f, 0, 360, 72, estilo::comAlfa(estilo::OURO, 0.85f));
+    DrawCircle(int(n.x), int(n.y), 8, Color{24, 17, 11, 235});
+    estilo::texto(estilo::Fonte::Forte, "N", n.x, n.y - 8, 16, estilo::MARFIM, estilo::CENTRO, false);
 }
 
 void MapaTela::desenharCheio(Vec3f jog, float yawJ, const std::vector<Vec3f>& rota, bool temObj, Vec3f obj) {
