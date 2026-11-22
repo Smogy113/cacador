@@ -22,7 +22,7 @@ public:
         interiores_ = &interiores;
         regioes_ = &regioes;
     }
-    // raio 0 = sem grama; densidade em folhas por m2
+    // Raio zero desliga a camada densa. A densidade controla a quantidade de tufos.
     void configurar(float raio, float densidade);
     void atualizar(Vec3f foco, int maxNovos);
     void desenhar(const Camera3D& cam, Material& mat);
@@ -32,7 +32,6 @@ public:
     int chamadas() const { return chamadas_; }
 
 private:
-    Mesh montar(int i, int j) const;
     const Terreno* t_ = nullptr;
     const MundoColisao* col_ = nullptr;
     const std::vector<InteriorMundo>* interiores_ = nullptr;
@@ -41,7 +40,10 @@ private:
     struct Bloco {
         Mesh malha{};
         BoundingBox limites{};
+        int triangulosBase = 0;
+        bool detalhado = false;
     };
+    Bloco montar(int i, int j, bool detalhado) const;
     std::map<std::pair<int, int>, Bloco> blocos_;
     size_t tris_ = 0;
     int chamadas_ = 0;

@@ -81,3 +81,17 @@ animar vento e granulação.
 
 Com `--benchmark --frames 40 --qualidade alto`, em 1280×720 no llvmpipe, a cidade passou de
 303,82 para 305,70 ms em média por quadro. A floresta passou de 259,24 para 238,69 ms.
+
+## Grama
+
+- `src/render/grama.cpp` monta uma malha indexada por bloco de 8 m. A ordem dos índices mantém
+  as folhas principais primeiro, para desenhar o mesmo bloco à distância com menos triângulos.
+  A semente de cada tufo conserva as folhas principais quando o bloco recebe folhas curvas.
+- As folhas extras desaparecem gradualmente até 12 m no `FS_LIT`. Ao alterar esse raio,
+  ajuste também `RAIO_DETALHE` no C++. Se mudar o vento, revise a folga da caixa da malha.
+- Para comparar silhueta e cobertura no Alto, use
+  `--pos 315 346 --yaw 90 --hora 12 --pitch 39 --dist-camera 2.6`. Confira também a margem
+  do rio, as bordas das trilhas e a seção **Grama** do F1.
+
+Em 32 quadros por cena no Alto, a 1280×720 no llvmpipe, o tempo médio passou de 262,04 para
+280,99 ms na cidade de perto e de 273,65 para 259,39 ms na floresta.

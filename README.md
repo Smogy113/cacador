@@ -66,6 +66,10 @@ com a sombra de cada fileira (cidade); e tábuas sobrepostas nas casas de madeir
 palha e as telhas são desenhadas uma vez numa textura de 1024² ao abrir o jogo; as tábuas usam a
 textura de madeira das paredes. O custo por quadro fica praticamente igual ao de antes.
 
+O capim cresce em tufos irregulares, com folhas finas, alturas variadas e algumas pontas
+secas. No Médio e no Alto, perto da câmera aparecem também folhas curvas que balançam com o
+vento. A cobertura fica mais baixa junto às trilhas e aos poços, e muda de tom na margem do rio.
+
 **Painel de depuração (F1):** em "Gráficos" dá para ligar e desligar a cabeça por raymarching (com
 o tempo do quadro ao lado, para comparar o custo), a luz de personagem, a profundidade de campo e a
 granulação/aberração.

@@ -76,8 +76,8 @@ void main() {
     if (vertexTexCoord.y > 3.5 && vertexTexCoord.y < 4.5) {  // grama: a ponta balanca com o vento (rajadas passando pelo campo)
         float flex = vertexColor.a;
         float onda = sin(tempoVento * 1.6 + vp.x * 0.23 + vp.z * 0.17) * 0.6 + sin(tempoVento * 3.1 + vp.x * 1.3) * 0.25;
-        vp.x += onda * 0.16 * flex;
-        vp.z += cos(tempoVento * 1.2 + vp.z * 0.31) * 0.07 * flex;
+        vp.x += onda * 0.08 * flex;
+        vp.z += cos(tempoVento * 1.2 + vp.z * 0.31) * 0.045 * flex;
     }
     vec4 p = matModel * vec4(vp, 1.0);
     posMundo = p.xyz;
@@ -827,8 +827,11 @@ void main() {
     vec3 Tcab = vec3(0.0, 1.0, 0.0);
     if (extra.y > 3.5 && extra.y < 4.5) {  // grama: some aos poucos na borda do campo desenhado
         float dg = length(posMundo.xz - posCamera.xz);
-        float hg = fract(sin(dot(floor(posMundo.xz * 9.0), vec2(12.9898, 78.233))) * 43758.5453);
-        if (dg > raioGrama - 9.0 * hg) discard;
+        bool extraFolha = extra.y > 4.15;
+        // A semente e constante em toda a folha, inclusive quando ela balanca.
+        float sorte = clamp((extra.y - (extraFolha ? 4.2 : 4.0)) * 10.0, 0.0, 1.0);
+        float alcance = extraFolha ? min(raioGrama, 12.0) : raioGrama;
+        if (dg > alcance * (1.0 - (extraFolha ? 0.48 : 0.25) * sorte)) discard;
         gGrama = 1.0;
     }
 #ifdef PAREDES

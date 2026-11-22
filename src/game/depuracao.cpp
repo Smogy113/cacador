@@ -159,7 +159,7 @@ void Jogo::desenharDepuracao() {
     barra("Campo de visão", dbg_.fov, 40.f, 100.f, "%.0f°");
     float rg = grama_.raio(), dg = dbg_.densGrama < 0 ? (luz_.nivel() == Nivel::Alto ? 20.f : 12.f) : dbg_.densGrama;
     bool mudou = barra("Raio da grama", rg, 0.f, 60.f, "%.0f m");
-    mudou |= barra("Folhas por m²", dg, 0.f, 40.f, "%.0f");
+    mudou |= barra("Densidade da grama", dg, 0.f, 40.f, "%.0f");
     if (mudou) { dbg_.densGrama = dg; grama_.configurar(std::round(rg), std::round(dg)); }
 
     // ---------------- coluna 3: jogador, recompensa, teleporte ----------------

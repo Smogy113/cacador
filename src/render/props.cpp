@@ -1073,14 +1073,14 @@ void Cenario::construirPerto(Pedaco& p) {
                 Vec3f base{x, y, z};
                 Vec3f r = col_->resolver(base, 0.35f);
                 if (std::hypot(r.x - x, r.z - z) > 0.01f) continue;  // nao nasce dentro de casa/cerca
-                float h = (0.28f + aleatorio01(rng) * 0.3f) * ambiente.altura, verde = 0.85f + aleatorio01(rng) * 0.3f;
-                Rgb cor = corCapimUmido({0.36f * verde, 0.5f * verde, 0.2f * verde}, ambiente.umidade);
-                Rgb ponta = corCapimUmido({0.62f * verde, 0.66f * verde, 0.3f * verde}, ambiente.umidade);
+                float h = (0.15f + aleatorio01(rng) * 0.22f) * ambiente.altura, verde = 0.85f + aleatorio01(rng) * 0.3f;
+                Rgb cor = corCapimUmido({0.28f * verde, 0.40f * verde, 0.16f * verde}, ambiente.umidade);
+                Rgb ponta = corCapimUmido({0.43f * verde, 0.51f * verde, 0.23f * verde}, ambiente.umidade);
                 for (int k = 0; k < 3; k++) {
-                    float a = aleatorio01(rng) * 6.2831f, l = 0.07f + aleatorio01(rng) * 0.05f;
+                    float a = aleatorio01(rng) * 6.2831f, l = 0.008f + aleatorio01(rng) * 0.009f;
                     Vec3f lado{std::cos(a) * l, 0, std::sin(a) * l};
-                    Vec3f top = base + Vec3f{std::sin(a + 1.3f) * h * 0.35f * ambiente.inclinacao, h,
-                                             std::cos(a + 1.3f) * h * 0.35f * ambiente.inclinacao};
+                    Vec3f top = base + Vec3f{std::sin(a + 1.3f) * h * 0.38f * ambiente.inclinacao, h * (0.68f + 0.16f * k),
+                                             std::cos(a + 1.3f) * h * 0.38f * ambiente.inclinacao};
                     Rgb c = k == 1 ? ponta : cor;
                     total.triangulo(base - lado, base + lado, top, c);
                     total.triangulo(base + lado, base - lado, top, c);
