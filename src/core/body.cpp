@@ -32,7 +32,23 @@ Esqueleto esqueletoHumano(const Proporcoes& p) {
     return e;
 }
 
-// Revolver na mao direita (pose de repouso: braco caido, cano para baixo seguindo a mao).
+Esqueleto esqueletoHumanoBase(const Proporcoes& p) {
+    Esqueleto e = esqueletoHumano(p);
+    float s = p.altura / 1.8f, o = p.ombros * s;
+    auto P = [&](float x, float y, float z) { return Vec3f{x, y*s, z*s}; };
+    e.poseA = true;
+    for (int lado = 0; lado < 2; ++lado) {
+        float sx = lado == 0 ? 1.f : -1.f;
+        int b = lado == 0 ? BRACO_E : BRACO_D, ab = lado == 0 ? ANTEBRACO_E : ANTEBRACO_D;
+        int m = lado == 0 ? MAO_E : MAO_D;
+        e.ossos[b] = {PEITO, P(sx*.194f*o, 1.441f, .020f), P(sx*.366f*o, 1.244f, .020f)};
+        e.ossos[ab] = {b, P(sx*.366f*o, 1.244f, .020f), P(sx*.503f*o, 1.114f, .023f)};
+        e.ossos[m] = {ab, P(sx*.503f*o, 1.114f, .023f), P(sx*.620f*o, .995f, .025f)};
+    }
+    return e;
+}
+
+// Revolver na mao direita, seguindo o eixo da mao na pose de repouso.
 Vec3f bocaDoRevolver(const Esqueleto& esq, float escala) {
     const Osso& mao = esq.ossos[MAO_D];
     Vec3f eixo = normalizar(mao.fim - mao.inicio);
@@ -59,6 +75,7 @@ void loft::revolverNaMao(Construtor& k, const Esqueleto& esq, float s) {
 }
 
 MalhaPele corpoHumano(const Proporcoes& pr, const Visual& vis) {
+    if (vis.corpoBase) return corpoHumanoBase(pr, vis);
     MalhaPele m;
     Construtor k{m};
     float s = pr.altura / 1.8f, ms = pr.massa;

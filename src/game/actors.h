@@ -19,7 +19,7 @@ public:
     void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose, bool hd = false, Material* matCabeca = nullptr) const;
 
     const Esqueleto& esqueleto() const { return esq_; }
-    int triangulos(bool hd = false) const { return hd ? hd_.triangulos() : malha_.triangulos(); }
+    int triangulos(bool hd = false) const { return hd && !baseHumana_ ? hd_.triangulos() : malha_.triangulos(); }
 
 private:
     Esqueleto esq_;
@@ -29,6 +29,7 @@ private:
     mutable bool volumePendente_ = false;
     float escXZ_ = 1, escY_ = 1;
     int trisSemPele_ = 0;
+    bool baseHumana_ = false;
     mutable std::vector<Mat4> ossos_;
 };
 

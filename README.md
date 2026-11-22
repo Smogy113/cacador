@@ -3,10 +3,12 @@
 Mundo aberto 3D low-poly, medieval, com clima de faroeste: você é um caçador de recompensas
 numa fronteira com cidade murada, vilarejo, fazendas, floresta, rio, ruínas de castelo,
 acampamento de bandidos, mina e cemitério. Feito em C++ com raylib, sem texturas nem arquivos de
-modelo: tudo é gerado pelo código.
+modelo em tempo de execução: a geometria é gerada ou decodificada pelo próprio código.
 
-Pessoas e cavalos têm corpo anatômico (~1.200 e ~1.500 triângulos) com esqueleto animado na placa
-de vídeo: andar, correr, respirar parado e cavalgar (passo, trote e galope).
+O protagonista usa uma base humana real quantizada no executável (26,7 mil triângulos, cerca de
+250 KB), em A-pose e pronta para receber cabelo e roupas como camadas. Pessoas distantes e cavalos
+mantêm modelos leves com esqueleto animado na placa de vídeo: andar, correr, respirar parado e
+cavalgar (passo, trote e galope).
 
 **v2 (jogável):** pegue uma recompensa no quadro, siga a bússola até o esconderijo, enfrente o
 procurado e o bando dele no revólver e traga o alvo vivo (vale mais) ou morto ao xerife, ao lado do

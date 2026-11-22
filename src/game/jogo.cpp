@@ -45,13 +45,16 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.lenco = {0.66f, 0.054f, 0.037f};
     r.cabelo = {0.27f, 0.2f, 0.14f};  // castanho com mechas mais claras
     r.barba = false;  // rosto limpo (pedido do usuario)
-    r.equipamento = !op.estudio;
+    r.equipamento = false;
     r.heroi = true;
-    r.cacadorDeFronteira = true;
-    r.revolver = !op.estudio;
-    r.cabeloLongo = true;
-    r.chapeuAba = false;  // sem chapeu: cabelo penteado para tras
-    modeloJogador_.carregarHeroi(Proporcoes{1.82f, 1.05f, 1.f, 1.f}, r);
+    r.corpoBase = true;
+    r.semCabelo = true;
+    r.cacadorDeFronteira = false;
+    r.revolver = false;
+    r.cabeloLongo = false;
+    r.chapeuAba = false;
+    r.sobretudo = false;
+    modeloJogador_.carregarHeroi(Proporcoes{1.82f, 1.07f, 1.f, 1.10f}, r);
     {   // folha de porta: tabuas, travessas, dobradicas de ferro (dobradica na origem, folha ao longo de +x)
         MeshBuilder m;
         const Rgb tons[4] = {{0.36f, 0.25f, 0.16f}, {0.32f, 0.22f, 0.14f}, {0.39f, 0.27f, 0.17f}, {0.34f, 0.23f, 0.15f}};
@@ -173,9 +176,9 @@ void Jogo::atualizarCamera(float dt, const Entrada& e) {
     rig_.ombroAlvo = ombroAntes;
     Vec3f p = rig_.posicao(), o = rig_.olhar();
     if (op_.retrato > 0) {
-        float alt = modeloJogador_.esqueleto().ossos[CABECA].inicio.y + 0.06f;
+        float alt = op_.estudio && op_.retrato > 1.f ? 0.91f : modeloJogador_.esqueleto().ossos[CABECA].inicio.y + 0.06f;
         Vec3f f = frenteDe(jogador_.yaw + op_.girarCamera * DEG2RAD);
-        o = jogador_.pos + Vec3f{0, alt - 0.1f * op_.retrato, 0};
+        o = jogador_.pos + Vec3f{0, alt - (op_.estudio && op_.retrato > 1.f ? 0.f : 0.1f * op_.retrato), 0};
         p = o + f * op_.retrato + Vec3f{0, 0.05f, 0};
     }
     cam_.position = {p.x, p.y, p.z};

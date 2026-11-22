@@ -7,13 +7,15 @@
 #include "rlgl.h"
 
 void ModeloHumano::carregar(const Proporcoes& p, const Visual& v) {
-    esq_ = esqueletoHumano(p);
+    baseHumana_ = v.corpoBase;
+    esq_ = v.corpoBase ? esqueletoHumanoBase(p) : esqueletoHumano(p);
     malha_.carregar(corpoHumano(p, v));
-    hd_.carregar(corpoHumanoHD(p, v));
+    if (!baseHumana_) hd_.carregar(corpoHumanoHD(p, v));
 }
 
 void ModeloHumano::carregarHeroi(const Proporcoes& p, const Visual& v) {
     carregar(p, v);
+    if (v.corpoBase) return;  // a mesma base compacta atende perto e longe; nao duplica na GPU
     if (v.cacadorDeFronteira) return;  // a silhueta vem da malha animada
 #if !defined(PLATFORM_WEB)
     Visual sp = v;
@@ -50,7 +52,7 @@ void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose,
         cabeca_.desenhar(*matCabeca, ossos_, modelo);
         return;
     }
-    (hd ? hd_ : malha_).desenhar(mat, ossos_, modelo);
+    (hd && !baseHumana_ ? hd_ : malha_).desenhar(mat, ossos_, modelo);
 }
 
 void ModeloCavaloAnat::carregar(const VisualCavalo& v) {

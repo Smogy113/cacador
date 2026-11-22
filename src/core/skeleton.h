@@ -10,6 +10,7 @@ struct Osso {
 
 struct Esqueleto {
     std::vector<Osso> ossos;  // pai sempre vem antes do filho
+    bool poseA = false;        // repouso com bracos abertos; animacoes compensam quando necessario
 };
 
 struct Pose {

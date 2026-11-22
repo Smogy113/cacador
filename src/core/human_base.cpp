@@ -1,0 +1,119 @@
+#include "core/body.h"
+
+#include <algorithm>
+#include <cmath>
+
+#include "core/loft.h"
+
+namespace {
+#include "core/human_base_data.inc"
+
+float projecao(Vec3f p, Vec3f a, Vec3f b) {
+    Vec3f ab = b - a;
+    return clamp01(dot(p - a, ab) / std::max(dot(ab, ab), 1e-8f));
+}
+
+void influencias(Vec3f p, VertPele& v) {
+    const float ax = std::abs(p.x), y = p.y;
+    auto pesos = [&](int a, int b, float wa) {
+        v.osso[0] = uint8_t(a);
+        v.osso[1] = uint8_t(b);
+        v.peso = clamp01(wa);
+    };
+
+    // Os bracos da base ja estao em A-pose. O limite acompanha a lateral do
+    // tronco para nao capturar peitoral, grande dorsal ou trapezio.
+    float limiteBraco = y > 1.42f ? .205f : lerp(.155f, .245f, clamp01((1.42f - y) / .36f));
+    if (ax > limiteBraco && y > .88f) {
+        const bool esquerda = p.x > 0;
+        const int braco = esquerda ? BRACO_E : BRACO_D;
+        const int antebraco = esquerda ? ANTEBRACO_E : ANTEBRACO_D;
+        const int mao = esquerda ? MAO_E : MAO_D;
+        Vec3f q{ax, y, p.z};
+        const Vec3f ombro{.194f, 1.441f, .020f}, cotovelo{.366f, 1.244f, .020f};
+        const Vec3f pulso{.503f, 1.114f, .023f}, dedos{.620f, .995f, .025f};
+        float t1 = projecao(q, ombro, cotovelo);
+        float t2 = projecao(q, cotovelo, pulso);
+        float t3 = projecao(q, pulso, dedos);
+        if (t1 < .86f && ax < .43f)
+            pesos(braco, PEITO, smoothstep(0.f, .22f, t1));
+        else if (t2 < .82f && ax < .51f)
+            pesos(antebraco, braco, smoothstep(.02f, .32f, t2));
+        else
+            pesos(mao, antebraco, smoothstep(.02f, .42f, t3));
+        return;
+    }
+
+    if (y < 1.02f && ax > .018f) {
+        const bool esquerda = p.x > 0;
+        const int coxa = esquerda ? COXA_E : COXA_D;
+        const int canela = esquerda ? CANELA_E : CANELA_D;
+        const int pe = esquerda ? PE_E : PE_D;
+        if (y < .14f) pesos(pe, canela, smoothstep(.13f, .055f, y));
+        else if (y < .54f) pesos(canela, coxa, smoothstep(.51f, .25f, y));
+        else pesos(coxa, QUADRIL, smoothstep(1.01f, .86f, y));
+        return;
+    }
+
+    if (y < 1.07f) pesos(QUADRIL, COLUNA, smoothstep(1.07f, .97f, y));
+    else if (y < 1.28f) pesos(COLUNA, QUADRIL, smoothstep(1.09f, 1.22f, y));
+    else if (y < 1.51f) pesos(PEITO, COLUNA, smoothstep(1.28f, 1.41f, y));
+    else if (y < 1.60f) pesos(PESCOCO, PEITO, smoothstep(1.50f, 1.58f, y));
+    else pesos(CABECA, PESCOCO, smoothstep(1.56f, 1.64f, y));
+}
+}  // namespace
+
+MalhaPele corpoHumanoBase(const Proporcoes& pr, const Visual& vis) {
+    MalhaPele m;
+    m.v.resize(HUMANO_VERTICES);
+    m.idx.assign(HUMANO_IDX, HUMANO_IDX + HUMANO_INDICES);
+    const float s = pr.altura / 1.8f;
+
+    for (uint32_t i = 0; i < HUMANO_VERTICES; ++i) {
+        Vec3f p{HUMANO_POS[i*3] * .0001f, HUMANO_POS[i*3+1] * .0001f,
+                HUMANO_POS[i*3+2] * .0001f};
+        // O molde original abre as canelas e traz os punhos para a frente.
+        // Esta correcao de repouso aproxima a A-pose reta usada para roupa e rig.
+        float ax0 = std::abs(p.x);
+        float limiteBraco0 = p.y > 1.42f ? .205f : lerp(.155f, .245f, clamp01((1.42f - p.y) / .36f));
+        if (ax0 > limiteBraco0 && p.y > .88f)
+            p.z -= smoothstep(.36f, .50f, ax0) * .19f;
+        if (p.y < .96f && ax0 > .03f) {
+            float fechar = .09f * (1.f - smoothstep(.08f, .96f, p.y)) * smoothstep(.03f, .08f, ax0);
+            p.x -= std::copysign(fechar, p.x);
+        }
+        float cabeca = smoothstep(1.50f, 1.64f, p.y);
+        float alto = smoothstep(1.16f, 1.45f, p.y) * (1.f - cabeca);
+        float pelve = 1.f - smoothstep(.91f, 1.22f, p.y);
+        float massaCorpo = lerp(pr.massa, 1.f, cabeca);
+        float largura = massaCorpo * (1.f + (pr.ombros-1.f)*alto + (pr.quadril-1.f)*pelve);
+        p.x *= largura;
+        p.z *= massaCorpo;
+
+        VertPele& v = m.v[i];
+        v.pos = p * s;
+        v.cor = vis.pele;
+        v.ao = 1.f;
+        v.material = MAT_PELE;
+        influencias(p, v);
+    }
+    // O hm08 ja modela a esclera dentro das palpebras. Uma pequena calota na
+    // frente acrescenta iris/pupila sem recortar nem duplicar a face.
+    loft::Construtor construtor{m};
+    construtor.material = MAT_OLHO;
+    for (float sx : {1.f, -1.f}) {
+        Vec3f c{sx * .034f * s, 1.692f * s, .148f * s};
+        std::vector<loft::Anel> aneis;
+        constexpr int linhas = 8;
+        for (int i = 0; i <= linhas; ++i) {
+            float ang = loft::PI_F * (1.f - i / float(linhas));
+            float r = .0065f * s;
+            aneis.push_back({c + Vec3f{0, 0, std::cos(ang) * r}, std::sin(ang) * r, std::sin(ang) * r,
+                             CABECA, CABECA, 1.f});
+        }
+        construtor.tubo(aneis, 16, {0, 1, 0}, true, true,
+                        [](int, float, Vec3f&, Vec3f, Vec3f, float&) { return Rgb{.34f, .22f, .11f}; });
+    }
+    loft::normaisSuaves(m);
+    return m;
+}

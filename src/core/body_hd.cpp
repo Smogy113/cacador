@@ -58,6 +58,7 @@ Pintor cor(Rgb c) {
 }  // namespace
 
 MalhaPele corpoHumanoHD(const Proporcoes& pr, const Visual& vis) {
+    if (vis.corpoBase) return corpoHumanoBase(pr, vis);
     MalhaPele m;
     Construtor k{m};
     const float s = pr.altura / 1.8f, ms = pr.massa, lo = pr.ombros, lq = pr.quadril;

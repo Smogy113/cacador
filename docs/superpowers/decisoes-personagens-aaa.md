@@ -60,3 +60,21 @@
 - Ruling: sombra de perto do personagem com PCF bilinear numa grade 3×3, sem ruído — a sombra do nariz ficava pontilhada (parecia sujeira/barba). Sardas redondas.
 - Ferramenta: visualizador por raymarching da SDF (fora do repositório) com vistas de frente/perfil/baixo e mapa de cavidade para achar vincos — iterar a escultura sem abrir o jogo.
 - Benchmark Baixo: máx. 264 mil triângulos / 113 chamadas.
+
+## Base humana compacta e personalizável (0.25.0)
+- Ruling: a soma de primitivas SDF foi descartada para o corpo. Ela parecia aceitável de frente,
+  mas criava volumes inflados no perfil e custava mais de 70 mil triângulos com a cabeça.
+- Ruling: a base agora vem da topologia humana hm08 do MakeHuman, asset CC0, transformada pelo
+  `tools/generate_human_base.py`. O gerador aplica o alvo masculino jovem e definição muscular,
+  normaliza para 1,80 m e grava somente posições quantizadas a 0,1 mm e índices de 16 bits em
+  `human_base_data.inc`. Não há OBJ, textura ou carregador de modelo no jogo.
+- Resultado: 13.380 vértices e 26.756 triângulos para corpo, rosto, mãos e pés completos; o objeto
+  compilado ocupa cerca de 250 KB. A geometria anterior precisava de mais de duas vezes isso.
+- Ruling: massa, ombros, quadril e altura continuam parâmetros aplicados ao decodificar a malha;
+  roupa e cabelo serão malhas/camadas independentes. O protótipo usa corpo atlético neutro, sem
+  cabelo, roupa ou equipamento.
+- Ruling: o esqueleto da base tem repouso em A-pose. As animações compensam esse repouso para pôr
+  os braços junto ao corpo; os esqueletos antigos preservam o repouso anterior.
+- Proveniência: `base.obj`, `caucasian-male-young.target` e
+  `universal-male-young-maxmuscle-averageweight.target`, MakeHuman commit
+  `a8bc2d54ff0ac92e78ff71431b1023eda42bf482`, licenciados em CC0 1.0.

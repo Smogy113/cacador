@@ -21,6 +21,8 @@ struct Visual {
     bool equipamento = false;  // bandoleira, besta nas costas e laco (so no modelo HD)
     bool revolver = false;     // revolver na mao direita
     bool cacadorDeFronteira = false;  // perfil esculpido e roupa do protagonista
+    bool corpoBase = false;           // manequim anatomico sem roupa, cabelo ou equipamento
+    bool semCabelo = false;           // mantem a cabeca limpa para receber penteados por cima
     bool cabeloLongo = false;  // mechas compridas ate a nuca, com fisica (o heroi)
     bool heroi = false;        // cabeca esculpida em resolucao maxima (o jogador); os outros usam celulas maiores
     bool semPeleCabeca = false;  // a pele esculpida da cabeca nao entra (desenhada por raymarching); olhos, cilios e cabelo sim
@@ -55,8 +57,11 @@ struct MalhaPele {
 };
 
 Esqueleto esqueletoHumano(const Proporcoes& p);
+Esqueleto esqueletoHumanoBase(const Proporcoes& p);
 Vec3f bocaDoRevolver(const Esqueleto& esq, float escala);
 MalhaPele corpoHumano(const Proporcoes& p, const Visual& vis);
+// Base humana CC0 quantizada no executavel: anatomia real, A-pose e sem roupa/cabelo.
+MalhaPele corpoHumanoBase(const Proporcoes& p, const Visual& vis);
 // Versao de alta definicao (perto da camera): ~6-14 mil triangulos, rosto esculpido, dedos, roupa com volume.
 MalhaPele corpoHumanoHD(const Proporcoes& p, const Visual& vis);
 

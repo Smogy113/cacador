@@ -330,6 +330,9 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
 }
 
 Pose Jogo::poseDoJogador(const Esqueleto& ej) const {
+    if (op_.estudio) {
+        return poseRepouso(ej);
+    }
     if (morteT_ >= 0) return poseCair(ej, morteT_ / 0.6f);
     if (arma_.recarregando()) {
         Pose p = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseRecarregar(ej, 1.f - arma_.recarga / Revolver::TEMPO_RECARGA);
