@@ -38,7 +38,11 @@ private:
     const std::vector<InteriorMundo>* interiores_ = nullptr;
     const RegioesCapim* regioes_ = nullptr;
     float raio_ = 0, densidade_ = 0;
-    std::map<std::pair<int, int>, Mesh> blocos_;
+    struct Bloco {
+        Mesh malha{};
+        BoundingBox limites{};
+    };
+    std::map<std::pair<int, int>, Bloco> blocos_;
     size_t tris_ = 0;
     int chamadas_ = 0;
 };

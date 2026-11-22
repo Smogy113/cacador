@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include "core/noise.h"
 #include "render/perfil.h"
 #include "render/shaders.h"
@@ -72,7 +73,7 @@ void Iluminacao::liberarEfeitos() {
     matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = matCabeca_.maps[MATERIAL_MAP_ROUGHNESS].texture = Texture2D{};
     {
         float zero = 0;
-        for (Shader sh : personagens()) SetShaderValue(sh, GetShaderLocation(sh, "usarSombraPerto"), &zero, SHADER_UNIFORM_FLOAT);
+        for (Shader sh : personagens_) SetShaderValue(sh, GetShaderLocation(sh, "usarSombraPerto"), &zero, SHADER_UNIFORM_FLOAT);
     }
     if (sombraOk_) {
         rlUnloadTexture(sombraRT_.depth.id);
@@ -98,7 +99,7 @@ void Iluminacao::liberarEfeitos() {
     }
     mat_.maps[MATERIAL_MAP_SPECULAR].texture = matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
     float zero = 0;
-    for (Shader sh : sombreados()) SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &zero, SHADER_UNIFORM_FLOAT);
+    for (Shader sh : sombreados_) SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &zero, SHADER_UNIFORM_FLOAT);
     matPele_.maps[MATERIAL_MAP_SPECULAR].texture = matCabeca_.maps[MATERIAL_MAP_SPECULAR].texture = Texture2D{};
 }
 
@@ -130,7 +131,9 @@ void Iluminacao::carregar(Nivel nivel) {
         litParede_.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(litParede_, "matModel");
         litParede_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(litParede_, "texSombra");
         matConstr_.shader = litParede_;
-        assarMateriais();
+        locJanelaP_ = GetShaderLocation(litParede_, "janelaP");
+        locJanelaN_ = GetShaderLocation(litParede_, "janelaN");
+        locNumJanelas_ = GetShaderLocation(litParede_, "numJanelas");
     }
 #endif
     esfera_ = LoadModelFromMesh(GenMeshSphere(400.f, 24, 32));
@@ -184,7 +187,18 @@ void Iluminacao::carregar(Nivel nivel) {
     matProfPele_ = LoadMaterialDefault();
     matProfPele_.shader = profPele_;
     junta_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(junta_, "texBrilho");
+    personagens_ = {pele_};
+    sombreados_ = {lit_, pele_};
+    if (paredeOk_) sombreados_.push_back(litParede_);
+    if (cabecaOk_) {
+        personagens_.push_back(cabeca_);
+        sombreados_.push_back(cabeca_);
+    }
     carregado_ = true;
+    }
+    if (paredeOk_ && nivel_ != Nivel::Baixo && !materiaisAssados_) {
+        assarMateriais();
+        materiaisAssados_ = true;
     }
     if (ef_.sombras) {
         sombraRT_ = criarMapaSombra(ef_.resolucaoSombra);
@@ -194,7 +208,7 @@ void Iluminacao::carregar(Nivel nivel) {
         if (sombraPertoOk_) {
             matPele_.maps[MATERIAL_MAP_ROUGHNESS].texture = matCabeca_.maps[MATERIAL_MAP_ROUGHNESS].texture = sombraPertoRT_.depth;
             float t = 1.f / 1024.f;
-            for (Shader sh : personagens()) setF(sh, "texelSombraPerto", t);
+            for (Shader sh : personagens_) setF(sh, "texelSombraPerto", t);
         }
         if (sombraOk_) {
             mat_.maps[MATERIAL_MAP_SPECULAR].texture = matConstr_.maps[MATERIAL_MAP_SPECULAR].texture = sombraRT_.depth;
@@ -202,11 +216,11 @@ void Iluminacao::carregar(Nivel nivel) {
             float texel = 1.f / ef_.resolucaoSombra;
             setF(lit_, "texelSombra", texel);
             if (paredeOk_) setF(litParede_, "texelSombra", texel);
-            for (Shader sh : personagens()) setF(sh, "texelSombra", texel);
+            for (Shader sh : personagens_) setF(sh, "texelSombra", texel);
             float tm = 2 * AREA_SOMBRA / ef_.resolucaoSombra;
             setF(lit_, "texelMetros", tm);
             if (paredeOk_) setF(litParede_, "texelMetros", tm);
-            for (Shader sh : personagens()) setF(sh, "texelMetros", tm);
+            for (Shader sh : personagens_) setF(sh, "texelMetros", tm);
         }
     }
     if (ef_.bloom || ef_.raiosDeLuz || ef_.ssao) {
@@ -257,6 +271,7 @@ void Iluminacao::descarregar() {
     for (auto& t : texMat_)
         if (t.id) UnloadRenderTexture(t);
     for (auto& t : texMat_) t = RenderTexture2D{};
+    materiaisAssados_ = false;
     if (paredeOk_) {
         matConstr_.shader = lit_;
         for (int m : {MATERIAL_MAP_ALBEDO, MATERIAL_MAP_NORMAL, MATERIAL_MAP_ROUGHNESS, MATERIAL_MAP_OCCLUSION}) matConstr_.maps[m].texture = Texture2D{};
@@ -288,7 +303,28 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
     sol_ = relogio.direcaoSol();
     lua_ = relogio.direcaoLua();
     noite_ = relogio.intensidadeTochas();
-    for (Shader sh : sombreados()) {
+
+    // A selecao e o tremor das luzes sao iguais para todos os materiais.
+    std::vector<const LuzPontual*> ord;
+    ord.reserve(todas.size());
+    for (const auto& l : todas) ord.push_back(&l);
+    auto d2 = [&](const LuzPontual* l) { Vec3f d = l->pos - foco; return dot(d, d); };
+    int n = int(std::min<size_t>(MAX_LUZES, ord.size()));
+    std::partial_sort(ord.begin(), ord.begin() + n, ord.end(), [&](auto a, auto b) { return d2(a) < d2(b); });
+    float pos[MAX_LUZES * 4], cor[MAX_LUZES * 3];
+    for (int i = 0; i < n; i++) {
+        const LuzPontual& l = *ord[i];
+        float tremor = 1.f;
+        if (l.tremor > 0) {
+            float semente = l.pos.x * 0.37f + l.pos.z * 0.71f;
+            tremor = 1.f + l.tremor * (0.12f * std::sin(tempo * 13.f + semente) + 0.10f * ruido2D(tempo * 6.f, semente, 3));
+        }
+        pos[i * 4 + 0] = l.pos.x; pos[i * 4 + 1] = l.pos.y; pos[i * 4 + 2] = l.pos.z; pos[i * 4 + 3] = l.raio;
+        cor[i * 3 + 0] = l.cor.r * tremor; cor[i * 3 + 1] = l.cor.g * tremor; cor[i * 3 + 2] = l.cor.b * tremor;
+    }
+
+    float luaAcima = smoothstep(-0.05f, 0.15f, lua_.y);
+    for (Shader sh : sombreados_) {
         uniformesComuns(sh, paleta_, sol_, noite_);
         setV3(sh, "posCamera", {cam.position.x, cam.position.y, cam.position.z});
         setF(sh, "tempoVento", tempo);
@@ -296,33 +332,15 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
         setF(sh, "neblinaBaixa", sol_.y > 0.f ? 0.25f + 0.85f * (1.f - smoothstep(0.05f, 0.45f, sol_.y)) : 0.5f);
         setRgb(sh, "ambCeu", paleta_.ambienteCeu);
         setRgb(sh, "ambChao", paleta_.ambienteChao);
-        float luaAcima = smoothstep(-0.05f, 0.15f, lua_.y);
         setRgb(sh, "corLua", Rgb{0.10f, 0.13f, 0.22f} * (luaAcima * noite_));
         setF(sh, "noite", noite_);
         setRgb(sh, "corChao", Rgb{0.10f, 0.15f, 0.05f});
 
-        // as 8 luzes mais proximas do foco
-        std::vector<const LuzPontual*> ord;
-        ord.reserve(todas.size());
-        for (auto& l : todas) ord.push_back(&l);
-        auto d2 = [&](const LuzPontual* l) { Vec3f d = l->pos - foco; return dot(d, d); };
-        size_t n = std::min<size_t>(MAX_LUZES, ord.size());
-        std::partial_sort(ord.begin(), ord.begin() + n, ord.end(), [&](auto a, auto b) { return d2(a) < d2(b); });
-        float pos[MAX_LUZES * 4] = {0}, cor[MAX_LUZES * 3] = {0};
-        for (size_t i = 0; i < n; i++) {
-            const LuzPontual& l = *ord[i];
-            float tremor = 1.f;
-            if (l.tremor > 0) {
-                float semente = l.pos.x * 0.37f + l.pos.z * 0.71f;
-                tremor = 1.f + l.tremor * (0.12f * std::sin(tempo * 13.f + semente) + 0.10f * ruido2D(tempo * 6.f, semente, 3));
-            }
-            pos[i * 4 + 0] = l.pos.x; pos[i * 4 + 1] = l.pos.y; pos[i * 4 + 2] = l.pos.z; pos[i * 4 + 3] = l.raio;
-            cor[i * 3 + 0] = l.cor.r * tremor; cor[i * 3 + 1] = l.cor.g * tremor; cor[i * 3 + 2] = l.cor.b * tremor;
+        if (n) {
+            SetShaderValueV(sh, GetShaderLocation(sh, "luzPos"), pos, SHADER_UNIFORM_VEC4, n);
+            SetShaderValueV(sh, GetShaderLocation(sh, "luzCor"), cor, SHADER_UNIFORM_VEC3, n);
         }
-        int ni = int(n);
-        SetShaderValueV(sh, GetShaderLocation(sh, "luzPos"), pos, SHADER_UNIFORM_VEC4, MAX_LUZES);
-        SetShaderValueV(sh, GetShaderLocation(sh, "luzCor"), cor, SHADER_UNIFORM_VEC3, MAX_LUZES);
-        SetShaderValue(sh, GetShaderLocation(sh, "numLuzes"), &ni, SHADER_UNIFORM_INT);
+        SetShaderValue(sh, GetShaderLocation(sh, "numLuzes"), &n, SHADER_UNIFORM_INT);
     }
 #if !defined(PLATFORM_WEB)
     if (paredeOk_) setF(litParede_, "paredes", dbg.semParedes || nivel_ == Nivel::Baixo ? 0.f : (nivel_ == Nivel::Alto ? 2.f : 1.f));
@@ -344,7 +362,7 @@ void Iluminacao::modoHorizonte(float d) {
 }
 
 void Iluminacao::modoEstudio(Vec3f dir, bool argila) {
-    for (Shader sh : sombreados()) {
+    for (Shader sh : sombreados_) {
         setV3(sh, "dirSol", dir);
         setRgb(sh, "corSol", Rgb{1.45f, 1.42f, 1.38f});
         setRgb(sh, "ambCeu", Rgb{0.16f, 0.165f, 0.18f});
@@ -361,7 +379,7 @@ void Iluminacao::modoEstudio(Vec3f dir, bool argila) {
     }
     sol_ = dir;
     dirSombra_ = dir;
-    for (Shader sh : personagens()) setF(sh, "argila", argila ? 1.f : 0.f);
+    for (Shader sh : personagens_) setF(sh, "argila", argila ? 1.f : 0.f);
 }
 
 void Iluminacao::desenharCeu(const Camera3D& cam) {
@@ -392,10 +410,9 @@ void Iluminacao::comecarSombra(Vec3f centro) {
     dirSombra_ = dir;
     setV3(lit_, "dirSombra", dir);
     if (paredeOk_) setV3(litParede_, "dirSombra", dir);
-    for (Shader sh : personagens()) setV3(sh, "dirSombra", dir);
+    for (Shader sh : personagens_) setV3(sh, "dirSombra", dir);
     BeginTextureMode(sombraRT_);
     ClearBackground(WHITE);
-    rlClearScreenBuffers();
     BeginMode3D(cl);
     luzVP_ = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
 }
@@ -404,7 +421,7 @@ void Iluminacao::terminarSombra() {
     EndMode3D();
     EndTextureMode();
     float um = 1;
-    for (Shader sh : sombreados()) {
+    for (Shader sh : sombreados_) {
         SetShaderValueMatrix(sh, GetShaderLocation(sh, "matLuz"), luzVP_);
         SetShaderValue(sh, GetShaderLocation(sh, "usarSombra"), &um, SHADER_UNIFORM_FLOAT);
     }
@@ -424,15 +441,17 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
     auto terminar = [&]() { if (perfil) perfil->terminar(); };
     EndTextureMode();
     int mw = largPos_ / 2, mh = altPos_ / 2;
+    bool bloom = ef_.bloom && !dbg.semBloom;
     comecar(P_POS_BRILHO);
     // 1) partes claras da cena (meia resolucao)
-    BeginTextureMode(meiaA_);
-    BeginShaderMode(brilho_);
-    float limiar = 0.85f;
-    SetShaderValue(brilho_, GetShaderLocation(brilho_, "limiar"), &limiar, SHADER_UNIFORM_FLOAT);
-    desenharTela(cena_, mw, mh);
-    EndShaderMode();
-    EndTextureMode();
+    if (bloom) {
+        BeginTextureMode(meiaA_);
+        BeginShaderMode(brilho_);
+        setF(brilho_, "limiar", 0.85f);
+        desenharTela(cena_, mw, mh);
+        EndShaderMode();
+        EndTextureMode();
+    }
     terminar();
     comecar(P_POS_RAIOS);
     // 2) raios de luz a partir do sol
@@ -466,7 +485,7 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
     terminar();
     comecar(P_POS_BRILHO_DESF);
     // 3) desfoca o brilho (horizontal e vertical, 2 vezes)
-    for (int k = 0; k < 2 && ef_.bloom && !dbg.semBloom; k++) {
+    for (int k = 0; k < 2 && bloom; k++) {
         float dh[2] = {1.f / mw * (k + 1), 0}, dv[2] = {0, 1.f / mh * (k + 1)};
         BeginTextureMode(meiaB_);
         BeginShaderMode(blur_);
@@ -563,7 +582,7 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
             SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texDesfoque"), focoA_.texture);
         }
     }
-    float fb = ef_.bloom && !dbg.semBloom ? 0.65f : 0.f, ur = raios ? 1.f : 0.f;
+    float fb = bloom ? 0.65f : 0.f, ur = raios ? 1.f : 0.f;
     float aspJ = float(largPos_) / float(altPos_);
     Vector3 crJ{paleta_.sol.r, paleta_.sol.g, paleta_.sol.b};
     SetShaderValue(junta_, GetShaderLocation(junta_, "posSol"), posSolTela_, SHADER_UNIFORM_VEC2);
@@ -571,8 +590,8 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
     SetShaderValue(junta_, GetShaderLocation(junta_, "corRaio"), &crJ, SHADER_UNIFORM_VEC3);
     SetShaderValue(junta_, GetShaderLocation(junta_, "forcaBrilho"), &fb, SHADER_UNIFORM_FLOAT);
     SetShaderValue(junta_, GetShaderLocation(junta_, "usarRaios"), &ur, SHADER_UNIFORM_FLOAT);
-    SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texBrilho"), meiaA_.texture);
-    SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texRaios"), raiosRT_.texture);
+    if (bloom) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texBrilho"), meiaA_.texture);
+    if (raios) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texRaios"), raiosRT_.texture);
     float ua = ao ? 1.f : 0.f;
     SetShaderValue(junta_, GetShaderLocation(junta_, "usarAO"), &ua, SHADER_UNIFORM_FLOAT);
     if (ao) SetShaderValueTexture(junta_, GetShaderLocation(junta_, "texAO"), aoA_.texture);
@@ -592,7 +611,6 @@ void Iluminacao::comecarSombraPerto(Vec3f centro) {
     cl.projection = CAMERA_ORTHOGRAPHIC;
     BeginTextureMode(sombraPertoRT_);
     ClearBackground(WHITE);
-    rlClearScreenBuffers();
     BeginMode3D(cl);
     luzVPPerto_ = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
 }
@@ -601,7 +619,7 @@ void Iluminacao::terminarSombraPerto() {
     EndMode3D();
     EndTextureMode();
     float um = 1;
-    for (Shader sh : personagens()) {
+    for (Shader sh : personagens_) {
         SetShaderValueMatrix(sh, GetShaderLocation(sh, "matLuzPerto"), luzVPPerto_);
         SetShaderValue(sh, GetShaderLocation(sh, "usarSombraPerto"), &um, SHADER_UNIFORM_FLOAT);
     }
@@ -674,13 +692,13 @@ void Iluminacao::prepararLuzParedes(const std::vector<FormaCena>& fs) {
     if (luzParede_.id == 0 || luzParede_.id == rlGetShaderIdDefault()) return;
     formasLuz_ = &fs;
     atlas_ = alocarAtlas(fs, METRO_TEXEL, TAM_ATLAS);
-    // tabela: por forma, 6 texels RGBA float (centro+rot, meia+parede, 4 retangulos)
+    // tabela: por forma, 6 texels RGBA float (centro+cos rot, meia+sen rot, 4 retangulos)
     std::vector<float> tab(fs.size() * 6 * 4, 0.f);
     for (size_t i = 0; i < fs.size(); i++) {
         float* t = &tab[i * 24];
         const FormaCena& f = fs[i];
-        t[0] = f.centro.x, t[1] = f.centro.y, t[2] = f.centro.z, t[3] = f.rotY;
-        t[4] = f.meia.x, t[5] = f.meia.y, t[6] = f.meia.z, t[7] = f.parede ? 1.f : 0.f;
+        t[0] = f.centro.x, t[1] = f.centro.y, t[2] = f.centro.z, t[3] = std::cos(f.rotY);
+        t[4] = f.meia.x, t[5] = f.meia.y, t[6] = f.meia.z, t[7] = std::sin(f.rotY);
         for (int k = 0; k < 4; k++) {
             const RetAtlas& r = atlas_[i][k];
             t[8 + k * 4] = float(r.x), t[9 + k * 4] = float(r.y), t[10 + k * 4] = float(r.w), t[11 + k * 4] = float(r.h);
@@ -713,8 +731,6 @@ void Iluminacao::prepararLuzParedes(const std::vector<FormaCena>& fs) {
     feita_.assign(fs.size() * 4, 0);
     solFace_.assign(fs.size() * 4, Vec3f{});
     corFace_.assign(fs.size() * 4, Vec3f{});
-    fila_.clear();
-    cursor_ = 0;
     luzParedeOk_ = true;
 #else
     (void)fs;
@@ -722,7 +738,7 @@ void Iluminacao::prepararLuzParedes(const std::vector<FormaCena>& fs) {
 }
 
 void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
-    if (!luzParedeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes) return;
+    if (!luzParedeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes || porQuadro <= 0) return;
     const auto& fs = *formasLuz_;
     // faces no raio de 70 m; as que entram agora vao para a frente da fila
     // luz que faz sombra (como comecarSombra) e cor do sol do quadro
@@ -734,8 +750,13 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
     std::vector<int> novas, saindo;
     std::vector<std::pair<float, int>> fila;  // ja calculadas, pela distancia
     for (size_t i = 0; i < fs.size(); i++) {
-        if (!fs[i].parede) continue;
-        float d = distanciaForma(fs[i], cam);
+        const FormaCena& forma = fs[i];
+        if (!forma.parede) continue;
+        // Folga que cobre qualquer rotacao horizontal da caixa.
+        float limite = 70.f + forma.meia.x + forma.meia.z + 0.01f;
+        float d = limite;
+        if (std::abs(cam.x - forma.centro.x) < limite && std::abs(cam.z - forma.centro.z) < limite)
+            d = distanciaForma(forma, cam);
         bool perto = d < 70.f;
         for (int k = 0; k < 4; k++) {
             int f = int(i) * 4 + k;
@@ -763,8 +784,10 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
         EndTextureMode();
     }
     if (novas.empty() && fila.empty()) return;
-    // as desatualizadas mais perto da camera primeiro
-    std::sort(fila.begin(), fila.end());
+    // As desatualizadas mais perto da camera primeiro, ate completar o orcamento.
+    size_t nNovas = std::min(novas.size(), size_t(porQuadro));
+    size_t nRefazer = std::min(fila.size(), size_t(porQuadro) - nNovas);
+    if (nRefazer) std::partial_sort(fila.begin(), fila.begin() + nRefazer, fila.end());
     Shader sh = luzParede_;
     float d3[3] = {dir.x, dir.y, dir.z}, s3[3] = {sol_.x, sol_.y, sol_.z}, c3[3] = {cs.r, cs.g, cs.b};
     SetShaderValue(sh, GetShaderLocation(sh, "dirSombra"), d3, SHADER_UNIFORM_VEC3);
@@ -777,8 +800,8 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
         const char* nomes[12] = {"formaA", "formaB", "formaCor", "numFormas", "formaCS", "formaR", "faceO", "faceU", "faceN", "faceTam", "faceRet", "saida"};
         for (int i = 0; i < 12; i++) loc[i] = GetShaderLocation(sh, nomes[i]);
     }
-    std::vector<int> escolhidas(novas.begin(), novas.begin() + std::min<size_t>(novas.size(), size_t(porQuadro)));
-    for (int n = 0; n < int(fila.size()) && int(escolhidas.size()) < porQuadro; n++) escolhidas.push_back(fila[n].second);
+    std::vector<int> escolhidas(novas.begin(), novas.begin() + nNovas);
+    for (size_t n = 0; n < nRefazer; n++) escolhidas.push_back(fila[n].second);
     int ultimaForma = -1;
     for (int pass = 0; pass < 2; pass++) {
         if (pass == 1 && nivel_ != Nivel::Alto) break;  // o rebote so aparece no Alto
@@ -805,12 +828,14 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
                     csn[q * 2] = std::cos(g.rotY), csn[q * 2 + 1] = std::sin(g.rotY);
                     r[q] = len(g.meia);
                 }
-                SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 64);
-                SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 64);
-                SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 64);
+                if (nf) {
+                    SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, nf);
+                    SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, nf);
+                    SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, nf);
+                    SetShaderValueV(sh, loc[4], csn, SHADER_UNIFORM_VEC2, nf);
+                    SetShaderValueV(sh, loc[5], r, SHADER_UNIFORM_FLOAT, nf);
+                }
                 SetShaderValue(sh, loc[3], &nf, SHADER_UNIFORM_INT);
-                SetShaderValueV(sh, loc[4], csn, SHADER_UNIFORM_VEC2, 64);
-                SetShaderValueV(sh, loc[5], r, SHADER_UNIFORM_FLOAT, 64);
             }
             FaceParede fc = faceDe(fs[i], k);
             const RetAtlas& ra = atlas_[i][k];
@@ -836,20 +861,9 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
     }
 }
 
-std::vector<Shader> Iluminacao::personagens() const {
-    std::vector<Shader> v{pele_};
-    if (cabecaOk_) v.push_back(cabeca_);
-    return v;
-}
-std::vector<Shader> Iluminacao::sombreados() const {
-    std::vector<Shader> v{lit_, pele_};
-    if (paredeOk_) v.push_back(litParede_);
-    if (cabecaOk_) v.push_back(cabeca_);
-    return v;
-}
 bool Iluminacao::usaCabecaRaio() const { return cabecaOk_ && nivel_ != Nivel::Baixo && !dbg.semCabecaRaio; }
 void Iluminacao::definirHeroi(bool sim) {
-    for (Shader sh : personagens()) setF(sh, "heroi", sim && !dbg.semLuzPersonagem ? 1.f : 0.f);
+    for (Shader sh : personagens_) setF(sh, "heroi", sim && !dbg.semLuzPersonagem ? 1.f : 0.f);
 }
 void Iluminacao::definirFoco(float d) { distFoco_ = d; }
 void Iluminacao::definirInteriores(const std::vector<InteriorMundo>& is, const std::vector<PortaMundo>& ps, Vec3f foco) {
@@ -861,51 +875,45 @@ void Iluminacao::definirInteriores(const std::vector<InteriorMundo>& is, const s
     }
     int n = std::min<int>(16, int(ord.size()));
     std::partial_sort(ord.begin(), ord.begin() + n, ord.end());
-    float a[16 * 4] = {0}, b[16 * 4] = {0}, c[16 * 4] = {0};
+    float a[16 * 4], b[16 * 4], c[16 * 4];
+    float limite = std::numeric_limits<float>::max();
+    Vec3f minimo{limite, limite, limite}, maximo{-limite, -limite, -limite};
     for (int k = 0; k < n; k++) {
         const InteriorMundo& it = is[ord[k].second];
+        float cosRot = std::cos(it.rot), senRot = std::sin(it.rot);
         float ab = ord[k].second < int(ps.size()) ? ps[ord[k].second].abertura : 0.f;  // a porta i e a do interior i
-        a[k * 4] = it.centro.x, a[k * 4 + 1] = it.centro.y, a[k * 4 + 2] = it.centro.z, a[k * 4 + 3] = it.rot;
+        a[k * 4] = it.centro.x, a[k * 4 + 1] = it.centro.y, a[k * 4 + 2] = it.centro.z, a[k * 4 + 3] = cosRot;
         b[k * 4] = it.meia.x, b[k * 4 + 1] = it.meia.y, b[k * 4 + 2] = it.meia.z, b[k * 4 + 3] = ab;
-        c[k * 4] = it.porta.x, c[k * 4 + 1] = it.porta.y, c[k * 4 + 2] = it.porta.z;
+        c[k * 4] = it.porta.x, c[k * 4 + 1] = it.porta.y, c[k * 4 + 2] = it.porta.z, c[k * 4 + 3] = senRot;
+
+        // A caixa envolve os volumes girados, incluindo as folgas do shader.
+        Vec3f m = it.meia + Vec3f{0.08f, 0.08f, 0.08f};
+        float dx = std::abs(cosRot) * m.x + std::abs(senRot) * m.z + 0.01f;
+        float dz = std::abs(senRot) * m.x + std::abs(cosRot) * m.z + 0.01f;
+        minimo.x = std::min(minimo.x, it.centro.x - dx);
+        minimo.y = std::min(minimo.y, it.centro.y - m.y - 0.31f);
+        minimo.z = std::min(minimo.z, it.centro.z - dz);
+        maximo.x = std::max(maximo.x, it.centro.x + dx);
+        maximo.y = std::max(maximo.y, it.centro.y + m.y + 0.01f);
+        maximo.z = std::max(maximo.z, it.centro.z + dz);
     }
-    for (Shader sh : sombreados()) {
-        SetShaderValueV(sh, GetShaderLocation(sh, "interiorA"), a, SHADER_UNIFORM_VEC4, 16);
-        SetShaderValueV(sh, GetShaderLocation(sh, "interiorB"), b, SHADER_UNIFORM_VEC4, 16);
-        SetShaderValueV(sh, GetShaderLocation(sh, "interiorP"), c, SHADER_UNIFORM_VEC4, 16);
+    for (Shader sh : sombreados_) {
+        if (n) {
+            SetShaderValueV(sh, GetShaderLocation(sh, "interiorA"), a, SHADER_UNIFORM_VEC4, n);
+            SetShaderValueV(sh, GetShaderLocation(sh, "interiorB"), b, SHADER_UNIFORM_VEC4, n);
+            SetShaderValueV(sh, GetShaderLocation(sh, "interiorP"), c, SHADER_UNIFORM_VEC4, n);
+            setV3(sh, "interioresMin", minimo);
+            setV3(sh, "interioresMax", maximo);
+        }
         SetShaderValue(sh, GetShaderLocation(sh, "numInteriores"), &n, SHADER_UNIFORM_INT);
     }
 #else
     (void)is, (void)ps, (void)foco;
 #endif
 }
-void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& js, Vec3f foco) {
+void Iluminacao::definirJanelas(const std::vector<JanelaLuz>& js, Vec3f foco) {
 #if !defined(PLATFORM_WEB)
-    if (!paredeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes) return;  // nada le esses valores
-    Shader sh = litParede_;
-    static unsigned int ultimo = 0;
-    static int loc[9];
-    if (sh.id != ultimo) {  // posicoes dos uniformes: uma vez por shader
-        ultimo = sh.id;
-        const char* nomes[9] = {"formaA", "formaB", "formaCor", "numFormas", "janelaP", "janelaN", "numJanelas", "formaCS", "formaR"};
-        for (int i = 0; i < 9; i++) loc[i] = GetShaderLocation(sh, nomes[i]);
-    }
-    float a[64 * 4] = {0}, b[64 * 4] = {0}, c[64 * 3] = {0}, cs[64 * 2] = {0}, r[64] = {0};
-    int n = std::min<int>(64, int(idx.size()));
-    for (int k = 0; k < n; k++) {
-        const FormaCena& f = fs[idx[k]];
-        a[k * 4] = f.centro.x, a[k * 4 + 1] = f.centro.y, a[k * 4 + 2] = f.centro.z, a[k * 4 + 3] = f.rotY;
-        b[k * 4] = f.meia.x, b[k * 4 + 1] = f.meia.y, b[k * 4 + 2] = f.meia.z, b[k * 4 + 3] = float(int(f.tipo));
-        c[k * 3] = f.cor.r, c[k * 3 + 1] = f.cor.g, c[k * 3 + 2] = f.cor.b;
-        cs[k * 2] = std::cos(f.rotY), cs[k * 2 + 1] = std::sin(f.rotY);
-        r[k] = len(f.meia);  // raio da esfera que envolve a forma (pular formas longe)
-    }
-    SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 64);
-    SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 64);
-    SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 64);
-    SetShaderValue(sh, loc[3], &n, SHADER_UNIFORM_INT);
-    SetShaderValueV(sh, loc[7], cs, SHADER_UNIFORM_VEC2, 64);
-    SetShaderValueV(sh, loc[8], r, SHADER_UNIFORM_FLOAT, 64);
+    if (!paredeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes || noite_ <= 0.f) return;
     // as 12 janelas mais proximas do foco
     std::vector<std::pair<float, int>> ord;
     ord.reserve(64);
@@ -916,17 +924,19 @@ void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vect
     }
     int nj = std::min<int>(12, int(ord.size()));
     std::partial_sort(ord.begin(), ord.begin() + nj, ord.end());
-    float jp[12 * 4] = {0}, jn[12 * 3] = {0};
+    float jp[12 * 3], jn[12 * 3];
     for (int k = 0; k < nj; k++) {
         const JanelaLuz& j = js[ord[k].second];
-        jp[k * 4] = j.pos.x, jp[k * 4 + 1] = j.pos.y, jp[k * 4 + 2] = j.pos.z;
+        jp[k * 3] = j.pos.x, jp[k * 3 + 1] = j.pos.y, jp[k * 3 + 2] = j.pos.z;
         jn[k * 3] = j.normal.x, jn[k * 3 + 1] = j.normal.y, jn[k * 3 + 2] = j.normal.z;
     }
-    SetShaderValueV(sh, loc[4], jp, SHADER_UNIFORM_VEC4, 12);
-    SetShaderValueV(sh, loc[5], jn, SHADER_UNIFORM_VEC3, 12);
-    SetShaderValue(sh, loc[6], &nj, SHADER_UNIFORM_INT);
+    if (nj) {
+        SetShaderValueV(litParede_, locJanelaP_, jp, SHADER_UNIFORM_VEC3, nj);
+        SetShaderValueV(litParede_, locJanelaN_, jn, SHADER_UNIFORM_VEC3, nj);
+    }
+    SetShaderValue(litParede_, locNumJanelas_, &nj, SHADER_UNIFORM_INT);
 #else
-    (void)fs, (void)idx, (void)js, (void)foco;
+    (void)js, (void)foco;
 #endif
 }
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }

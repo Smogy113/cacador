@@ -22,9 +22,11 @@ public:
 private:
     struct Pedaco {
         Mesh lod[3]{};
+        BoundingBox limites[3]{};
         bool tem[3]{false, false, false};
         float uso[3]{0, 0, 0};
         Mesh agua{};
+        BoundingBox limitesAgua{};
         bool temAgua = false, aguaFeita = false;
         float hmin = 0, hmax = 0;
     };

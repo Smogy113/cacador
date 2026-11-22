@@ -105,6 +105,8 @@ scripts/build-web.sh                           # build-web/ (precisa do emsdk)
 scripts/screenshot.sh saida.png --hora 15 --qualidade alto   # print sem janela (Xvfb)
 ```
 
+Para investigar FPS ou alterar renderização, siga o [guia de desempenho](DESEMPENHO.md).
+
 Opções úteis (prints e testes): `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidade baixo|medio|alto`,
 `--montado`, `--abrir-quadro`, `--abrir-mapa`, `--depuracao`, `--recompensa N`, `--tiroteio`,
 `--mirar`, `--pitch graus`, `--girar-camera graus`, `--retrato distancia`, `--estudio`, `--argila`.

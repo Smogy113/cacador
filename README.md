@@ -97,10 +97,12 @@ cmake -B build && cmake --build build -j8   # jogo (Linux) e testes
 scripts/build-windows.sh                     # build-win/cacador.exe (MinGW)
 scripts/build-web.sh                         # build-web/ (versão de teste no navegador, precisa do emsdk)
 scripts/screenshot.sh saida.png --hora 18.5  # tira um print sem abrir janela (Xvfb)
-./build/cacador --benchmark                  # mede triângulos e chamadas de desenho num trajeto fixo
+./build/cacador --benchmark --qualidade alto # mede tempo de quadro, triângulos e chamadas num trajeto fixo
 ```
 
 Opções úteis para testes: `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidade baixo|medio|alto`,
 `--montado`, `--abrir-quadro`, `--mapa arquivo.txt`, `--recompensa N` (aceita o cartaz N),
 `--tiroteio` (começa perto do bando, já em combate), `--mirar`, `--estudio --retrato 0.5` (só o
 caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`.
+
+Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).

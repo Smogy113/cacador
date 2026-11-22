@@ -35,8 +35,7 @@ public:
     void definirCabelo(Vec3f raiz, Vec3f ponta);
     void definirHeroi(bool sim);
     void definirFoco(float distHeroi);
-    // construcoes perto da camera (formas exatas) e janelas, para a luz tracada nas paredes
-    void definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& janelas, Vec3f foco);
+    void definirJanelas(const std::vector<JanelaLuz>& janelas, Vec3f foco);
     // luz das paredes guardada por face: prepara o atlas uma vez (depois de gerar o cenario) e, a cada
     // quadro, recalcula algumas faces perto da camera (rodizio; faces novas primeiro)
     void prepararLuzParedes(const std::vector<FormaCena>& fs);
@@ -81,6 +80,7 @@ private:
     void liberarEfeitos();
     void assarMateriais();
     RenderTexture2D texMat_[4]{};  // material das paredes (alturas, fatores de cor, pesos) e dos telhados
+    bool materiaisAssados_ = false;
     // luz guardada das paredes
     static constexpr int TAM_ATLAS = 2048;
     static constexpr float METRO_TEXEL = 0.25f;
@@ -89,16 +89,14 @@ private:
     std::vector<std::vector<int>> pertoFace_;  // formas perto de cada forma (calculado uma vez)
     std::vector<uint8_t> feita_;               // por face (forma*4+k): ja calculada desde que entrou no raio
     std::vector<Vec3f> solFace_, corFace_;     // sol (direcao e cor) com que cada face foi calculada
-    std::vector<int> fila_;                    // faces no raio, em rodizio
-    size_t cursor_ = 0;
     RenderTexture2D luz1_{}, luz2_{};
     Texture2D texFaces_{};
     Shader luzParede_{};
+    int locJanelaP_ = -1, locJanelaN_ = -1, locNumJanelas_ = -1;
     bool luzParedeOk_ = false;
     void liberarLuzParedes();
     void limparLuzParedes();  // apaga o atlas (alfa 0) e manda recalcular tudo
-    std::vector<Shader> personagens() const;  // pele_ e, se houver, cabeca_
-    std::vector<Shader> sombreados() const;   // lit_, pele_ e cabeca_
+    std::vector<Shader> personagens_, sombreados_;  // preenchidos quando os shaders sao carregados
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blur4_{}, longe_{};
     Shader pele_{}, profPele_{}, cabeca_{}, litParede_{};
     bool paredeOk_ = false;

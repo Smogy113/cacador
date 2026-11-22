@@ -62,9 +62,11 @@ private:
         Vec3f centro{};
         float raio = 0;
         Mesh construcoes{}, arvPerto{}, arvLonge{};
+        BoundingBox limitesConstr{}, limitesArvPerto{}, limitesArvLonge{};
         struct Quadrante {  // predios de 32 x 32 m: detalhados perto, casca simples longe (e no Baixo/sombras)
             Vec3f centro{};
             Mesh det{}, casca{};
+            BoundingBox limitesDet{}, limitesCasca{};
             bool tem = false;
         };
         Quadrante q[4];

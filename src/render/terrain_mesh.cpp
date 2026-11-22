@@ -4,32 +4,37 @@
 #include <cmath>
 #include "core/noise.h"
 #include "raymath.h"
+#include "render/frustum.h"
 
 namespace {
-const float PASSOS[3] = {1.5f, 4.f, 8.f};  // perto: 1,5 m (chao com mais detalhe)
+constexpr float PASSOS[3] = {1.5f, 4.f, 8.f};  // perto: 1,5 m (chao com mais detalhe)
 const float DIST_LOD[2] = {110.f, 240.f};
+constexpr int CELULAS_MAX = int(TerrenoRender::TAM / PASSOS[0] + 0.5f);
+static_assert((CELULAS_MAX + 1) * (CELULAS_MAX + 1) + 16 * CELULAS_MAX <= 65536,
+              "os indices da raylib precisam caber em 16 bits");
 
 struct Buf {
     std::vector<float> v, n, t;
     std::vector<unsigned char> c;
-    void tri(Vec3f a, Vec3f b, Vec3f d, Rgb cor, float agua = 0) { tri3(a, b, d, cor, cor, cor, agua); }
-    void tri3(Vec3f a, Vec3f b, Vec3f d, Rgb ca, Rgb cb, Rgb cd, float agua = 0) {
-        Vec3f nn = normalizar(cross(b - a, d - a));
-        const Rgb cs[3] = {ca, cb, cd};
-        int k = 0;
-        for (Vec3f p : {a, b, d}) {
-            Rgb cor = cs[k++];
-            v.insert(v.end(), {p.x, p.y, p.z});
-            n.insert(n.end(), {nn.x, nn.y, nn.z});
-            t.insert(t.end(), {1.f, agua});
-            auto c8 = [](float x) { return (unsigned char)(std::clamp(x, 0.f, 1.f) * 255.f + .5f); };
-            c.insert(c.end(), {c8(cor.r), c8(cor.g), c8(cor.b), 255});
-        }
+    std::vector<unsigned short> indices;
+    void vertice(Vec3f p, Vec3f normal, Rgb cor, float tipo = 0) {
+        v.insert(v.end(), {p.x, p.y, p.z});
+        n.insert(n.end(), {normal.x, normal.y, normal.z});
+        t.insert(t.end(), {1.f, tipo});
+        auto c8 = [](float x) { return (unsigned char)(std::clamp(x, 0.f, 1.f) * 255.f + .5f); };
+        c.insert(c.end(), {c8(cor.r), c8(cor.g), c8(cor.b), 255});
+    }
+    void tri(Vec3f a, Vec3f b, Vec3f d, Rgb cor, float tipo = 0) {
+        Vec3f normal = normalizar(cross(b - a, d - a));
+        for (Vec3f p : {a, b, d}) vertice(p, normal, cor, tipo);
+    }
+    void face(int a, int b, int d) {
+        indices.insert(indices.end(), {static_cast<unsigned short>(a), static_cast<unsigned short>(b), static_cast<unsigned short>(d)});
     }
     Mesh subir() {
         Mesh m{};
         m.vertexCount = int(v.size() / 3);
-        m.triangleCount = m.vertexCount / 3;
+        m.triangleCount = indices.empty() ? m.vertexCount / 3 : int(indices.size() / 3);
         if (!m.vertexCount) return m;
         m.vertices = (float*)MemAlloc(v.size() * sizeof(float));
         m.normals = (float*)MemAlloc(n.size() * sizeof(float));
@@ -39,6 +44,10 @@ struct Buf {
         std::copy(n.begin(), n.end(), m.normals);
         std::copy(t.begin(), t.end(), m.texcoords);
         std::copy(c.begin(), c.end(), m.colors);
+        if (!indices.empty()) {
+            m.indices = (unsigned short*)MemAlloc(indices.size() * sizeof(unsigned short));
+            std::copy(indices.begin(), indices.end(), m.indices);
+        }
         UploadMesh(&m, false);
         return m;
     }
@@ -141,29 +150,18 @@ void TerrenoRender::construir(int ci, int cj, int lod) {
         float x = x0 + i * s, z = z0 + j * s;
         return Vec3f{x, t_.altura(x, z), z};
     };
-    struct Amostra { Vec3f pos, normal; Rgb cor; };
+    // As duas faces de cada celula usam os mesmos atributos nos vertices da grade.
     const int linha = k + 1;
-    std::vector<Amostra> pontos(linha * linha);
     for (int j = 0; j <= k; ++j)
         for (int i = 0; i <= k; ++i) {
             Vec3f pos = P(i, j), normal = t_.normal(pos.x, pos.z);
-            pontos[j * linha + i] = {pos, normal, corDoChao(t_, pos.x, pos.z, normal.y)};
+            b.vertice(pos, normal, corDoChao(t_, pos.x, pos.z, normal.y), -1.f);
         }
-    auto face = [&](int i, int j, int k2) {
-        const auto &a = pontos[i], &c = pontos[j], &d = pontos[k2];
-        b.tri3(a.pos, c.pos, d.pos, a.cor, c.cor, d.cor, -1.f);
-        size_t base = b.n.size() - 9;
-        for (Vec3f normal : {a.normal, c.normal, d.normal}) {
-            b.n[base++] = normal.x;
-            b.n[base++] = normal.y;
-            b.n[base++] = normal.z;
-        }
-    };
     for (int j = 0; j < k; ++j)
         for (int i = 0; i < k; ++i) {
             int a = j * linha + i, d = a + linha;
-            if ((i + j) & 1) { face(a, d, a + 1); face(a + 1, d, d + 1); }
-            else { face(a, d, d + 1); face(a, d + 1, a + 1); }
+            if ((i + j) & 1) { b.face(a, d, a + 1); b.face(a + 1, d, d + 1); }
+            else { b.face(a, d, d + 1); b.face(a, d + 1, a + 1); }
         }
     // "saias" nas bordas escondem frestas entre niveis de detalhe
     const float SAIA = 4.f;
@@ -176,13 +174,14 @@ void TerrenoRender::construir(int ci, int cj, int lod) {
             else { a = P(0, q + 1); c = P(0, q); }
             Vec3f ab = a - Vec3f{0, SAIA, 0}, cb = c - Vec3f{0, SAIA, 0};
             Rgb cor = corDoChao(t_, a.x, a.z, t_.normal(a.x, a.z).y);
-            b.tri(a, c, cb, cor);
-            b.tri(a, cb, ab, cor);
-            // normal para cima: a saia recebe a mesma luz do chao ao lado
-            for (size_t q2 = b.n.size() - 18; q2 < b.n.size(); q2 += 3) { b.n[q2] = 0; b.n[q2 + 1] = 1; b.n[q2 + 2] = 0; }
+            int base = int(b.v.size() / 3);
+            for (Vec3f pos : {a, c, cb, ab}) b.vertice(pos, {0, 1, 0}, cor);
+            b.face(base, base + 1, base + 2);
+            b.face(base, base + 2, base + 3);
         }
     Pedaco& p = p_[cj * n_ + ci];
     p.lod[lod] = b.subir();
+    p.limites[lod] = GetMeshBoundingBox(p.lod[lod]);
     p.tem[lod] = true;
     p.uso[lod] = tempo_ + 0.001f;  // conta como usado agora: se nunca for desenhado, ainda e descartado
 }
@@ -209,6 +208,7 @@ void TerrenoRender::construirAgua(int ci, int cj) {
         }
     if (b.v.empty()) return;
     p.agua = b.subir();
+    p.limitesAgua = GetMeshBoundingBox(p.agua);
     p.temAgua = true;
 }
 
@@ -251,6 +251,7 @@ void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& mat) 
     Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
     float cosMeio = std::cos((cam.fovy * 0.5f * 1.9f) * DEG2RAD);  // margem para a largura da tela
     Matrix id = MatrixIdentity();
+    const Frustum frustum = Frustum::doPasse();
     for (int j = 0; j < n_; j++)
         for (int i = 0; i < n_; i++) {
             Pedaco& p = p_[j * n_ + i];
@@ -271,10 +272,12 @@ void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& mat) 
             for (int k = l - 1; k >= 0 && usar < 0; k--) if (p.tem[k]) usar = k;
             if (usar < 0) continue;
             p.uso[usar] = tempo_ + 0.001f;
-            DrawMesh(p.lod[usar], mat, id);
-            tris_ += p.lod[usar].triangleCount;
-            chamadas_++;
-            if (p.temAgua) {
+            if (frustum.contemParte(p.limites[usar])) {
+                DrawMesh(p.lod[usar], mat, id);
+                tris_ += p.lod[usar].triangleCount;
+                chamadas_++;
+            }
+            if (p.temAgua && frustum.contemParte(p.limitesAgua)) {
                 DrawMesh(p.agua, mat, id);
                 tris_ += p.agua.triangleCount;
                 chamadas_++;
@@ -284,6 +287,7 @@ void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& mat) 
 
 void TerrenoRender::desenharArea(Vec3f centro, float raio, Material& mat) {
     Matrix id = MatrixIdentity();
+    const Frustum frustum = Frustum::doPasse();
     for (int j = 0; j < n_; j++)
         for (int i = 0; i < n_; i++) {
             Pedaco& p = p_[j * n_ + i];
@@ -291,7 +295,7 @@ void TerrenoRender::desenharArea(Vec3f centro, float raio, Material& mat) {
             if (std::hypot(c.x - centro.x, c.z - centro.z) > raio + TAM * 0.72f) continue;
             for (int k = 0; k < 3; k++)
                 if (p.tem[k]) {
-                    DrawMesh(p.lod[k], mat, id);
+                    if (frustum.contemParte(p.limites[k])) DrawMesh(p.lod[k], mat, id);
                     break;
                 }
         }

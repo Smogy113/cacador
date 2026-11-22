@@ -97,18 +97,15 @@ uniform vec3 formaCor[64];
 uniform vec2 formaCS[64];   // cos e sen da rotacao (calculados no processador)
 uniform float formaR[64];   // raio da esfera que envolve a forma
 uniform int numFormas;
-uniform vec4 janelaP[12];
-uniform vec3 janelaN[12];
-uniform int numJanelas;
 float dForma(int i, vec3 p) {
     vec3 d = p - formaA[i].xyz;
     float c = formaCS[i].x, s = formaCS[i].y;
     vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
     vec3 h = formaB[i].xyz;
-    vec3 dd = abs(q) - h;
-    float cx = length(max(dd, 0.0)) + min(max(dd.x, max(dd.y, dd.z)), 0.0);
-    if (formaB[i].w < 0.5) return cx;
     if (formaB[i].w < 1.5) {
+        vec3 dd = abs(q) - h;
+        float cx = length(max(dd, 0.0)) + min(max(dd.x, max(dd.y, dd.z)), 0.0);
+        if (formaB[i].w < 0.5) return cx;
         float gz = 1.0 / h.z, gy = 1.0 / (2.0 * h.y);
         float agua = (abs(q.z) * gz + (q.y + h.y) * gy - 1.0) / sqrt(gz * gz + gy * gy);
         return max(max(agua, max(-h.y - q.y, abs(q.x) - h.x)), cx);
@@ -123,7 +120,9 @@ void listarPerto(vec3 p, float alcance) {          // formas a menos de "alcance
     nLista = 0;
     for (int i = 0; i < 64; i++) {
         if (i >= numFormas) break;
-        if (length(p - formaA[i].xyz) - formaR[i] < alcance) { lista[nLista] = i; nLista++; }
+        vec3 d = p - formaA[i].xyz;
+        float r = formaR[i] + alcance;
+        if (dot(d, d) < r * r) { lista[nLista] = i; nLista++; }
     }
 }
 void listarSegmento(vec3 a, vec3 b, float folga) {  // formas a menos de "folga" do segmento a-b
@@ -134,7 +133,9 @@ void listarSegmento(vec3 a, vec3 b, float folga) {  // formas a menos de "folga"
         if (i >= numFormas) break;
         vec3 c = formaA[i].xyz;
         float t = clamp(dot(c - a, ab) / l2, 0.0, 1.0);
-        if (length(a + ab * t - c) - formaR[i] < folga) { lista[nLista] = i; nLista++; }
+        vec3 d = a + ab * t - c;
+        float r = formaR[i] + folga;
+        if (dot(d, d) < r * r) { lista[nLista] = i; nLista++; }
     }
 }
 float mapaLista(vec3 p, out int id) {
@@ -143,19 +144,10 @@ float mapaLista(vec3 p, out int id) {
     for (int k = 0; k < 64; k++) {
         if (k >= nLista) break;
         int i = lista[k];
-        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
-        float di = dForma(i, p);
-        if (di < d) { d = di; id = i; }
-    }
-    return d;
-}
-float mapaCena(vec3 p, out int id) {
-    float d = 1e9;
-    id = -1;
-    for (int i = 0; i < 64; i++) {
-        if (i >= numFormas) break;
         // a forma inteira cabe numa esfera: se ate a esfera ja e mais longe que a melhor, pula
-        if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
+        vec3 delta = p - formaA[i].xyz;
+        float r = formaR[i] + d;  // d pode ser negativo dentro de uma forma
+        if (r <= 0.0 || dot(delta, delta) >= r * r) continue;
         float di = dForma(i, p);
         if (di < d) { d = di; id = i; }
     }
@@ -181,6 +173,7 @@ float oclusaoCena(vec3 p, vec3 n) {
     int id;
     // so contam formas a menos de 0,9 m das amostras (alem disso d - dist <= 0 para todas)
     listarPerto(p, 1.8);
+    if (nLista == 0) return 1.0;
     for (int k = 1; k <= 5; k++) {
         float d = 0.18 * float(k);
         occ += (d - min(mapaLista(p + n * d, id), 1e3)) * w;
@@ -269,6 +262,22 @@ float hash12(vec2 p) {
 
 // Sombra suave (PCSS simplificado): procura quem bloqueia a luz e borra mais
 // quanto mais longe o bloqueador esta do chao. Perto do pe: nitida; na ponta: borrada.
+#if !defined(GL_ES)
+// Discos unitarios com angulo i * 2.39996 e raio sqrt((i + 0.5) / N).
+// A rotacao aleatoria e a mesma para todas as amostras de um fragmento.
+const vec2 discoBloq[8] = vec2[8](
+    vec2(0.250000000, 0.000000000), vec2(-0.319289148, 0.292496890),
+    vec2(0.048868917, -0.556876838), vec2(0.402449489, 0.524913669),
+    vec2(-0.738536775, -0.130627036), vec2(0.699597657, -0.445042878),
+    vec2(-0.233987495, 0.870488286), vec2(-0.446290076, -0.859258533));
+const vec2 discoSombra[12] = vec2[12](
+    vec2(0.204124153, 0.000000000), vec2(-0.260698497, 0.238822713),
+    vec2(0.039901301, -0.454688042), vec2(0.328598619, 0.428590238),
+    vec2(-0.603012800, -0.106656536), vec2(0.571219087, -0.363375992),
+    vec2(-0.191050008, 0.710750699), vec2(-0.364394337, -0.701581657),
+    vec2(0.790564001, 0.288689852), vec2(-0.822432637, 0.339516312),
+    vec2(0.396443814, -0.847249866), vec2(0.293014765, 0.934064090));
+#endif
 float gGrama = 0.0;  // fragmento de grama: sombra com 1 amostra (sao muitas folhas sobrepostas)
 float sombraEm(vec3 p, vec3 n) {
     if (usarSombra < 0.5) return 1.0;
@@ -280,11 +289,20 @@ float sombraEm(vec3 p, vec3 n) {
     float bias = 0.00012 + 0.0005 * (1.0 - nl);
     if (gGrama > 0.5) return (q.z - bias > TEX(texSombra, q.xy).r) ? 0.0 : 1.0;
     float giro = hash12(p.xz * 7.13) * 6.2831;
+#if !defined(GL_ES)
+    float cg = cos(giro), sg = sin(giro);
+    mat2 rotacao = mat2(cg, sg, -sg, cg);
+#endif
     float soma = 0.0, cont = 0.0;
     for (int i = 0; i < 8; i++) {
+#if !defined(GL_ES)
+        vec2 desloc = (rotacao * discoBloq[i]) * (5.0 * texelSombra);
+#else
         float a = float(i) * 2.39996 + giro;
         float r = sqrt((float(i) + 0.5) / 8.0) * 5.0;
-        float d = TEX(texSombra, q.xy + vec2(cos(a), sin(a)) * r * texelSombra).r;
+        vec2 desloc = vec2(cos(a), sin(a)) * r * texelSombra;
+#endif
+        float d = TEX(texSombra, q.xy + desloc).r;
         if (d < q.z - bias) { soma += d; cont += 1.0; }
     }
     if (cont < 0.5) return 1.0;
@@ -295,9 +313,14 @@ float sombraEm(vec3 p, vec3 n) {
     float raio = clamp(distBloq * 0.045 / texelMetros, 0.8, 7.0);
     float s = 0.0;
     for (int i = 0; i < 12; i++) {
+#if !defined(GL_ES)
+        vec2 desloc = (rotacao * discoSombra[i]) * (raio * texelSombra);
+#else
         float a = float(i) * 2.39996 + giro;
         float r = sqrt((float(i) + 0.5) / 12.0) * raio;
-        float d = TEX(texSombra, q.xy + vec2(cos(a), sin(a)) * r * texelSombra).r;
+        vec2 desloc = vec2(cos(a), sin(a)) * r * texelSombra;
+#endif
+        float d = TEX(texSombra, q.xy + desloc).r;
         s += (q.z - bias > d) ? 0.0 : 1.0;
     }
     s /= 12.0;
@@ -499,19 +522,22 @@ float finura(vec3 q) {
 
 #if !defined(GL_ES)
 // ---- dentro de casa: o ceu so entra pela porta e janelas; a noite, luz quente de vela ----
-uniform vec4 interiorA[16];   // centro xyz, giro
+uniform vec4 interiorA[16];   // centro xyz, cos(giro)
 uniform vec4 interiorB[16];   // meia xyz, abertura da porta (0..1)
-uniform vec4 interiorP[16];   // centro do vao da porta
+uniform vec4 interiorP[16];   // centro do vao da porta, sen(giro)
+uniform vec3 interioresMin;
+uniform vec3 interioresMax;
 uniform int numInteriores;
 float fatorInterior(vec3 p) {
+    if (any(lessThan(p, interioresMin)) || any(greaterThan(p, interioresMax))) return 1.0;
     float f = 1.0;
-    for (int i = 0; i < 16; i++) {
-        if (i >= numInteriores) break;
+    for (int i = 0; i < numInteriores; i++) {
         vec3 d = p - interiorA[i].xyz;
-        float c = cos(interiorA[i].w), s = sin(interiorA[i].w);
-        vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
         vec3 m = interiorB[i].xyz + vec3(0.08);
-        if (abs(q.x) < m.x && abs(q.z) < m.z && q.y > -m.y - 0.3 && q.y < m.y) {
+        if (d.y <= -m.y - 0.3 || d.y >= m.y) continue;
+        float c = interiorA[i].w, s = interiorP[i].w;
+        vec2 q = vec2(d.x * c - d.z * s, d.x * s + d.z * c);
+        if (abs(q.x) < m.x && abs(q.y) < m.z) {
             float dp = length(p - interiorP[i].xyz);
             float k = 0.26 + interiorB[i].w * 0.7 * exp(-dp * 0.55);  // janelas abertas + porta (se aberta)
             f = min(f, clamp(k, 0.0, 1.0));
@@ -553,18 +579,16 @@ vec2 matTelhado(vec2 uv, float mat) {  // altura (m, <= 0) e fator de cor
     float h = -0.03 * textureLod(texAltura, uv * 0.25, lodMat).g - degrau * fract(uv.y * 5.0);
     return vec2(h, textureLod(texFator, uv * 0.25, lodMat).g * 2.0);
 }
-)" CENA_SDF R"(
 vec3 nParede = vec3(0.0);   // normal da face (antes do relevo)
 float aoCena = 1.0;
 // luz guardada por face (atlas): tabela das formas e as duas imagens de luz
 VARY float formaV;
-uniform sampler2D texFaces;   // por forma: (centro, rot), (meia, parede), 4 retangulos do atlas
+uniform sampler2D texFaces;   // por forma: (centro, cos rot), (meia, sen rot), 4 retangulos do atlas
 uniform sampler2D texLuz1;    // sombra tracada, oclusao, -, calculada?
 uniform sampler2D texLuz2;    // rebote / 2
 uniform float tamAtlas;
 uniform float metroTexel;
 uniform float usarAtlas;   // 0 ate o atlas existir (sem ele, os amostradores leriam a textura branca)
-bool bordaSombra = false;  // a luz guardada esta numa borda de sombra: a sombra e tracada no pixel
 bool luzGuardada(vec3 p, vec3 n, out vec4 L1, out vec3 L2) {
     L1 = vec4(0.0);
     L2 = vec3(0.0);
@@ -572,7 +596,7 @@ bool luzGuardada(vec3 p, vec3 n, out vec4 L1, out vec3 L2) {
     if (fid < 0 || usarAtlas < 0.5) return false;
     vec4 cr = texelFetch(texFaces, ivec2(0, fid), 0);
     vec4 mh = texelFetch(texFaces, ivec2(1, fid), 0);
-    float c = cos(cr.w), s = sin(cr.w);
+    float c = cr.w, s = mh.w;
     vec3 d = p - cr.xyz;
     vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
     vec3 nl = vec3(n.x * c - n.z * s, n.y, n.x * s + n.z * c);
@@ -586,16 +610,19 @@ bool luzGuardada(vec3 p, vec3 n, out vec4 L1, out vec3 L2) {
     vec2 t = clamp(vec2(u, v) / metroTexel, vec2(0.0), r.zw - 2.0);
     vec2 auv = (r.xy + 1.0 + t) / tamAtlas;
     L1 = textureLod(texLuz1, auv, 0.0);
-    if (L1.a < 0.5) return false;   // ainda nao calculada: caminho por pixel
-    L2 = textureLod(texLuz2, auv, 0.0).rgb * 2.0;
+    if (L1.a < 0.5) return false;   // ainda nao calculada
+    if (paredes > 1.5) L2 = textureLod(texLuz2, auv, 0.0).rgb * 2.0;
     return true;
 }
 // janelas acesas a noite clareiam a parede em volta
+uniform vec3 janelaP[12];
+uniform vec3 janelaN[12];
+uniform int numJanelas;
 vec3 luzJanelas(vec3 p, vec3 n) {
     vec3 soma = vec3(0.0);
     for (int i = 0; i < 12; i++) {
         if (i >= numJanelas) break;
-        vec3 d = janelaP[i].xyz - p;
+        vec3 d = janelaP[i] - p;
         float dd = length(d);
         if (dd > 5.0) continue;
         // a luz sai pela janela (mais forte para fora) e espalha pela propria parede, caindo suave
@@ -657,8 +684,8 @@ void relevoParede(inout vec3 n, inout vec3 albedo, inout float ao, vec3 v, float
     // cor e oclusao das cavidades (fatores e pesos assados)
     vec3 corPedra = vec3(0.46, 0.44, 0.41);
     vec4 F = textureLod(texFator, uv * 0.25, lodMat) * 2.0;
-    vec4 P = textureLod(texPeso, uv * 0.25, lodMat);
     if (mat < 5.5) {
+        vec4 P = textureLod(texPeso, uv * 0.25, lodMat);
         albedo *= F.r;
         albedo = mix(albedo, albedo * vec3(0.93, 0.92, 0.88), P.a);   // pintura gasta
         albedo = mix(albedo, corPedra * (P.g * 2.0), P.r);            // reboco caido: pedra exposta
@@ -667,7 +694,8 @@ void relevoParede(inout vec3 n, inout vec3 albedo, inout float ao, vec3 v, float
         albedo = mix(albedo, vec3(lumM) * vec3(1.08, 0.95, 0.82), 0.45);   // madeira envelhecida: menos saturada
         albedo *= F.g;
     } else {
-        albedo = mix(albedo * F.b, vec3(0.42, 0.39, 0.34) * 0.75, P.b);   // argamassa
+        float peso = textureLod(texPeso, uv * 0.25, lodMat).b;
+        albedo = mix(albedo * F.b, vec3(0.42, 0.39, 0.34) * 0.75, peso);   // argamassa
     }
     ao *= mix(0.45, 1.0, smoothstep(-0.03, -0.004, h0));             // fundo das frestas escuro
 }
@@ -708,7 +736,7 @@ void main() {
     marchar();
 #endif
 #ifdef PAREDES
-    {   // nivel de detalhe do material: tamanho de um pixel em metros (texel = 4 m / 2048)
+    if (paredes > 0.5) {  // tamanho de um pixel em metros (texel = 4 m / 2048)
         float px = max(length(dFdx(posMundo)), length(dFdy(posMundo)));
         lodMat = clamp(log2(max(px, 1e-5) / (4.0 / 2048.0)), 0.0, 11.0);
     }
@@ -725,13 +753,17 @@ void main() {
         vec2 p = posMundo.xz;
         float alcance = 1.0 - smoothstep(65.0, 120.0, dist);
         float manchas = ruidoSolo(p * 1.7);
-        float grao = ruidoSolo(p * 13.0 + vec2(17.0, 5.0));
-        float fino = 1.0 - smoothstep(9.0, 30.0, dist);
-        float areia = ruidoSolo(p * 66.0);
-        float pedrinhas = smoothstep(0.72, 0.9, grao);
-        albedo *= 1.0 + alcance * (0.38 * (manchas - 0.5) +
-                  (0.55 * (grao - 0.5) + 0.30 * pedrinhas) * (1.0 - smoothstep(18.0, 65.0, dist)) +
-                  0.45 * (areia - 0.5) * fino);
+        float detalhe = 0.38 * (manchas - 0.5);
+        if (dist < 65.0) {
+            float grao = ruidoSolo(p * 13.0 + vec2(17.0, 5.0));
+            float pedrinhas = smoothstep(0.72, 0.9, grao);
+            detalhe += (0.55 * (grao - 0.5) + 0.30 * pedrinhas) * (1.0 - smoothstep(18.0, 65.0, dist));
+        }
+        if (dist < 30.0) {
+            float areia = ruidoSolo(p * 66.0);
+            detalhe += 0.45 * (areia - 0.5) * (1.0 - smoothstep(9.0, 30.0, dist));
+        }
+        albedo *= 1.0 + alcance * detalhe;
     }
     // parametros de material (mundo: tudo zero)
     float brilho = 0.0, aspereza = 1.0, sss = 0.0, veludo = 0.0, metalico = 0.0;
@@ -937,7 +969,14 @@ void main() {
     vec3 luz = mix(ambChao, ambCeu, hemi) * ao * fInt;
     if (fInt < 0.999) luz += vec3(1.0, 0.72, 0.48) * 0.14 * noite * ao;  // dentro, a noite: vela/lareira
     // sol e lua (com sombra)
+#ifdef PAREDES
+    // Onde o atlas cobre toda a sombra, o mapa PCSS teria peso zero.
+    bool usaSombraAtlas = paredes > 1.5 && guardada;
+    float sombra = usaSombraAtlas && alcance >= 1.0 ? smoothstep(0.08, 0.92, luz1.r) : sombraEm(posMundo, n);
+    if (usaSombraAtlas && alcance < 1.0) sombra = mix(sombra, smoothstep(0.08, 0.92, luz1.r), alcance);
+#else
     float sombra = sombraEm(posMundo, n);
+#endif
 #ifdef PERSONAGEM
 #ifdef RAYMARCH
     // no Alto o rosto usa a sombra propria exata (abaixo) no lugar do mapa de perto (serrilhado de 3 mm)
@@ -953,14 +992,16 @@ void main() {
             vec2 uvT = q2.xy / texelSombraPerto - 0.5;
             vec2 fr = fract(uvT);
             vec2 base = (floor(uvT) + 0.5) * texelSombraPerto;
+            // As 9 amostras bilineares compartilham 16 texels. Soma os pesos por eixo.
             float s2 = 0.0;
-            for (int i = 0; i < 9; i++) {
-                vec2 o = (vec2(mod(float(i), 3.0), floor(float(i) / 3.0)) - 1.0) * texelSombraPerto;
-                float a00 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o).r) ? 0.0 : 1.0;
-                float a10 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o + vec2(texelSombraPerto, 0.0)).r) ? 0.0 : 1.0;
-                float a01 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o + vec2(0.0, texelSombraPerto)).r) ? 0.0 : 1.0;
-                float a11 = (q2.z - 0.00004 > TEX(texSombraPerto, base + o + vec2(texelSombraPerto)).r) ? 0.0 : 1.0;
-                s2 += mix(mix(a00, a10, fr.x), mix(a01, a11, fr.x), fr.y);
+            for (int y = 0; y < 4; y++) {
+                float wy = y == 0 ? 1.0 - fr.y : (y == 3 ? fr.y : 1.0);
+                for (int x = 0; x < 4; x++) {
+                    float wx = x == 0 ? 1.0 - fr.x : (x == 3 ? fr.x : 1.0);
+                    vec2 uv = base + (vec2(float(x), float(y)) - 1.0) * texelSombraPerto;
+                    float lit = q2.z - 0.00004 > TEX(texSombraPerto, uv).r ? 0.0 : 1.0;
+                    s2 += lit * wx * wy;
+                }
             }
             sombra = min(sombra, s2 / 9.0);
         }
@@ -971,11 +1012,6 @@ void main() {
     if (economico < 0.5 && sombra > 0.01) sombra = min(sombra, mix(0.22, 1.0, sombraPropria(qHit, Lq)));  // a luz rebatida na pele nao deixa a sombra preta
 #endif
 #ifdef PAREDES
-    if (ehParede && paredes > 1.5 && alcance > 0.0) {  // Alto: a sombra vem dos raios contra as construcoes
-        // guardada a cada 25 cm: o contraste realca a borda (beiral nitido); sem luz guardada, o mapa de sombras
-        float sc = guardada ? smoothstep(0.08, 0.92, luz1.r) : sombra;
-        sombra = mix(sombra, sc, alcance);
-    }
     sombra *= sombraRelevo;
 #endif
     float ndl = dot(n, dirSol);
@@ -995,7 +1031,7 @@ void main() {
 #ifdef PAREDES
     if (ehParede && alcance > 0.0) {
         if (paredes > 1.5 && guardada) luz += luz2 * alcance * aoCena;
-        luz += luzJanelas(posMundo, n) * alcance;
+        if (noite > 0.0) luz += luzJanelas(posMundo, n) * alcance;
     }
 #endif
     // tochas, fogueiras, lanterna
@@ -1004,6 +1040,7 @@ void main() {
         vec3 d = luzPos[i].xyz - posMundo;
         float r = luzPos[i].w;
         float dd = length(d);
+        if (dd >= r) continue;
         float at = clamp(1.0 - (dd * dd) / (r * r), 0.0, 1.0);
         at = at * at / (1.0 + dd * 0.35);
         float lamb = max(dot(n, d / max(dd, 0.001)), 0.0) * 0.8 + 0.2;
@@ -1038,6 +1075,7 @@ void main() {
             if (i >= numLuzes) break;
             vec3 d = luzPos[i].xyz - posMundo;
             float dd = length(d);
+            if (dd >= luzPos[i].w) continue;
             vec3 hl = normalize(d / max(dd, 0.001) + v);
             float at = clamp(1.0 - (dd * dd) / (luzPos[i].w * luzPos[i].w), 0.0, 1.0);
             c += luzCor[i] * at * at * pow(max(dot(n, hl), 0.0), expo) * brilho * 0.15;
@@ -1459,8 +1497,10 @@ uniform float forca;
 // fonte dos raios: so o ceu (o que tapa o ceu vira sombra no facho), mais forte perto do sol
 vec3 fonte(vec2 uv) {
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0);
+    if (usarProf > 0.5 && TEX(texProf, uv).r < 0.99995) return vec3(0.0);
     vec3 c = TEX(texture0, uv).rgb;
-    float ceu = usarProf > 0.5 ? step(0.99995, TEX(texProf, uv).r) : smoothstep(0.55, 0.9, dot(c, vec3(0.3, 0.59, 0.11)));
+    float ceu = usarProf > 0.5 ? 1.0 : smoothstep(0.55, 0.9, dot(c, vec3(0.3, 0.59, 0.11)));
+    if (ceu <= 0.0) return vec3(0.0);
     vec2 dd = (uv - posSol) * vec2(aspecto, 1.0);
     float perto = exp(-dot(dd, dd) * 9.0);
     return (c * 0.55 + corRaio * 0.25) * ceu * perto;
@@ -1515,7 +1555,7 @@ void main() {
         if (bf.a > 0.02) c = mix(c, bf.rgb / bf.a, coc * smoothstep(0.02, 0.35, bf.a));
     }
     if (usarAO > 0.5) c *= TEX(texAO, fragTexCoord).r;
-    c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
+    if (forcaBrilho > 0.0) c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
     if (usarRaios > 0.5) {
         c += TEX(texRaios, fragTexCoord).rgb;
         // reflexos da lente: o sol visivel deixa "fantasmas" na linha que passa pelo centro da tela

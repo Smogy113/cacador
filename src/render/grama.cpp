@@ -5,6 +5,7 @@
 #include "core/noise.h"
 #include "core/terrain.h"
 #include "raymath.h"
+#include "render/frustum.h"
 #include "render/terrain_mesh.h"
 
 void Grama::configurar(float raio, float densidade) {
@@ -15,8 +16,8 @@ void Grama::configurar(float raio, float densidade) {
 }
 
 void Grama::descarregar() {
-    for (auto& [k, m] : blocos_)
-        if (m.vertexCount > 0) UnloadMesh(m);
+    for (auto& [k, b] : blocos_)
+        if (b.malha.vertexCount > 0) UnloadMesh(b.malha);
     blocos_.clear();
 }
 
@@ -95,7 +96,7 @@ void Grama::atualizar(Vec3f foco, int maxNovos) {
     for (auto it = blocos_.begin(); it != blocos_.end();) {
         float cx = (it->first.first + 0.5f) * BLOCO, cz = (it->first.second + 0.5f) * BLOCO;
         if (std::hypot(cx - foco.x, cz - foco.z) > raio_ + BLOCO * 2.f) {
-            if (it->second.vertexCount > 0) UnloadMesh(it->second);
+            if (it->second.malha.vertexCount > 0) UnloadMesh(it->second.malha);
             it = blocos_.erase(it);
         } else {
             ++it;
@@ -110,7 +111,18 @@ void Grama::atualizar(Vec3f foco, int maxNovos) {
             if (d <= raio_ + BLOCO && !blocos_.count({i, j})) fila.push_back({d, {i, j}});
         }
     std::sort(fila.begin(), fila.end());
-    for (int k = 0; k < int(fila.size()) && k < maxNovos; k++) blocos_[fila[k].second] = montar(fila[k].second.first, fila[k].second.second);
+    for (int k = 0; k < int(fila.size()) && k < maxNovos; k++) {
+        auto chave = fila[k].second;
+        Bloco& bloco = blocos_[chave];
+        bloco.malha = montar(chave.first, chave.second);
+        if (!bloco.malha.vertexCount) continue;
+        bloco.limites = GetMeshBoundingBox(bloco.malha);
+        // O vento do VS_LIT desloca as pontas ate 0,136 m em X e 0,07 m em Z.
+        bloco.limites.min.x -= 0.15f;
+        bloco.limites.max.x += 0.15f;
+        bloco.limites.min.z -= 0.08f;
+        bloco.limites.max.z += 0.08f;
+    }
 }
 
 void Grama::desenhar(const Camera3D& cam, Material& mat) {
@@ -120,15 +132,17 @@ void Grama::desenhar(const Camera3D& cam, Material& mat) {
     Vec3f c{cam.position.x, cam.position.y, cam.position.z};
     Vec3f f = normalizar(Vec3f{cam.target.x - c.x, 0, cam.target.z - c.z});
     Matrix id = MatrixIdentity();
-    for (auto& [k, m] : blocos_) {
-        if (m.vertexCount == 0) continue;
+    const Frustum frustum = Frustum::doPasse();
+    for (auto& [k, b] : blocos_) {
+        if (!b.malha.vertexCount) continue;
         Vec3f centro{(k.first + 0.5f) * BLOCO, c.y, (k.second + 0.5f) * BLOCO};
         Vec3f d = centro - c;
         float dist = std::hypot(d.x, d.z);
         if (dist > raio_ + BLOCO) continue;
         if (dist > BLOCO * 1.5f && (d.x * f.x + d.z * f.z) < -BLOCO) continue;  // atras da camera
-        DrawMesh(m, mat, id);
-        tris_ += size_t(m.triangleCount);
+        if (!frustum.contemParte(b.limites)) continue;
+        DrawMesh(b.malha, mat, id);
+        tris_ += size_t(b.malha.triangleCount);
         chamadas_++;
     }
 }

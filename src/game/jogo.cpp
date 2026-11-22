@@ -489,7 +489,7 @@ void Jogo::desenhar() {
     perfil_.ligar(dbg_.aberto);  // so mede com o painel F1 aberto
     perfil_.comecarQuadro();
     luz_.comecarCena(cam_, relogio_, luzes_, jogador_.pos, tempo_);
-    if (!luzParedesPronta_) {
+    if (!luzParedesPronta_ && luz_.nivel() != Nivel::Baixo && !luz_.dbg.semParedes) {
         luz_.prepararLuzParedes(cenario_.formas());
         luzParedesPronta_ = true;
     }
@@ -531,11 +531,9 @@ void Jogo::desenhar() {
         }
     }
     perfil_.terminar();
-    luz_.definirInteriores(cenario_.interiores(), cenario_.portas(), {cam_.position.x, cam_.position.y, cam_.position.z});
-    {   // paredes com luz tracada: as construcoes e janelas mais proximas da camera
-        Vec3f c{cam_.position.x, cam_.position.y, cam_.position.z};
-        luz_.definirFormas(cenario_.formas(), formasPerto(cenario_.formas(), c, 70.f, 32), cenario_.janelas(), c);
-    }
+    Vec3f posCamera{cam_.position.x, cam_.position.y, cam_.position.z};
+    luz_.definirInteriores(cenario_.interiores(), cenario_.portas(), posCamera);
+    luz_.definirJanelas(cenario_.janelas(), posCamera);
     if (luz_.usaPos()) luz_.comecarPos();
     ClearBackground(BLACK);
     BeginMode3D(cam_);
@@ -577,7 +575,10 @@ void Jogo::desenhar() {
         Vec3f heroi = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.3f : 1.5f, 0};
         luz_.definirFoco(len(heroi - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z}));
     }
-    if (luz_.usaPos()) luz_.terminarPos(cam_, op_.semEntrada ? tempo_ : float(GetTime()), &perfil_);
+    if (luz_.usaPos()) {
+        float tempoGrao = op_.semEntrada ? tempo_ : float(GetTime());
+        luz_.terminarPos(cam_, tempoGrao, &perfil_);
+    }
     dbg_.msDesenharCPU = dbg_.msDesenharCPU * 0.9f + float(GetTime() - t0) * 1000.f * 0.1f;
     tris_ = terrenoR_->triangulosDesenhados() + cenario_.triangulos() + trisAtores_ + grama_.triangulos();
     chamadas_ = terrenoR_->chamadasDesenho() + cenario_.chamadas() + chamadasAtores_ + grama_.chamadas();

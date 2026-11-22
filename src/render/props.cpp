@@ -5,6 +5,7 @@
 #include "core/meshbuilder.h"
 #include "core/noise.h"
 #include "raymath.h"
+#include "render/frustum.h"
 #include "render/meshconv.h"
 
 namespace {
@@ -1012,6 +1013,7 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
                 if (io != g.constr.end() && !io->second.vazio()) {
                     io->second.calcularAO(&t, 10);
                     p.construcoes = paraMesh(io->second);
+                    p.limitesConstr = GetMeshBoundingBox(p.construcoes);
                     p.temConstr = true;
                 }
                 for (int qd = 0; qd < 4; qd++) {  // predios por quadrante: detalhados e casca
@@ -1024,6 +1026,8 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
                     ic->second.calcularAO(&t, 4);
                     Q.det = paraMesh(id->second);
                     Q.casca = paraMesh(ic->second);
+                    Q.limitesDet = GetMeshBoundingBox(Q.det);
+                    Q.limitesCasca = GetMeshBoundingBox(Q.casca);
                     Q.tem = true;
                 }
             }
@@ -1034,6 +1038,7 @@ void Cenario::construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, u
                     m.aoVertical(p.centro.y - 10, p.centro.y + 6);
                     for (auto& a : p.arvores) (void)a;
                     p.arvLonge = paraMesh(m);
+                    p.limitesArvLonge = GetMeshBoundingBox(p.arvLonge);
                     p.temLonge = true;
                 }
             }
@@ -1087,6 +1092,7 @@ void Cenario::construirPerto(Pedaco& p) {
         return;
     }
     p.arvPerto = paraMesh(total);
+    p.limitesArvPerto = GetMeshBoundingBox(p.arvPerto);
     p.temPerto = true;
 }
 
@@ -1122,6 +1128,14 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Materi
     Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
     float meio = std::acos(std::cos(cam.fovy * 0.5f * 1.9f * DEG2RAD));
     Matrix id = MatrixIdentity();
+    const Frustum frustum = Frustum::doPasse();
+    const Material& materialConstrucao = matConstr ? *matConstr : mat;
+    auto desenharMalha = [&](const Mesh& malha, const BoundingBox& limites, const Material& material) {
+        if (!frustum.contemParte(limites)) return;
+        DrawMesh(malha, material, id);
+        tris_ += malha.triangleCount;
+        chamadas_++;
+    };
     for (auto& p : p_) {
         if (!p.temConstr && !p.temLonge && !p.temPerto && !p.q[0].tem && !p.q[1].tem && !p.q[2].tem && !p.q[3].tem) continue;
         Vector3 v{p.centro.x - cam.position.x, p.centro.y - cam.position.y, p.centro.z - cam.position.z};
@@ -1133,47 +1147,42 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Materi
             if (ang - std::asin(std::min(1.f, p.raio / d)) > meio) continue;
         }
         if (partes & 1) {
-            if (p.temConstr) {
-                DrawMesh(p.construcoes, matConstr ? *matConstr : mat, id);
-                tris_ += p.construcoes.triangleCount;
-                chamadas_++;
-            }
+            if (p.temConstr) desenharMalha(p.construcoes, p.limitesConstr, materialConstrucao);
             for (auto& Q : p.q) {  // predios: detalhados perto, casca longe (Baixo: sempre casca)
                 if (!Q.tem) continue;
                 float dq = std::hypot(Q.centro.x - cam.position.x, Q.centro.z - cam.position.z) - TAM * 0.36f;
-                const Mesh& mq = dq > distDetalhe ? Q.casca : Q.det;
-                DrawMesh(mq, matConstr ? *matConstr : mat, id);
-                tris_ += mq.triangleCount;
-                chamadas_++;
+                if (dq > distDetalhe) desenharMalha(Q.casca, Q.limitesCasca, materialConstrucao);
+                else desenharMalha(Q.det, Q.limitesDet, materialConstrucao);
             }
         }
         if (!(partes & 2)) continue;
         bool perto = dh < DIST_PERTO && p.temPerto;
         if (perto) {
             p.usoPerto = tempo_;
-            DrawMesh(p.arvPerto, mat, id);
-            tris_ += p.arvPerto.triangleCount;
-            chamadas_++;
+            desenharMalha(p.arvPerto, p.limitesArvPerto, mat);
         } else if (p.temLonge) {
-            DrawMesh(p.arvLonge, mat, id);
-            tris_ += p.arvLonge.triangleCount;
-            chamadas_++;
+            desenharMalha(p.arvLonge, p.limitesArvLonge, mat);
         }
     }
 }
 
 void Cenario::desenharArea(Vec3f centro, float raio, Material& mat) {
     Matrix id = MatrixIdentity();
+    const Frustum frustum = Frustum::doPasse();
+    auto desenharMalha = [&](const Mesh& malha, const BoundingBox& limites) {
+        if (frustum.contemParte(limites)) DrawMesh(malha, mat, id);
+    };
     for (auto& p : p_) {
         if (std::hypot(p.centro.x - centro.x, p.centro.z - centro.z) > raio + p.raio) continue;
-        if (p.temConstr) DrawMesh(p.construcoes, mat, id);
+        if (p.temConstr) desenharMalha(p.construcoes, p.limitesConstr);
         for (auto& Q : p.q) {  // sombras: casca (leve); perto, o predio detalhado (o sol entra pelos vaos)
             if (!Q.tem) continue;
             bool perto = std::hypot(Q.centro.x - centro.x, Q.centro.z - centro.z) < 25.f + TAM * 0.36f;
-            DrawMesh(perto ? Q.det : Q.casca, mat, id);
+            if (perto) desenharMalha(Q.det, Q.limitesDet);
+            else desenharMalha(Q.casca, Q.limitesCasca);
         }
-        if (p.temPerto) DrawMesh(p.arvPerto, mat, id);
-        else if (p.temLonge) DrawMesh(p.arvLonge, mat, id);
+        if (p.temPerto) desenharMalha(p.arvPerto, p.limitesArvPerto);
+        else if (p.temLonge) desenharMalha(p.arvLonge, p.limitesArvLonge);
     }
 }
 
