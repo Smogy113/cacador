@@ -141,21 +141,29 @@ void TerrenoRender::construir(int ci, int cj, int lod) {
         float x = x0 + i * s, z = z0 + j * s;
         return Vec3f{x, t_.altura(x, z), z};
     };
-    for (int j = 0; j < k; j++)
-        for (int i = 0; i < k; i++) {
-            Vec3f a = P(i, j), bb = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
-            // diagonais alternadas deixam o relevo mais natural
-            bool alt = ((i + j) & 1) != 0;
-            Vec3f t1[3], t2[3];
-            if (alt) { t1[0] = a; t1[1] = d; t1[2] = bb; t2[0] = bb; t2[1] = d; t2[2] = c; }
-            else { t1[0] = a; t1[1] = d; t1[2] = c; t2[0] = a; t2[1] = c; t2[2] = bb; }
-            for (auto* tr : {t1, t2}) {
-                Vec3f nn = normalizar(cross(tr[1] - tr[0], tr[2] - tr[0]));
-                // sombreamento leve por face mantem o visual facetado
-                float f = 0.96f + 0.08f * hash32(uint32_t(int(tr[0].x * 7 + tr[1].z * 13 + tr[2].x * 3))) / 4294967296.f;
-                b.tri3(tr[0], tr[1], tr[2], corDoChao(t_, tr[0].x, tr[0].z, nn.y) * f, corDoChao(t_, tr[1].x, tr[1].z, nn.y) * f,
-                       corDoChao(t_, tr[2].x, tr[2].z, nn.y) * f);
-            }
+    struct Amostra { Vec3f pos, normal; Rgb cor; };
+    const int linha = k + 1;
+    std::vector<Amostra> pontos(linha * linha);
+    for (int j = 0; j <= k; ++j)
+        for (int i = 0; i <= k; ++i) {
+            Vec3f pos = P(i, j), normal = t_.normal(pos.x, pos.z);
+            pontos[j * linha + i] = {pos, normal, corDoChao(t_, pos.x, pos.z, normal.y)};
+        }
+    auto face = [&](int i, int j, int k2) {
+        const auto &a = pontos[i], &c = pontos[j], &d = pontos[k2];
+        b.tri3(a.pos, c.pos, d.pos, a.cor, c.cor, d.cor, -1.f);
+        size_t base = b.n.size() - 9;
+        for (Vec3f normal : {a.normal, c.normal, d.normal}) {
+            b.n[base++] = normal.x;
+            b.n[base++] = normal.y;
+            b.n[base++] = normal.z;
+        }
+    };
+    for (int j = 0; j < k; ++j)
+        for (int i = 0; i < k; ++i) {
+            int a = j * linha + i, d = a + linha;
+            if ((i + j) & 1) { face(a, d, a + 1); face(a + 1, d, d + 1); }
+            else { face(a, d, d + 1); face(a, d + 1, a + 1); }
         }
     // "saias" nas bordas escondem frestas entre niveis de detalhe
     const float SAIA = 4.f;

@@ -306,6 +306,17 @@ float sombraEm(vec3 p, vec3 n) {
 } // > 0: horizonte, some onde o terreno detalhado ja desenha
 
 
+float hashSolo(vec2 p) {
+    vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+float ruidoSolo(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hashSolo(i), hashSolo(i + vec2(1,0)), f.x),
+               mix(hashSolo(i + vec2(0,1)), hashSolo(i + vec2(1,1)), f.x), f.y);
+}
 #ifdef PERSONAGEM
 ENTRADA vec4 tanRep;   // cartao: direcao do fio + v; pele do rosto: coordenadas do rosto
 ENTRADA vec3 tanMundo;
@@ -666,6 +677,18 @@ void main() {
     vec3 v = paraCam / max(dist, 0.001);
     if (descartarPerto > 0.0 && length(paraCam.xz) < descartarPerto) discard;
 
+    if (extra.y < -0.5 && dist < 120.0) {
+        vec2 p = posMundo.xz;
+        float alcance = 1.0 - smoothstep(65.0, 120.0, dist);
+        float manchas = ruidoSolo(p * 1.7);
+        float grao = ruidoSolo(p * 13.0 + vec2(17.0, 5.0));
+        float fino = 1.0 - smoothstep(9.0, 30.0, dist);
+        float areia = ruidoSolo(p * 66.0);
+        float pedrinhas = smoothstep(0.72, 0.9, grao);
+        albedo *= 1.0 + alcance * (0.38 * (manchas - 0.5) +
+                  (0.55 * (grao - 0.5) + 0.30 * pedrinhas) * (1.0 - smoothstep(18.0, 65.0, dist)) +
+                  0.45 * (areia - 0.5) * fino);
+    }
     // parametros de material (mundo: tudo zero)
     float brilho = 0.0, aspereza = 1.0, sss = 0.0, veludo = 0.0, metalico = 0.0;
     float kk = 0.0;               // cabelo (Kajiya-Kay)
