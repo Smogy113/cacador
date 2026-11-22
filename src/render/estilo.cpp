@@ -10,6 +10,7 @@ Font& fonte(Fonte f) { return fontes[int(f)]; }
 }  // namespace
 
 void carregar() {
+    if (ok) return;
     std::vector<int> cps;
     for (int c = 32; c < 256; c++) cps.push_back(c);  // latim com acentos
     const char* arq[3] = {"data/fontes/Rye.ttf", "data/fontes/EBGaramond-Medium.ttf", "data/fontes/EBGaramond-SemiBold.ttf"};

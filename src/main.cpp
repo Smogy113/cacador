@@ -8,7 +8,9 @@ extern "C" __declspec(dllimport) int __stdcall MessageBoxA(void* janela, const c
 #include <string>
 #include <vector>
 #include "game/jogo.h"
+#include "game/menu_inicial.h"
 #include "raylib.h"
+#include "render/estilo.h"
 #if defined(PLATFORM_WEB)
 #include <emscripten/emscripten.h>
 #endif
@@ -18,6 +20,7 @@ extern "C" const unsigned char* glGetString(unsigned int nome);
 struct Opcoes {
     bool qualidadeDada = false;
     bool benchmark = false;
+    bool direto = false;
     std::string screenshot;
     int frames = 0;
     OpcoesJogo jogo;
@@ -34,6 +37,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--pos") { o.jogo.temPos = true; o.jogo.x = (float)std::atof(prox()); o.jogo.z = (float)std::atof(prox()); }
         else if (a == "--girar-camera") o.jogo.girarCamera = (float)std::atof(prox());
         else if (a == "--benchmark") { o.benchmark = true; o.jogo.semEntrada = true; o.jogo.congelarHora = true; }
+        else if (a == "--direto") o.direto = true;
         else if (a == "--estudio") o.jogo.estudio = true;
         else if (a == "--argila") { o.jogo.estudio = true; o.jogo.argila = true; }
         else if (a == "--retrato") o.jogo.retrato = (float)std::atof(prox());
@@ -64,6 +68,8 @@ static Opcoes lerArgs(int argc, char** argv) {
 
 static Opcoes g_op;
 static Jogo* g_jogo = nullptr;
+static MenuInicial g_menu;
+static bool g_carregando = false, g_sair = false;
 static int g_frame = 0;
 
 static void quadro() {
@@ -77,6 +83,36 @@ static void quadro() {
     if (g_op.screenshot.empty()) DrawFPS(10, 10);
     EndDrawing();
     g_frame++;
+}
+
+static void iniciarJogo() {
+    double t0 = GetTime();
+    g_jogo = new Jogo(g_op.jogo);
+    std::printf("carregamento=%.2fs\n", GetTime() - t0);
+}
+
+static void quadroAplicacao() {
+    if (g_jogo) {
+        quadro();
+        return;
+    }
+    if (g_carregando) {
+        g_menu.descarregar();
+        iniciarJogo();
+        return;
+    }
+    Nivel anterior = g_op.jogo.nivel;
+    auto acao = g_menu.atualizar(g_op.jogo.nivel);
+    if (anterior != g_op.jogo.nivel && !g_op.jogo.arquivoConfig.empty())
+        salvarConfig(g_op.jogo.arquivoConfig, g_op.jogo.nivel);
+    if (acao == MenuInicial::Acao::Sair) {
+        g_sair = true;
+        return;
+    }
+    if (acao == MenuInicial::Acao::Jogar) g_carregando = true;
+    BeginDrawing();
+    g_menu.desenhar(g_op.jogo.nivel, g_carregando);
+    EndDrawing();
 }
 
 struct Medicao {
@@ -146,7 +182,6 @@ int main(int argc, char** argv) {
     if (!g_op.benchmark) flags |= FLAG_VSYNC_HINT;
     SetConfigFlags(flags);
     InitWindow(1280, 720, "Caçador");
-    if (g_op.screenshot.empty() && !g_op.benchmark) InitAudioDevice();  // sons gerados por codigo
     if (!IsWindowReady()) {
 #if defined(_WIN32)
         MessageBoxA(nullptr, "Nao foi possivel abrir a janela do jogo.\n\nO Cacador precisa de uma placa de video com OpenGL 3.3.\nAtualize o driver de video e tente de novo.", "Cacador", 0x10);
@@ -160,10 +195,6 @@ int main(int argc, char** argv) {
     // data/ e config.txt ficam ao lado do executavel
     if (!FileExists(g_op.jogo.arquivoMapa.c_str())) ChangeDirectory(GetApplicationDirectory());
 #endif  // Esc pausa; sair pelo menu de pausa
-    BeginDrawing();
-    ClearBackground({18, 16, 14, 255});
-    DrawText("Carregando o mundo...", 40, GetScreenHeight() - 70, 28, {220, 200, 160, 255});
-    EndDrawing();
     if (!g_op.qualidadeDada) {
         const char* cfg = "config.txt";
         const unsigned char* r = glGetString(0x1F01);  // GL_RENDERER
@@ -173,9 +204,17 @@ int main(int argc, char** argv) {
         if (!temConfig(cfg)) salvarConfig(cfg, g_op.jogo.nivel);
         std::printf("placa=%s nivel=%s\n", placa.c_str(), nomeNivel(g_op.jogo.nivel));
     }
-    double t0 = GetTime();
-    g_jogo = new Jogo(g_op.jogo);
-    std::printf("carregamento=%.2fs\n", GetTime() - t0);
+    // O backend de audio, inclusive WebAudio, e inicializado antes do loop.
+    if (g_op.screenshot.empty() && !g_op.benchmark) InitAudioDevice();
+    if (g_op.direto || g_op.jogo.semEntrada || g_op.jogo.estudio) {
+        BeginDrawing();
+        ClearBackground({18, 16, 14, 255});
+        DrawText("Carregando o mundo...", 40, GetScreenHeight() - 70, 28, {220, 200, 160, 255});
+        EndDrawing();
+        iniciarJogo();
+    } else {
+        g_menu.carregar();
+    }
     if (g_op.benchmark) {
         rodarBenchmark();
         delete g_jogo;
@@ -183,10 +222,10 @@ int main(int argc, char** argv) {
         return 0;
     }
 #if defined(PLATFORM_WEB)
-    emscripten_set_main_loop(quadro, 0, 1);
+    emscripten_set_main_loop(quadroAplicacao, 0, 1);
 #else
-    while (!WindowShouldClose() && !g_jogo->querSair()) {
-        quadro();
+    while (!WindowShouldClose() && !g_sair && (!g_jogo || !g_jogo->querSair())) {
+        quadroAplicacao();
         if (!g_op.screenshot.empty() && g_frame >= (g_op.frames ? g_op.frames : 30)) {
             Image img = LoadImageFromScreen();
             ExportImage(img, g_op.screenshot.c_str());
@@ -198,6 +237,8 @@ int main(int argc, char** argv) {
     }
 #endif
     delete g_jogo;
+    g_menu.descarregar();
+    estilo::descarregar();
     if (IsAudioDeviceReady()) CloseAudioDevice();
     CloseWindow();
     return 0;

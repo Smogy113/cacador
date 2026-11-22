@@ -19,6 +19,7 @@ Missões de história e loja vêm depois.
 ## Como jogar (Windows)
 
 Abra `cacador.exe` (a pasta `data/` precisa estar ao lado dele).
+No menu inicial, use o mouse ou as setas e Enter para jogar ou escolher a qualidade gráfica.
 
 | Tecla | Ação |
 |---|---|
@@ -116,3 +117,5 @@ Opções úteis para testes: `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidad
 caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`.
 
 Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).
+
+Use `--direto` para abrir uma partida sem passar pelo menu inicial.
