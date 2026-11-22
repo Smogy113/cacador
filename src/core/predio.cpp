@@ -356,6 +356,9 @@ Planta gerarPredio(const Lote& l) {
             }
         }
         p.casca = std::move(c);
+        PecaPredio g;  // volume grosso (paredes ate o topo): e assim que os vizinhos "veem" este predio
+        g.centro = vol.centro, g.tam = vol.tam, g.forma = true, g.soForma = true, g.grossa = true;
+        p.pecas.push_back(g);
     }
     return p;
 }
@@ -387,4 +390,16 @@ bool portaPodeFechar(const PortaMundo& p, Vec3f pos, float raio) {
         if (std::abs(r.x - pos.x) + std::abs(r.z - pos.z) > 1e-4f) return false;
     }
     return true;
+}
+
+int dentroDeInterior(const std::vector<InteriorMundo>& is, Vec3f p) {
+    for (size_t i = 0; i < is.size(); i++) {
+        const InteriorMundo& it = is[i];
+        Vec3f d = p - it.centro;
+        float c = std::cos(it.rot), s = std::sin(it.rot);
+        float lx = d.x * c - d.z * s, lz = d.x * s + d.z * c;
+        // o pe do personagem fica no piso (embaixo do centro): a faixa de altura comeca 0,3 m abaixo do piso
+        if (std::abs(lx) <= it.meia.x && std::abs(lz) <= it.meia.z && d.y >= -it.meia.y - 0.3f && d.y <= it.meia.y) return int(i);
+    }
+    return -1;
 }

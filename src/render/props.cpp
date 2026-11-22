@@ -39,6 +39,7 @@ struct Gerador {
     std::vector<JanelaLuz>* janelas = nullptr;
     std::vector<PortaMundo>* portas = nullptr;
     std::vector<InteriorMundo>* interiores = nullptr;
+    int proximoGrupo = 0;
 
     float r01() { return aleatorio01(rng); }
     float r(float a, float b) { return a + (b - a) * r01(); }
@@ -169,13 +170,14 @@ struct Gerador {
         MeshBuilder& m = predioDet[idx];
         MeshBuilder& ml = predioCasca[idx];
         m.tamanhoMaximoFace(3.5f);    // as paredes usam a luz guardada: pouca subdivisao basta
+        m.grupo(proximoGrupo++);
         ml.tamanhoMaximoFace(1000.f);  // casca: faces inteiras
         std::vector<std::pair<int, Vec3f>> paredesReg;  // formas de parede desta casa (detalhes usam a luz delas)
         for (const auto& pc : pl.pecas) {
             float tipoV = tipoMaterial(pc.mat);
             bool deParede = tipoV > 4.5f && tipoV < 7.5f;
             if (pc.soForma) {
-                if (formas) m.soForma(pc.tipo == PecaPredio::Prisma ? TipoForma::Prisma : TipoForma::Caixa, f.P(pc.centro.x, pc.centro.y, pc.centro.z), pc.tam * 0.5f, f.rot + pc.rotY);
+                if (formas) m.soForma(pc.tipo == PecaPredio::Prisma ? TipoForma::Prisma : TipoForma::Caixa, f.P(pc.centro.x, pc.centro.y, pc.centro.z), pc.tam * 0.5f, f.rot + pc.rotY, pc.grossa);
                 continue;
             }
             if (!pc.forma && deParede && !paredesReg.empty()) {
@@ -199,6 +201,7 @@ struct Gerador {
             desenharPeca(ml, pc, f);
             ml.tipo(TIPO_NORMAL);
         }
+        m.grupo(-1);
         for (const auto& c : pl.paredes) {
             Vec3f w = f.P(c.centro.x, 0, c.centro.z);
             col.adicionarGirada({w, c.meiaX, c.meiaZ, f.rot + c.rot, f.o.y + c.y0, f.o.y + c.y1});

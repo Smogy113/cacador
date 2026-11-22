@@ -787,8 +787,8 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
             if (i != ultimaForma) {  // formas perto desta casa (calculadas uma vez)
                 ultimaForma = i;
                 auto& pf = pertoFace_[i];
-                if (pf.empty()) pf = formasPerto(fs, fs[i].centro, 40.f, 32);
-                float a[32 * 4] = {0}, b[32 * 4] = {0}, c[32 * 3] = {0}, csn[32 * 2] = {0}, r[32] = {0};
+                if (pf.empty()) pf = formasParaLuz(fs, fs[i].centro, fs[i].grupo, 40.f, 64);
+                float a[64 * 4] = {0}, b[64 * 4] = {0}, c[64 * 3] = {0}, csn[64 * 2] = {0}, r[64] = {0};
                 int nf = int(pf.size());
                 for (int q = 0; q < nf; q++) {
                     const FormaCena& g = fs[pf[q]];
@@ -798,12 +798,12 @@ void Iluminacao::atualizarLuzParedes(Vec3f cam, int porQuadro) {
                     csn[q * 2] = std::cos(g.rotY), csn[q * 2 + 1] = std::sin(g.rotY);
                     r[q] = len(g.meia);
                 }
-                SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 32);
-                SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 32);
-                SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 32);
+                SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 64);
+                SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 64);
+                SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 64);
                 SetShaderValue(sh, loc[3], &nf, SHADER_UNIFORM_INT);
-                SetShaderValueV(sh, loc[4], csn, SHADER_UNIFORM_VEC2, 32);
-                SetShaderValueV(sh, loc[5], r, SHADER_UNIFORM_FLOAT, 32);
+                SetShaderValueV(sh, loc[4], csn, SHADER_UNIFORM_VEC2, 64);
+                SetShaderValueV(sh, loc[5], r, SHADER_UNIFORM_FLOAT, 64);
             }
             FaceParede fc = faceDe(fs[i], k);
             const RetAtlas& ra = atlas_[i][k];
@@ -845,6 +845,33 @@ void Iluminacao::definirHeroi(bool sim) {
     for (Shader sh : personagens()) setF(sh, "heroi", sim && !dbg.semLuzPersonagem ? 1.f : 0.f);
 }
 void Iluminacao::definirFoco(float d) { distFoco_ = d; }
+void Iluminacao::definirInteriores(const std::vector<InteriorMundo>& is, const std::vector<PortaMundo>& ps, Vec3f foco) {
+#if !defined(PLATFORM_WEB)
+    std::vector<std::pair<float, int>> ord;
+    for (int i = 0; i < int(is.size()); i++) {
+        float d = std::hypot(is[i].centro.x - foco.x, is[i].centro.z - foco.z);
+        if (d < 80.f) ord.push_back({d, i});
+    }
+    int n = std::min<int>(16, int(ord.size()));
+    std::partial_sort(ord.begin(), ord.begin() + n, ord.end());
+    float a[16 * 4] = {0}, b[16 * 4] = {0}, c[16 * 4] = {0};
+    for (int k = 0; k < n; k++) {
+        const InteriorMundo& it = is[ord[k].second];
+        float ab = ord[k].second < int(ps.size()) ? ps[ord[k].second].abertura : 0.f;  // a porta i e a do interior i
+        a[k * 4] = it.centro.x, a[k * 4 + 1] = it.centro.y, a[k * 4 + 2] = it.centro.z, a[k * 4 + 3] = it.rot;
+        b[k * 4] = it.meia.x, b[k * 4 + 1] = it.meia.y, b[k * 4 + 2] = it.meia.z, b[k * 4 + 3] = ab;
+        c[k * 4] = it.porta.x, c[k * 4 + 1] = it.porta.y, c[k * 4 + 2] = it.porta.z;
+    }
+    for (Shader sh : sombreados()) {
+        SetShaderValueV(sh, GetShaderLocation(sh, "interiorA"), a, SHADER_UNIFORM_VEC4, 16);
+        SetShaderValueV(sh, GetShaderLocation(sh, "interiorB"), b, SHADER_UNIFORM_VEC4, 16);
+        SetShaderValueV(sh, GetShaderLocation(sh, "interiorP"), c, SHADER_UNIFORM_VEC4, 16);
+        SetShaderValue(sh, GetShaderLocation(sh, "numInteriores"), &n, SHADER_UNIFORM_INT);
+    }
+#else
+    (void)is, (void)ps, (void)foco;
+#endif
+}
 void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vector<int>& idx, const std::vector<JanelaLuz>& js, Vec3f foco) {
 #if !defined(PLATFORM_WEB)
     if (!paredeOk_ || nivel_ == Nivel::Baixo || dbg.semParedes) return;  // nada le esses valores
@@ -856,8 +883,8 @@ void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vect
         const char* nomes[9] = {"formaA", "formaB", "formaCor", "numFormas", "janelaP", "janelaN", "numJanelas", "formaCS", "formaR"};
         for (int i = 0; i < 9; i++) loc[i] = GetShaderLocation(sh, nomes[i]);
     }
-    float a[32 * 4] = {0}, b[32 * 4] = {0}, c[32 * 3] = {0}, cs[32 * 2] = {0}, r[32] = {0};
-    int n = std::min<int>(32, int(idx.size()));
+    float a[64 * 4] = {0}, b[64 * 4] = {0}, c[64 * 3] = {0}, cs[64 * 2] = {0}, r[64] = {0};
+    int n = std::min<int>(64, int(idx.size()));
     for (int k = 0; k < n; k++) {
         const FormaCena& f = fs[idx[k]];
         a[k * 4] = f.centro.x, a[k * 4 + 1] = f.centro.y, a[k * 4 + 2] = f.centro.z, a[k * 4 + 3] = f.rotY;
@@ -866,12 +893,12 @@ void Iluminacao::definirFormas(const std::vector<FormaCena>& fs, const std::vect
         cs[k * 2] = std::cos(f.rotY), cs[k * 2 + 1] = std::sin(f.rotY);
         r[k] = len(f.meia);  // raio da esfera que envolve a forma (pular formas longe)
     }
-    SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 32);
-    SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 32);
-    SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 32);
+    SetShaderValueV(sh, loc[0], a, SHADER_UNIFORM_VEC4, 64);
+    SetShaderValueV(sh, loc[1], b, SHADER_UNIFORM_VEC4, 64);
+    SetShaderValueV(sh, loc[2], c, SHADER_UNIFORM_VEC3, 64);
     SetShaderValue(sh, loc[3], &n, SHADER_UNIFORM_INT);
-    SetShaderValueV(sh, loc[7], cs, SHADER_UNIFORM_VEC2, 32);
-    SetShaderValueV(sh, loc[8], r, SHADER_UNIFORM_FLOAT, 32);
+    SetShaderValueV(sh, loc[7], cs, SHADER_UNIFORM_VEC2, 64);
+    SetShaderValueV(sh, loc[8], r, SHADER_UNIFORM_FLOAT, 64);
     // as 12 janelas mais proximas do foco
     std::vector<std::pair<float, int>> ord;
     ord.reserve(64);

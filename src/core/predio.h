@@ -21,6 +21,7 @@ struct PecaPredio {
     Rgb cor{};
     bool forma = false;     // registra forma (luz tracada); so caixa sem inclinacao e prisma
     bool soForma = false;   // so a forma (bloqueia luz), sem desenho
+    bool grossa = false;    // volume grosso do predio (luz dos vizinhos)
     bool detalhe = false;   // fica de fora no Baixo e na casca de longe
 };
 
@@ -82,3 +83,5 @@ struct InteriorMundo {
 CaixaGirada folhaPorta(const PortaMundo& p);
 // a porta pode fechar sem bater em quem esta em "pos" (circulo de raio "raio")?
 bool portaPodeFechar(const PortaMundo& p, Vec3f pos, float raio);
+// em qual interior (indice) o ponto esta; -1 = fora de todos (a altura conta a partir do piso)
+int dentroDeInterior(const std::vector<InteriorMundo>& is, Vec3f p);

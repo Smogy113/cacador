@@ -186,3 +186,13 @@ TEST_CASE("porta: nao fecha com alguem no vao") {
     CHECK(portaPodeFechar(p, meio + rotY({0, 0, 2.f}, p.rot), 0.35f));   // longe, do lado de fora
     CHECK_FALSE(portaPodeFechar(p, meio + rotY({0, 0, -0.5f}, p.rot), 0.35f));  // logo atras do vao, onde a folha passa
 }
+TEST_CASE("interior: dentro do volume girado") {
+    InteriorMundo it{{10, 1.5f, 5}, {3, 1.4f, 2}, 0.7f, {}};
+    std::vector<InteriorMundo> v{it};
+    CHECK(dentroDeInterior(v, {10, 0.4f, 5}) == 0);
+    Vec3f canto = Vec3f{10, 0.4f, 5} + rotY({2.8f, 0, 1.8f}, 0.7f);
+    CHECK(dentroDeInterior(v, canto) == 0);
+    Vec3f fora = Vec3f{10, 0.4f, 5} + rotY({3.4f, 0, 0}, 0.7f);
+    CHECK(dentroDeInterior(v, fora) == -1);
+    CHECK(dentroDeInterior(v, {10, 4.f, 5}) == -1);  // acima do forro
+}

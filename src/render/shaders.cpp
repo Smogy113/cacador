@@ -91,11 +91,11 @@ void main() {
 // Formula de distancia do vilarejo e os raios contra ela (paredes no FS_LIT e luz guardada por face)
 #define CENA_SDF R"(
 // ---- o vilarejo como formula de distancia: as construcoes perto da camera (formas exatas) ----
-uniform vec4 formaA[32];    // centro.xyz, rotY
-uniform vec4 formaB[32];    // meia.xyz, tipo (0 caixa, 1 prisma, 2 cilindro)
-uniform vec3 formaCor[32];
-uniform vec2 formaCS[32];   // cos e sen da rotacao (calculados no processador)
-uniform float formaR[32];   // raio da esfera que envolve a forma
+uniform vec4 formaA[64];    // centro.xyz, rotY
+uniform vec4 formaB[64];    // meia.xyz, tipo (0 caixa, 1 prisma, 2 cilindro)
+uniform vec3 formaCor[64];
+uniform vec2 formaCS[64];   // cos e sen da rotacao (calculados no processador)
+uniform float formaR[64];   // raio da esfera que envolve a forma
 uniform int numFormas;
 uniform vec4 janelaP[12];
 uniform vec3 janelaN[12];
@@ -117,11 +117,11 @@ float dForma(int i, vec3 p) {
     return min(max(dr, dy), 0.0) + length(max(vec2(dr, dy), 0.0));
 }
 // lista de formas que podem influir num efeito (as outras ficam longe demais para mudar o resultado)
-int lista[32];
+int lista[64];
 int nLista = 0;
 void listarPerto(vec3 p, float alcance) {          // formas a menos de "alcance" do ponto
     nLista = 0;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 64; i++) {
         if (i >= numFormas) break;
         if (length(p - formaA[i].xyz) - formaR[i] < alcance) { lista[nLista] = i; nLista++; }
     }
@@ -130,7 +130,7 @@ void listarSegmento(vec3 a, vec3 b, float folga) {  // formas a menos de "folga"
     nLista = 0;
     vec3 ab = b - a;
     float l2 = dot(ab, ab);
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 64; i++) {
         if (i >= numFormas) break;
         vec3 c = formaA[i].xyz;
         float t = clamp(dot(c - a, ab) / l2, 0.0, 1.0);
@@ -140,7 +140,7 @@ void listarSegmento(vec3 a, vec3 b, float folga) {  // formas a menos de "folga"
 float mapaLista(vec3 p, out int id) {
     float d = 1e9;
     id = -1;
-    for (int k = 0; k < 32; k++) {
+    for (int k = 0; k < 64; k++) {
         if (k >= nLista) break;
         int i = lista[k];
         if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
@@ -152,7 +152,7 @@ float mapaLista(vec3 p, out int id) {
 float mapaCena(vec3 p, out int id) {
     float d = 1e9;
     id = -1;
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 64; i++) {
         if (i >= numFormas) break;
         // a forma inteira cabe numa esfera: se ate a esfera ja e mais longe que a melhor, pula
         if (length(p - formaA[i].xyz) - formaR[i] >= d) continue;
@@ -485,6 +485,30 @@ float finura(vec3 q) {
 }
 #endif
 
+
+#if !defined(GL_ES)
+// ---- dentro de casa: o ceu so entra pela porta e janelas; a noite, luz quente de vela ----
+uniform vec4 interiorA[16];   // centro xyz, giro
+uniform vec4 interiorB[16];   // meia xyz, abertura da porta (0..1)
+uniform vec4 interiorP[16];   // centro do vao da porta
+uniform int numInteriores;
+float fatorInterior(vec3 p) {
+    float f = 1.0;
+    for (int i = 0; i < 16; i++) {
+        if (i >= numInteriores) break;
+        vec3 d = p - interiorA[i].xyz;
+        float c = cos(interiorA[i].w), s = sin(interiorA[i].w);
+        vec3 q = vec3(d.x * c - d.z * s, d.y, d.x * s + d.z * c);
+        vec3 m = interiorB[i].xyz + vec3(0.08);
+        if (abs(q.x) < m.x && abs(q.z) < m.z && q.y > -m.y - 0.3 && q.y < m.y) {
+            float dp = length(p - interiorP[i].xyz);
+            float k = 0.26 + interiorB[i].w * 0.7 * exp(-dp * 0.55);  // janelas abertas + porta (se aberta)
+            f = min(f, clamp(k, 0.0, 1.0));
+        }
+    }
+    return f;
+}
+#endif
 
 #ifdef PAREDES
 // ---- paredes das casas: relevo desenhado pixel a pixel (o raio entra num campo de alturas por
@@ -837,7 +861,13 @@ void main() {
 
     // ceu e chao (hemisferica) com oclusao de ambiente
     float hemi = n.y * 0.5 + 0.5;
-    vec3 luz = mix(ambChao, ambCeu, hemi) * ao;
+#if !defined(GL_ES)
+    float fInt = fatorInterior(posMundo);  // 1 fora de casa
+#else
+    float fInt = 1.0;
+#endif
+    vec3 luz = mix(ambChao, ambCeu, hemi) * ao * fInt;
+    if (fInt < 0.999) luz += vec3(1.0, 0.72, 0.48) * 0.14 * noite * ao;  // dentro, a noite: vela/lareira
     // sol e lua (com sombra)
     float sombra = sombraEm(posMundo, n);
 #ifdef PERSONAGEM
@@ -890,10 +920,10 @@ void main() {
     luz += corLua * max(dot(n, dirLua), 0.0) * sombra;
     // luz rebatida: o chao iluminado pelo sol devolve luz colorida para cima
     float solNoChao = max(dirSol.y, 0.0);
-    luz += corSol * corChao * solNoChao * (0.5 - 0.5 * n.y) * 0.9 * ao;
+    luz += corSol * corChao * solNoChao * (0.5 - 0.5 * n.y) * 0.9 * ao * fInt;
     // contorno: o ceu "abraca" as bordas (luz indireta)
     float borda = pow(1.0 - max(dot(n, v), 0.0), 3.0);
-    luz += ambCeu * borda * 0.25 * (1.0 - abs(n.y)) * ao;
+    luz += ambCeu * borda * 0.25 * (1.0 - abs(n.y)) * ao * fInt;
 #ifdef PAREDES
     if (ehParede && alcance > 0.0) {
         if (paredes > 1.5 && guardada) luz += luz2 * alcance * aoCena;

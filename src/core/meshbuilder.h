@@ -27,7 +27,12 @@ public:
     // caixa inclinada: gira "incl" em torno do x local e depois "rotY" (placas de telhado)
     void caixaInclinada(Vec3f centro, Vec3f tamanho, float rotY, float incl, Rgb cor);
     // so registra a forma (bloqueia a luz tracada), sem desenhar nada
-    void soForma(TipoForma t, Vec3f centro, Vec3f meia, float rotY) { registrarForma(t, centro, meia, rotY, {}); formaAtual_ = formaFixa_; }
+    void soForma(TipoForma t, Vec3f centro, Vec3f meia, float rotY, bool grossa = false) {
+        registrarForma(t, centro, meia, rotY, {});
+        if (grossa && formas_) formas_->back().grossa = true;
+        formaAtual_ = formaFixa_;
+    }
+    void grupo(int g) { grupo_ = g; }  // predio das proximas formas registradas
     void cilindro(Vec3f base, float raio, float altura, int lados, Rgb cor);
     void cone(Vec3f base, float raio, float altura, int lados, Rgb cor);
     void prisma(Vec3f centro, Vec3f tamanho, float rotY, Rgb cor);  // telhado de duas aguas, cumeeira no eixo x local
@@ -62,7 +67,7 @@ private:
     float tipoAtual_ = TIPO_NORMAL;
     float tamFace_ = 2.f;
     std::vector<FormaCena>* formas_ = nullptr;
-    int formaAtual_ = -1, formaFixa_ = -1;
+    int formaAtual_ = -1, formaFixa_ = -1, grupo_ = -1;
     void registrarForma(TipoForma t, Vec3f c, Vec3f h, float rot, Rgb cor);
     std::vector<int> dono_;  // oclusor que gerou cada vertice (nao se auto-oclui)
     std::vector<Caixa> oclusores_;

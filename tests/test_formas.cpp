@@ -165,3 +165,26 @@ TEST_CASE("meshbuilder: pecas presas levam o indice da forma fixa") {
     for (size_t i = n0; i < n1; i++) CHECK(m.verts()[i].forma == 0);
     for (size_t i = n1; i < m.verts().size(); i++) CHECK(m.verts()[i].forma == -1);
 }
+TEST_CASE("formas para luz: a propria casa em detalhe, as vizinhas pelo volume") {
+    std::vector<FormaCena> fs;
+    for (int g = 0; g < 3; g++) {
+        for (int k = 0; k < 30; k++) {
+            FormaCena f{TipoForma::Caixa, {g * 10.f + k * 0.1f, 1, 0}, {0.5f, 1, 0.1f}, 0, {}};
+            f.grupo = g;
+            fs.push_back(f);
+        }
+        FormaCena v{TipoForma::Caixa, {g * 10.f + 1.5f, 2, 0}, {3, 2, 3}, 0, {}};
+        v.grupo = g, v.grossa = true;
+        fs.push_back(v);
+    }
+    auto r = formasParaLuz(fs, {1.5f, 1, 0}, 0, 40.f, 64);
+    int minhas = 0, grossasVizinhas = 0, detalheVizinho = 0;
+    for (int i : r) {
+        if (fs[i].grupo == 0) { minhas++; CHECK_FALSE(fs[i].grossa); }
+        else if (fs[i].grossa) grossasVizinhas++;
+        else detalheVizinho++;
+    }
+    CHECK(minhas == 30);
+    CHECK(grossasVizinhas == 2);
+    CHECK(detalheVizinho == 0);
+}

@@ -161,7 +161,15 @@ Entrada Jogo::lerEntrada() {
 
 void Jogo::atualizarCamera(float dt, const Entrada& e) {
     Vec3f alvo = montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.pos + Vec3f{0, 0.9f, 0} : jogador_.pos;
+    // dentro de casa: camera perto do ombro (o combate redefine a distancia todo quadro; so aqui e limitada)
+    float distAntes = rig_.distAlvo, ombroAntes = rig_.ombroAlvo;
+    if (montadoEm_ < 0 && dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0) {
+        rig_.distAlvo = std::min(rig_.distAlvo, 1.8f);
+        rig_.ombroAlvo = std::min(rig_.ombroAlvo, 0.35f);
+    }
     rig_.atualizar(alvo, e.mouseDx, e.mouseDy, *terreno_, col_, dt);
+    rig_.distAlvo = distAntes;
+    rig_.ombroAlvo = ombroAntes;
     Vec3f p = rig_.posicao(), o = rig_.olhar();
     if (op_.retrato > 0) {
         float alt = modeloJogador_.esqueleto().ossos[CABECA].inicio.y + 0.06f;
@@ -512,6 +520,7 @@ void Jogo::desenhar() {
         }
     }
     perfil_.terminar();
+    luz_.definirInteriores(cenario_.interiores(), cenario_.portas(), {cam_.position.x, cam_.position.y, cam_.position.z});
     {   // paredes com luz tracada: as construcoes e janelas mais proximas da camera
         Vec3f c{cam_.position.x, cam_.position.y, cam_.position.z};
         luz_.definirFormas(cenario_.formas(), formasPerto(cenario_.formas(), c, 70.f, 32), cenario_.janelas(), c);

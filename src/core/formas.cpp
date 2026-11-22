@@ -87,3 +87,15 @@ std::vector<std::array<RetAtlas, 4>> alocarAtlas(const std::vector<FormaCena>& f
     }
     return r;
 }
+
+std::vector<int> formasParaLuz(const std::vector<FormaCena>& fs, Vec3f foco, int grupo, float raio, int max) {
+    std::vector<int> todas = formasPerto(fs, foco, raio, int(fs.size())), r;
+    for (int i : todas) {
+        const FormaCena& f = fs[i];
+        bool minha = grupo >= 0 && f.grupo == grupo;
+        if (minha ? f.grossa : (f.grupo >= 0 && !f.grossa)) continue;  // a propria casa em detalhe; vizinhas pelo volume
+        r.push_back(i);
+        if (int(r.size()) >= max) break;
+    }
+    return r;
+}

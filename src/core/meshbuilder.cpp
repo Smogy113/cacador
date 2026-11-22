@@ -18,6 +18,7 @@ void MeshBuilder::registrarForma(TipoForma t, Vec3f c, Vec3f h, float rot, Rgb c
     if (!formas_) return;
     FormaCena f{t, c, h, rot, cor};
     f.parede = t == TipoForma::Caixa && tipoAtual_ > 4.5f && tipoAtual_ < 7.5f;
+    f.grupo = grupo_;
     formas_->push_back(f);
     formaAtual_ = int(formas_->size()) - 1;
 }

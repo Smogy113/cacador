@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include "core/daytime.h"
 #include "core/formas.h"
+#include "core/predio.h"
 #include "core/quality.h"
 
 struct LuzPontual {
@@ -39,6 +40,8 @@ public:
     // luz das paredes guardada por face: prepara o atlas uma vez (depois de gerar o cenario) e, a cada
     // quadro, recalcula algumas faces perto da camera (rodizio; faces novas primeiro)
     void prepararLuzParedes(const std::vector<FormaCena>& fs);
+    // interiores perto da camera (o shader escurece o ambiente dentro de casa)
+    void definirInteriores(const std::vector<InteriorMundo>& is, const std::vector<PortaMundo>& ps, Vec3f foco);
     void atualizarLuzParedes(Vec3f camera, int porQuadro = 48);  // camera de cinema: o heroi fica em foco  // o personagem desenhado a seguir e o cacador (luz de personagem)  // fisica do cabelo do personagem desenhado a seguir  // grama densa: some depois desse raio
 
     // Sombras: desenhe o mundo entre comecarSombra() e terminarSombra() com materialSombra().

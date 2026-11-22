@@ -14,7 +14,11 @@ struct FormaCena {
     float rotY;   // como o MeshBuilder: girarY
     Rgb cor;
     bool parede = false;  // caixa de parede/alicerce (tem luz guardada por face)
+    int grupo = -1;       // predio a que pertence (-1: solta)
+    bool grossa = false;  // volume grosso do predio (so para as faces dos vizinhos)
 };
+// formas que importam para a luz de um predio: as suas todas, dos outros predios so o volume grosso
+std::vector<int> formasParaLuz(const std::vector<FormaCena>& fs, Vec3f foco, int grupo, float raio, int max);
 // janela (acende a noite): centro e direcao para fora da parede
 struct JanelaLuz {
     Vec3f pos, normal;
