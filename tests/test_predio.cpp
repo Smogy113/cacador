@@ -17,6 +17,10 @@ static std::vector<Lote> lotes() {
             l.tipo = t;
             l.largura = 5.5f + float(s % 7) * 0.9f;
             l.profundidade = 4.8f + float(s % 5) * 0.8f;
+            if (t == TipoPredio::Casa && s % 2 == 0) {
+                l.largura = 9.f + float(s % 4);
+                l.profundidade = 9.f + float((s / 2) % 4);
+            }
             l.andares = (t == TipoPredio::Taverna || s % 3 == 0) && t != TipoPredio::Capela && t != TipoPredio::Cadeia ? 2 : 1;
             v.push_back(l);
         }
@@ -26,6 +30,10 @@ static std::vector<Lote> lotes() {
             l.tipo = TipoPredio::Casa;
             l.largura = 5.f + float(s % 5);
             l.profundidade = 4.5f + float(s % 4) * 0.7f;
+            if (s % 2 == 0) {
+                l.largura = 9.f + float(s % 4);
+                l.profundidade = 8.f + float(s % 6) * 0.5f;
+            }
             l.cobertura = Cobertura::Palha;
             v.push_back(l);
         }
@@ -36,6 +44,10 @@ static std::vector<Lote> lotes() {
             l.tipo = t;
             l.largura = t == TipoPredio::Barracao ? 4.2f : 6.f + float(s % 6);
             l.profundidade = t == TipoPredio::Barracao ? 3.6f : 5.f + float(s % 4);
+            if (t == TipoPredio::Casa && s % 2 == 0) {
+                l.largura = 12.f;
+                l.profundidade = 10.5f;
+            }
             l.andares = t == TipoPredio::Taverna ? 2 : 1;
             v.push_back(l);
         }

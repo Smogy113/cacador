@@ -76,6 +76,8 @@ Planta gerarPredio(const Lote& l) {
     const float W = l.largura, D = l.profundidade;
     const float t = pedra ? 0.4f : (med ? 0.24f : 0.18f);
     float H = 2.95f;
+    // Altura bruta do pavimento. Portas, janelas e moveis continuam em medidas humanas.
+    if (tipo == TipoPredio::Casa) H = med ? 3.10f : 3.20f;
     if (tipo == TipoPredio::Capela) H = 4.3f;
     if (tipo == TipoPredio::Celeiro) H = 4.0f;
     const int andares = (tipo == TipoPredio::Capela || tipo == TipoPredio::Celeiro || tipo == TipoPredio::Barracao) ? 1 : std::max(1, l.andares);

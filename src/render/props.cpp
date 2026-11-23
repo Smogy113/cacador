@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <optional>
 #include "core/meshbuilder.h"
 #include "core/noise.h"
 #include "raymath.h"
@@ -79,10 +80,12 @@ struct Gerador {
         AABB a = pegada(f, w + margem, d + margem);
         for (auto& o : ocupado)
             if (a.min.x < o.max.x && a.max.x > o.min.x && a.min.z < o.max.z && a.max.z > o.min.z) return false;
-        // nao construir em cima de estrada nem de agua
-        for (float sx : {-0.5f, 0.f, 0.5f})
-            for (float sz : {-0.5f, 0.f, 0.5f}) {
-                Vec3f p = f.P(sx * w, 0, sz * d);
+        // Amostra toda a pegada. Uma estrada estreita pode passar entre os cantos de um lote grande.
+        int nx = std::max(2, int(std::ceil(w / 2.f)));
+        int nz = std::max(2, int(std::ceil(d / 2.f)));
+        for (int iz = 0; iz <= nz; iz++)
+            for (int ix = 0; ix <= nx; ix++) {
+                Vec3f p = f.P((float(ix) / nx - 0.5f) * w, 0, (float(iz) / nz - 0.5f) * d);
                 if (t.mascaraEstrada(p.x, p.z) > 0.08f || t.mascaraRio(p.x, p.z) > 0.01f) return false;
             }
         return true;
@@ -443,8 +446,7 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
         {7, 6, 1, PEDRA_ESC, ARDOSIA, false, {}, 3},
         {12, 8, 1, MADEIRA, TELHA_M, false, {}, 4},
     };
-    int casas = 0;
-    for (float raioAnel : {22.f, 36.f, 50.f, 64.f, 76.f}) {
+    for (float raioAnel : {22.f, 36.f, 51.f, 66.f, 78.f}) {
         int nl = int(2 * PI * raioAnel / 15.f);
         float desloc = g.r(0, 1);
         for (int k = 0; k < nl; k++) {
@@ -452,9 +454,13 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
             Vec3f p{l.x + std::sin(a) * raioAnel, 0, l.z + std::cos(a) * raioAnel};
             p.y = g.h(p.x, p.z);
             Frame f{p, a + PI};  // frente para o centro
-            Especial e = {g.r(6.5f, 9.f), g.r(5.5f, 7.f), g.r01() < 0.45f ? 2 : 1, g.r01() < 0.6f ? REBOCO : REBOCO2,
+            // Sobrados predominam perto da praca. A profundidade acomoda a planta inteira atras da fachada.
+            Especial e = {g.r(9.f, 12.f), g.r(9.f, 12.f), g.r01() < (raioAnel <= 36.f ? 0.85f : 0.6f) ? 2 : 1,
+                          g.r01() < 0.6f ? REBOCO : REBOCO2,
                           g.r01() < 0.5f ? TELHA_V : (g.r01() < 0.5f ? TELHA_M : ARDOSIA), false, {}, 0};
             if (!fila.empty()) e = fila.front();
+            // Deixa a passagem interna da muralha livre, incluindo beirais e chamines.
+            if (std::hypot(raioAnel + e.d * 0.5f + 1.f, e.w * 0.5f + 1.f) > R - 3.f) continue;
             if (!g.livre(f, e.w, e.d, 2.5f)) continue;
             if (!fila.empty()) fila.erase(fila.begin());
             Vec3f entrada = f.P(e.w * 0.18f, 0, e.d / 2 + 1.8f);
@@ -502,12 +508,10 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
                     g.quadroRecompensas(fq, c.quadros, l.nome);
                     g.tochaParede(f, e.w * 0.45f, 2.8f, e.d / 2 + 0.25f);
                 }
-                if (e.tipo == 0) casas++;
             }
             rota.push_back(entrada);
         }
     }
-    (void)casas;
 }
 
 static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f>& rota) {
@@ -536,15 +540,15 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
     g.ocupado.push_back({{l.x - 7, 0, l.z - 7}, {l.x + 7, 0, l.z + 7}});
     rota.push_back(centro + Vec3f{-2, 0, -3});
     int feitas = 0;
-    for (float raioAnel : {16.f, 27.f, 38.f}) {
-        int nl = int(2 * PI * raioAnel / 17.f);
+    for (float raioAnel : {18.f, 31.f, 44.f}) {
+        int nl = int(2 * PI * raioAnel / 18.f);
         float desloc = g.r(0, 1);
         for (int k = 0; k < nl && feitas < 9; k++) {
             float a = 2 * PI * (k + desloc) / nl;
             Vec3f p{l.x + std::sin(a) * raioAnel, 0, l.z + std::cos(a) * raioAnel};
             p.y = g.h(p.x, p.z);
             Frame f{p, a + PI + g.r(-0.25f, 0.25f)};
-            float w = g.r(7.f, 10.f), d = g.r(6.f, 8.5f);
+            float w = g.r(9.f, 12.f), d = g.r(8.f, 10.5f);
             if (!g.livre(f, w, d, 3.f)) continue;
             Lote lt;
             lt.largura = w, lt.profundidade = d, lt.andares = g.r01() < 0.25f ? 2 : 1, lt.estilo = Estilo::Medieval;
@@ -571,22 +575,32 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
 static void gerarFazenda(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f>& rota) {
     float rot = l.rot * PI / 180.f;
     Frame fl{{l.x, g.h(l.x, l.z), l.z}, rot};
+    // Procura para os fundos e para fora do terreiro, mantendo a plantacao na frente.
+    auto implantar = [&](const Lote& lote, float x, float z, float avanco) -> std::optional<Vec3f> {
+        for (float recuo : {0.f, 4.f, 8.f, 12.f, 16.f, 20.f, 24.f}) {
+            for (float lateral : {0.f, 4.f, -4.f, 8.f, -8.f, 12.f, -12.f, 16.f, -16.f}) {
+                Vec3f origem = fl.P(x + (x < 0.f ? -lateral : lateral), 0, z - recuo);
+                const Frame pegada{origem + rotY({0, 0, avanco * 0.5f}, rot), rot};
+                if (!g.livre(pegada, lote.largura + 1.2f, lote.profundidade + 1.2f + avanco, 1.f)) continue;
+                origem.y = g.h(origem.x, origem.z);
+                return g.predio({origem, rot}, lote);
+            }
+        }
+        return std::nullopt;
+    };
     // celeiro e casa no estilo faroeste
-    Frame fb{fl.P(-10, 0, -8), rot};
-    fb.o.y = g.h(fb.o.x, fb.o.z);
     Lote lc;
     lc.largura = 12, lc.profundidade = 8, lc.estilo = Estilo::Faroeste, lc.tipo = TipoPredio::Celeiro;
     lc.semente = uint32_t(l.x * 13 + l.z * 7) + 5u;
     lc.corParede = Rgb{0.55f, 0.22f, 0.16f}, lc.corTelhado = TELHA_M;
-    Vec3f entCeleiro = g.predio(fb, lc);
-    Frame fc{fl.P(8, 0, -9), rot};
-    fc.o.y = g.h(fc.o.x, fc.o.z);
     Lote lf;
-    lf.largura = 9, lf.profundidade = 7, lf.estilo = Estilo::Faroeste, lf.tipo = TipoPredio::Casa;
+    lf.largura = 12, lf.profundidade = 10.5f, lf.estilo = Estilo::Faroeste, lf.tipo = TipoPredio::Casa;
     lf.semente = uint32_t(l.x * 31 + l.z * 17) + 9u;
     lf.corParede = Rgb{0.62f, 0.52f, 0.4f}, lf.corTelhado = Rgb{0.36f, 0.3f, 0.26f};
-    rota.push_back(g.predio(fc, lf));
-    rota.push_back(entCeleiro);
+    auto entradaCeleiro = implantar(lc, -10.f, -8.f, 0.8f);
+    auto entradaCasa = implantar(lf, 8.f, -10.5f, 2.8f);  // varanda e degrau
+    if (entradaCasa) rota.push_back(*entradaCasa);
+    if (entradaCeleiro) rota.push_back(*entradaCeleiro);
     // plantacao com cerca
     float pw = 24, pd = 16;
     Vec3f c0 = fl.P(-pw / 2, 0, 4), c1 = fl.P(pw / 2, 0, 4), c2 = fl.P(pw / 2, 0, 4 + pd), c3 = fl.P(-pw / 2, 0, 4 + pd);
@@ -607,7 +621,7 @@ static void gerarFazenda(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec
         p.y = g.h(p.x, p.z);
         g.b(p).cilindro(p + Vec3f{0, -0.1f, 0}, 0.9f, 1.3f, 8, PALHA);
     }
-    g.tocha(fl.P(4, 0, -4));
+    g.tocha(fl.P(3, 0, -2.3f));
     (void)c;
 }
 

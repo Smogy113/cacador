@@ -50,7 +50,7 @@ animar vento e granulação.
 
 ```bash
 ./build/cacador --screenshot cidade.png --qualidade alto --pos 320 345 --yaw 90 --hora 12 --frames 16
-./build/cacador --screenshot interior.png --qualidade alto --pos -219.94 143.38 --yaw 165 --hora 22 --portas-abertas --frames 16
+./build/cacador --screenshot interior.png --qualidade alto --pos -214.38 122.61 --yaw -15 --hora 22 --portas-abertas --frames 16
 ```
 
 ## Onde atuar nos gargalos
