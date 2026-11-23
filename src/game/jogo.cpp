@@ -526,8 +526,8 @@ void Jogo::desenhar() {
         float a = Iluminacao::AREA_SOMBRA * 1.2f;
         passePrincipal_ = false;  // sombras usam o modelo leve
         luz_.comecarSombra(jogador_.pos);
-        terrenoR_->desenharArea(jogador_.pos, a, luz_.materialSombra());
-        cenario_.desenharArea(jogador_.pos, a, luz_.materialSombra());
+        terrenoR_->desenharArea(jogador_.pos, a, luz_.materialSombraOpaca());
+        cenario_.desenharArea(jogador_.pos, a, luz_.materialSombra(), luz_.materialSombraOpaca());
         desenharPortas(luz_.materialSombra(), 30.f);
         desenharAtores(luz_.materialSombra(), luz_.materialSombraPele(), false, a);
         luz_.terminarSombra();
@@ -548,20 +548,22 @@ void Jogo::desenhar() {
     BeginMode3D(cam_);
     luz_.comecarPassePrincipal();
     float dv = luz_.efeitos().distanciaVisao;
+    float distDetalhe = luz_.nivel() == Nivel::Alto ? 35.f : (luz_.nivel() == Nivel::Medio ? 30.f : -1e9f);
     perfil_.comecar(P_TERRENO);
+    cenario_.prepararPassePrincipal(cam_, dv, distDetalhe);
+    // A profundidade das construcoes evita sombrear o terreno encoberto. As chamas ficam para a cor.
+    if (luz_.usaProfundidadeConstrucoes()) cenario_.desenharProfundidadeConstrucoes(luz_.materialSombra());
     luz_.modoHorizonte(dv - 40.f);
     terrenoR_->desenharHorizonte(luz_.material());
     luz_.modoHorizonte(0);
     terrenoR_->desenhar(cam_, dv, luz_.materialSolo(), luz_.material());
     perfil_.terminar();
     perfil_.comecar(P_CONSTRUCOES);
-    // predios detalhados perto (Alto 35 m, Medio 30 m); Baixo so a casca
-    float distDetalhe = luz_.nivel() == Nivel::Alto ? 35.f : (luz_.nivel() == Nivel::Medio ? 30.f : -1e9f);
-    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 1, distDetalhe);
+    cenario_.desenharConstrucoes(luz_.materialConstrucoes());
     perfil_.terminar();
     desenharPortas(luz_.material(), 45.f);
     perfil_.comecar(P_ARVORES);
-    cenario_.desenhar(cam_, dv, luz_.material(), &luz_.materialConstrucoes(), 2);
+    cenario_.desenharArvores(luz_.material());
     perfil_.terminar();
     perfil_.comecar(P_GRAMA);
     luz_.definirRaioGrama(grama_.raio());

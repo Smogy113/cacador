@@ -35,11 +35,12 @@ public:
     static constexpr float TAM = 64.f;
     void construir(const Mapa& mapa, const Terreno& t, MundoColisao& col, uint32_t semente);
     void atualizar(Vec3f foco, float tempo, int maxConstrucoes = 4);
-    // matConstr: construcoes; partes: 1 construcoes, 2 arvores, 3 ambas
-    // simples: so as cascas dos predios (Baixo)
-    // distDetalhe: ate onde os predios sao desenhados detalhados (alem: casca; 0 = sempre casca)
-    void desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr = nullptr, int partes = 3, float distDetalhe = 70.f);
-    void desenharArea(Vec3f centro, float raio, Material& mat);  // passe de sombra
+    // Selecao feita com a camera ativa. Cada construcao usa a mesma malha na profundidade e na cor.
+    void prepararPassePrincipal(const Camera3D& cam, float distMax, float distDetalhe);
+    void desenharProfundidadeConstrucoes(const Material& mat) const;
+    void desenharConstrucoes(const Material& mat) const;
+    void desenharArvores(const Material& mat) const;
+    void desenharArea(Vec3f centro, float raio, const Material& mat, const Material& matOpaca);  // passe de sombra
     void descarregar();
 
     std::vector<LuzPontual> luzes;
@@ -76,6 +77,7 @@ private:
     };
     void construirPerto(Pedaco& p);
     std::vector<Pedaco> p_;
+    std::vector<const Mesh*> construcoesVisiveis_, arvoresVisiveis_;
     std::vector<FormaCena> formas_;
     std::vector<JanelaLuz> janelas_;
     std::vector<PortaMundo> portas_;

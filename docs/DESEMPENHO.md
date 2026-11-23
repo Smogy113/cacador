@@ -65,6 +65,34 @@ animar vento e granulação.
 - Sombras e materiais em `src/render/shaders.cpp`. Preserve as amostras, distâncias e fórmulas
   dos efeitos. Procure primeiro operações repetidas e cálculos cujo peso na imagem seja zero.
 
+## Profundidade das construções
+
+No Alto do PC, a profundidade das construções visíveis é preenchida antes do terreno.
+O renderizador pode rejeitar os fragmentos encobertos antes do cálculo de iluminação e texturas.
+Os passes de profundidade e cor usam a mesma seleção de malhas e o mesmo nível de detalhe.
+A posição de cada vértice precisa coincidir entre os shaders para o teste `GL_LEQUAL` aceitar
+o desenho de cor. As chamas são desenhadas no passe de cor quando estão acesas.
+
+O mapa de sombras usa uma variante de profundidade para terreno e vegetação opacos. Ao adicionar
+um material com recorte a essas malhas, mantenha sua condição de recorte no passe de profundidade.
+No F1, o pré-passe entra no tempo de **Terreno**. Os triângulos e as chamadas impressos pelo
+benchmark continuam contando os desenhos de cor do passe principal.
+
+Comparação com `9ac6c568` em 1280×720, nível Alto, cabelo ondulado e Mesa llvmpipe
+(LLVM 19.1.7, duas threads). Os valores são as medianas de três rodadas de 24 quadros
+por cena. A cidade usa `--pos 320 345 --yaw 90 --hora 12`. O interior usa
+`--pos -219.94 143.38 --yaw 165 --hora 22 --portas-abertas`.
+
+| Cena | Média antes → depois | p95 antes → depois |
+| --- | ---: | ---: |
+| Cidade | 482,24 → 394,58 ms | 611,79 → 426,29 ms |
+| Interior | 434,23 → 296,60 ms | 494,53 → 330,50 ms |
+
+Na floresta (`--pos -382 -249 --yaw 85 --hora 7.25 --pitch 6`), as médias de rodada
+variaram de 327 a 344 ms na base e de 313 a 395 ms com a mudança. Em duas rodadas adicionais
+de 36 quadros, com o processo fixado a um núcleo e `LP_NUM_THREADS=1`, a mediana dos tempos
+médios foi de 667,47 para 641,14 ms e a dos p95 foi de 752,72 para 720,08 ms.
+
 ## Iluminação do nível Alto
 
 - O mapa de sombras é compartilhado por terreno, construções, personagens e grama. As

@@ -16,7 +16,7 @@ public:
     // malha do mapa inteiro em baixo detalhe: montanhas e paisagem distante
     void desenharHorizonte(Material& mat);
     // sem recorte pela camera: tudo num raio (passe de sombra)
-    void desenharArea(Vec3f centro, float raio, Material& mat);
+    void desenharArea(Vec3f centro, float raio, const Material& mat);
     size_t triangulosDesenhados() const { return tris_; }
     int chamadasDesenho() const { return chamadas_; }
 

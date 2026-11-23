@@ -53,6 +53,7 @@ Shader carregarShaderDef(const char* vs, const char* fs, const char* defs) {
 }
 
 const char* VS_LIT = R"(
+invariant gl_Position;  // a profundidade do pre-passe precisa coincidir com a do passe de cor
 ATTR vec3 vertexPosition;
 ATTR vec2 vertexTexCoord;
 ATTR vec3 vertexNormal;
@@ -78,12 +79,14 @@ void main() {
     pesosSolo = vertexTexCoord2;
 #endif
     vec3 vp = vertexPosition;
+#ifndef SOLO_DETALHADO
     if (vertexTexCoord.y > 3.5 && vertexTexCoord.y < 4.5) {  // grama: a ponta balanca com o vento (rajadas passando pelo campo)
         float flex = vertexColor.a;
         float onda = sin(tempoVento * 1.6 + vp.x * 0.23 + vp.z * 0.17) * 0.6 + sin(tempoVento * 3.1 + vp.x * 1.3) * 0.25;
         vp.x += onda * 0.08 * flex;
         vp.z += cos(tempoVento * 1.2 + vp.z * 0.31) * 0.045 * flex;
     }
+#endif
     vec4 p = matModel * vec4(vp, 1.0);
     posMundo = p.xyz;
     normalMundo = normalize(mat3(matModel) * vertexNormal);
@@ -851,9 +854,12 @@ void main() {
     vec3 paraCam = posCamera - posMundo;
     float dist = length(paraCam);
     vec3 v = paraCam / max(dist, 0.001);
+#ifndef SOLO_DETALHADO
     if (descartarPerto > 0.0 && length(paraCam.xz) < descartarPerto) discard;
+#endif
 
 #ifdef SOLO_DETALHADO
+    // Esta variante recebe apenas a malha opaca do solo. A agua e o horizonte usam o shader geral.
     materialDoSolo(n, albedo, dist);
 #else
     if (extra.y < -0.5 && dist < 120.0) {
@@ -878,6 +884,7 @@ void main() {
     float kk = 0.0;               // cabelo (Kajiya-Kay)
     float olhoHeroi = 0.0;        // brilho de cinema no olho do heroi
     vec3 Tcab = vec3(0.0, 1.0, 0.0);
+#ifndef SOLO_DETALHADO
     if (extra.y > 3.5 && extra.y < 4.5) {  // grama: some aos poucos na borda do campo desenhado
         float dg = length(posMundo.xz - posCamera.xz);
         bool extraFolha = extra.y > 4.15;
@@ -887,6 +894,7 @@ void main() {
         if (dg > alcance * (1.0 - (extraFolha ? 0.48 : 0.25) * sorte)) discard;
         gGrama = 1.0;
     }
+#endif
 #ifdef PAREDES
     bool ehParede = paredes > 0.5 && extra.y > 4.5 && extra.y < 7.5 && abs(n.y) < 0.3;
     float alcance = 1.0 - smoothstep(40.0, 70.0, dist);  // luz tracada: ate 40 m, some ate 70 m
@@ -1246,6 +1254,7 @@ void main() {
         }
     }
 #endif
+#ifndef SOLO_DETALHADO
     if (extra.y > 2.5 && extra.y < 3.5) {
         // janela: vidro escuro de dia, luz quente a noite
         vec3 vidro = vec3(0.03, 0.035, 0.045) * luz + vec3(0.02);
@@ -1278,6 +1287,7 @@ void main() {
         c += corSol * pow(max(dot(r, dirSol), 0.0), 120.0) * 1.5 * reflexoLuz;
         c += corLua * pow(max(dot(r, dirLua), 0.0), 80.0) * reflexoLuz;
     }
+#endif
 
     float f = neblinaFator(dist);
     c = mix(c, neblinaCor(-v), f);
@@ -1405,6 +1415,7 @@ void main() {
 
 // ---------- passe de profundidade (mapa de sombras) ----------
 const char* VS_PROF = R"(
+invariant gl_Position;
 ATTR vec3 vertexPosition;
 ATTR vec2 vertexTexCoord;
 uniform mat4 mvp;
@@ -1420,8 +1431,10 @@ const char* FS_PROF = CORTE_MECHA R"(
 VARY float tipo;
 VARY vec2 mechaUV;
 void main() {
+#ifndef PROFUNDIDADE_OPACA
     if (tipo > 1.5 && tipo < 2.5) discard;
     if (tipo > 23.5 && (tipo < 24.25 || tipo > 24.75 || foraDaMecha(mechaUV))) discard;
+#endif
     FRAG = vec4(1.0);
 }
 )";
@@ -1613,10 +1626,10 @@ uniform sampler2D texture0;
 uniform sampler2D texProf;
 uniform float distFoco;
 void main() {
-    vec3 c = TEX(texture0, fragTexCoord).rgb;
     float dist = profLinear(TEX(texProf, fragTexCoord).r);
     float w = smoothstep(distFoco + 12.0, distFoco + 25.0, dist);
-    FRAG = vec4(c * w, w);
+    if (w <= 0.0) { FRAG = vec4(0.0); return; }
+    FRAG = vec4(TEX(texture0, fragTexCoord).rgb * w, w);
 }
 )";
 // desfoque que conserva o alfa (pesos do fundo)
@@ -1756,8 +1769,10 @@ void main() {
         prof = profLinear(TEX(texProf, fragTexCoord).r);
     if (usarFoco > 0.5) {  // o fundo distante desfoca; o heroi e o que esta perto dele nunca
         float coc = smoothstep(distFoco + 25.0, distFoco + 150.0, prof) * forcaFoco;
-        vec4 bf = TEX(texDesfoque, fragTexCoord);  // fundo desfocado, pre-multiplicado pelo peso (alfa)
-        if (bf.a > 0.02) c = mix(c, bf.rgb / bf.a, coc * smoothstep(0.02, 0.35, bf.a));
+        if (coc > 0.0) {
+            vec4 bf = TEX(texDesfoque, fragTexCoord);  // fundo desfocado, pre-multiplicado pelo peso (alfa)
+            if (bf.a > 0.02) c = mix(c, bf.rgb / bf.a, coc * smoothstep(0.02, 0.35, bf.a));
+        }
     }
     if (usarAO > 0.5 && prof < alcanceAO) {
         vec2 ao = TEX(texAO, fragTexCoord).rg;

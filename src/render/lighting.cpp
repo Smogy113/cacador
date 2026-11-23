@@ -204,6 +204,13 @@ void Iluminacao::carregar(Nivel nivel) {
     prof_ = carregarShader(VS_PROF, FS_PROF);
     matProf_ = LoadMaterialDefault();
     matProf_.shader = prof_;
+#if !defined(PLATFORM_WEB)
+    Shader profOpaca = carregarShaderDef(VS_PROF, FS_PROF, "#define PROFUNDIDADE_OPACA\n");
+    if (profOpaca.id && profOpaca.id != rlGetShaderIdDefault()) {
+        matProfOpaca_ = matProf_;
+        matProfOpaca_.shader = profOpaca;
+    }
+#endif
     brilho_ = carregarShaderPos(FS_BRILHO);
     blur_ = carregarShaderPos(FS_BLUR);
     raios_ = carregarShaderPos(FS_RAIOS);
@@ -344,6 +351,8 @@ void Iluminacao::descarregar() {
     samplerSombra_ = 0;
 #endif
     for (Shader sh : {prof_, brilho_, blur_, raios_, junta_, pele_, profPele_, ssao_, blurAO_, blur4_, longe_}) UnloadShader(sh);
+    if (matProfOpaca_.shader.id) UnloadShader(matProfOpaca_.shader);
+    matProfOpaca_ = {};
     if (cabecaOk_) {
         for (int i = 0; i < 12; i++) matCabeca_.maps[i].texture = Texture2D{};  // as texturas sao de outros donos
         UnloadShader(cabeca_);
@@ -471,6 +480,15 @@ void Iluminacao::comecarCena(const Camera3D& cam, const DayClock& relogio, const
 void Iluminacao::modoHorizonte(float d) {
     setF(lit_, "descartarPerto", d);
     if (paredeOk_) setF(litParede_, "descartarPerto", d);
+}
+
+bool Iluminacao::usaProfundidadeConstrucoes() const {
+#if !defined(PLATFORM_WEB)
+    return nivel_ == Nivel::Alto && prof_.id != rlGetShaderIdDefault()
+           && matConstr_.shader.id != rlGetShaderIdDefault();
+#else
+    return false;
+#endif
 }
 
 void Iluminacao::modoEstudio(Vec3f dir, bool argila) {
@@ -722,7 +740,6 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
     bool foco = cinema && !dbg.semFoco;
     if (foco) {
         BeginTextureMode(focoA_);
-        ClearBackground(BLANK);
         BeginShaderMode(longe_);
         SetShaderValue(longe_, GetShaderLocation(longe_, "distFoco"), &distFoco_, SHADER_UNIFORM_FLOAT);
         SetShaderValue(longe_, GetShaderLocation(longe_, "profCena"), profCena_, SHADER_UNIFORM_VEC2);

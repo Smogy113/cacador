@@ -314,7 +314,7 @@ void TerrenoRender::desenhar(const Camera3D& cam, float distMax, Material& solo,
         }
 }
 
-void TerrenoRender::desenharArea(Vec3f centro, float raio, Material& mat) {
+void TerrenoRender::desenharArea(Vec3f centro, float raio, const Material& mat) {
     Matrix id = MatrixIdentity();
     const Frustum frustum = Frustum::doPasse();
     for (int j = 0; j < n_; j++)

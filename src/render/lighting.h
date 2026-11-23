@@ -65,6 +65,8 @@ public:
     void comecarSombraPerto(Vec3f centro);
     void terminarSombraPerto();
     Material& materialSombra() { return matProf_; }
+    const Material& materialSombraOpaca() const { return matProfOpaca_.shader.id ? matProfOpaca_ : matProf_; }
+    bool usaProfundidadeConstrucoes() const;
     // personagens com esqueleto
     Material& materialPele() { return matPele_; }
     Material& materialSombraPele() { return matProfPele_; }
@@ -113,6 +115,7 @@ private:
     bool paredeOk_ = false;
     bool cabecaOk_ = false;
     Material mat_{}, matProf_{}, matPele_{}, matProfPele_{}, matCabeca_{}, matConstr_{};
+    Material matProfOpaca_{};  // usa os mesmos mapas de matProf_ e tem seu proprio shader
     Material matSolo_{};
     bool soloTentado_ = false;
     Model esfera_{};

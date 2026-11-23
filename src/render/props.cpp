@@ -7,6 +7,7 @@
 #include "raymath.h"
 #include "render/frustum.h"
 #include "render/meshconv.h"
+#include "rlgl.h"
 
 namespace {
 // PI vem da raylib
@@ -1120,21 +1121,17 @@ void Cenario::atualizar(Vec3f foco, float tempo, int maxConstrucoes) {
     }
 }
 
-void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Material* matConstr, int partes, float distDetalhe) {
-    if (partes & 1) {  // a contagem recomeca na primeira parte do quadro
-        tris_ = 0;
-        chamadas_ = 0;
-    }
+void Cenario::prepararPassePrincipal(const Camera3D& cam, float distMax, float distDetalhe) {
+    construcoesVisiveis_.clear();
+    arvoresVisiveis_.clear();
+    tris_ = 0;
     Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
     float meio = std::acos(std::cos(cam.fovy * 0.5f * 1.9f * DEG2RAD));
-    Matrix id = MatrixIdentity();
     const Frustum frustum = Frustum::doPasse();
-    const Material& materialConstrucao = matConstr ? *matConstr : mat;
-    auto desenharMalha = [&](const Mesh& malha, const BoundingBox& limites, const Material& material) {
+    auto selecionarMalha = [&](const Mesh& malha, const BoundingBox& limites, std::vector<const Mesh*>& visiveis) {
         if (!frustum.contemParte(limites)) return;
-        DrawMesh(malha, material, id);
+        visiveis.push_back(&malha);
         tris_ += malha.triangleCount;
-        chamadas_++;
     };
     for (auto& p : p_) {
         if (!p.temConstr && !p.temLonge && !p.temPerto && !p.q[0].tem && !p.q[1].tem && !p.q[2].tem && !p.q[3].tem) continue;
@@ -1146,47 +1143,68 @@ void Cenario::desenhar(const Camera3D& cam, float distMax, Material& mat, Materi
             float ang = std::acos(std::clamp(Vector3DotProduct(Vector3Scale(v, 1.f / d), fwd), -1.f, 1.f));
             if (ang - std::asin(std::min(1.f, p.raio / d)) > meio) continue;
         }
-        if (partes & 1) {
-            if (p.temConstr) desenharMalha(p.construcoes, p.limitesConstr, materialConstrucao);
-            for (auto& Q : p.q) {  // predios: detalhados perto, casca longe (Baixo: sempre casca)
-                if (!Q.tem) continue;
-                float dq = std::hypot(Q.centro.x - cam.position.x, Q.centro.z - cam.position.z) - TAM * 0.36f;
-                if (dq > distDetalhe) desenharMalha(Q.casca, Q.limitesCasca, materialConstrucao);
-                else desenharMalha(Q.det, Q.limitesDet, materialConstrucao);
-            }
+        if (p.temConstr) selecionarMalha(p.construcoes, p.limitesConstr, construcoesVisiveis_);
+        for (const auto& q : p.q) {  // predios detalhados perto e a casca longe
+            if (!q.tem) continue;
+            float dq = std::hypot(q.centro.x - cam.position.x, q.centro.z - cam.position.z) - TAM * 0.36f;
+            if (dq > distDetalhe) selecionarMalha(q.casca, q.limitesCasca, construcoesVisiveis_);
+            else selecionarMalha(q.det, q.limitesDet, construcoesVisiveis_);
         }
-        if (!(partes & 2)) continue;
         bool perto = dh < DIST_PERTO && p.temPerto;
         if (perto) {
             p.usoPerto = tempo_;
-            desenharMalha(p.arvPerto, p.limitesArvPerto, mat);
+            selecionarMalha(p.arvPerto, p.limitesArvPerto, arvoresVisiveis_);
         } else if (p.temLonge) {
-            desenharMalha(p.arvLonge, p.limitesArvLonge, mat);
+            selecionarMalha(p.arvLonge, p.limitesArvLonge, arvoresVisiveis_);
         }
     }
+    chamadas_ = int(construcoesVisiveis_.size() + arvoresVisiveis_.size());
 }
 
-void Cenario::desenharArea(Vec3f centro, float raio, Material& mat) {
-    Matrix id = MatrixIdentity();
+void Cenario::desenharProfundidadeConstrucoes(const Material& mat) const {
+    if (construcoesVisiveis_.empty()) return;
+    // O passe inicial escreve so a profundidade. A ordem dos passes de cor continua a mesma.
+    rlColorMask(false, false, false, false);
+    desenharConstrucoes(mat);
+    rlColorMask(true, true, true, true);
+}
+
+static void desenharMalhas(const std::vector<const Mesh*>& malhas, const Material& mat) {
+    const Matrix identidade = MatrixIdentity();
+    for (const Mesh* malha : malhas) DrawMesh(*malha, mat, identidade);
+}
+
+void Cenario::desenharConstrucoes(const Material& mat) const {
+    desenharMalhas(construcoesVisiveis_, mat);
+}
+
+void Cenario::desenharArvores(const Material& mat) const {
+    desenharMalhas(arvoresVisiveis_, mat);
+}
+
+void Cenario::desenharArea(Vec3f centro, float raio, const Material& mat, const Material& matOpaca) {
+    const Matrix id = MatrixIdentity();
     const Frustum frustum = Frustum::doPasse();
-    auto desenharMalha = [&](const Mesh& malha, const BoundingBox& limites) {
-        if (frustum.contemParte(limites)) DrawMesh(malha, mat, id);
+    auto desenharMalha = [&](const Mesh& malha, const BoundingBox& limites, const Material& material) {
+        if (frustum.contemParte(limites)) DrawMesh(malha, material, id);
     };
-    for (auto& p : p_) {
+    for (const auto& p : p_) {
         if (std::hypot(p.centro.x - centro.x, p.centro.z - centro.z) > raio + p.raio) continue;
-        if (p.temConstr) desenharMalha(p.construcoes, p.limitesConstr);
-        for (auto& Q : p.q) {  // sombras: casca (leve); perto, o predio detalhado (o sol entra pelos vaos)
-            if (!Q.tem) continue;
-            bool perto = std::hypot(Q.centro.x - centro.x, Q.centro.z - centro.z) < 25.f + TAM * 0.36f;
-            if (perto) desenharMalha(Q.det, Q.limitesDet);
-            else desenharMalha(Q.casca, Q.limitesCasca);
+        if (p.temConstr) desenharMalha(p.construcoes, p.limitesConstr, mat);
+        for (const auto& q : p.q) {  // sombras: casca (leve); perto, o predio detalhado (o sol entra pelos vaos)
+            if (!q.tem) continue;
+            bool perto = std::hypot(q.centro.x - centro.x, q.centro.z - centro.z) < 25.f + TAM * 0.36f;
+            if (perto) desenharMalha(q.det, q.limitesDet, mat);
+            else desenharMalha(q.casca, q.limitesCasca, mat);
         }
-        if (p.temPerto) desenharMalha(p.arvPerto, p.limitesArvPerto);
-        else if (p.temLonge) desenharMalha(p.arvLonge, p.limitesArvLonge);
+        if (p.temPerto) desenharMalha(p.arvPerto, p.limitesArvPerto, matOpaca);
+        else if (p.temLonge) desenharMalha(p.arvLonge, p.limitesArvLonge, matOpaca);
     }
 }
 
 void Cenario::descarregar() {
+    construcoesVisiveis_.clear();
+    arvoresVisiveis_.clear();
     for (auto& p : p_) {
         if (p.temConstr) UnloadMesh(p.construcoes);
         for (auto& Q : p.q)
