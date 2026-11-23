@@ -148,6 +148,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
 Entrada Jogo::lerEntrada() {
     Entrada e;
     e.mirar = op_.mirar;
+    e.frente = op_.andar > 0 ? 1.f : 0.f;
+    e.correr = op_.andar == 2;
     if (op_.semEntrada) return e;
     e.frente = (IsKeyDown(KEY_W) ? 1.f : 0.f) - (IsKeyDown(KEY_S) ? 1.f : 0.f);
     e.lado = (IsKeyDown(KEY_D) ? 1.f : 0.f) - (IsKeyDown(KEY_A) ? 1.f : 0.f);
@@ -333,13 +335,12 @@ void Jogo::atualizar(float dt) {
         Vec3f antes = jogador_.pos;
         moverAPe(jogador_, e, rig_.yaw, dt * dbg_.velJogador, *terreno_, col_);
         if (mira_ > 0.5f) jogador_.yaw = rig_.yaw;
-        float distancia = std::hypot(jogador_.pos.x - antes.x, jogador_.pos.z - antes.z);
-        float alvo = distancia > dt * 0.08f ? 1.f : 0.f;
-        pesoPassada_ += (alvo - pesoPassada_) * (1.f - std::exp(-dt * 14.f));
-        passada_ += distancia * fasePorMetro(jogador_.vel);
-        if (int((passada_ + 1.5708f) / 3.14159f) != passoAntes_) {  // um som por passo
-            passoAntes_ = int((passada_ + 1.5708f) / 3.14159f);
-            if (jogador_.vel > 0.1f) sons_.passo(jogador_.vel > 3.f ? 0.55f : 0.35f, dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0);
+        // a animacao segue o que o corpo andou de fato (parede segura o passo); mirando, o yaw segue a
+        // camera e o corpo nao tomba nas puxadas do mouse
+        loco_.atualizar(dt, jogador_.pos - antes, jogador_.yaw, mira_ <= 0.5f);
+        if (loco_.passo() != passoAntes_) {  // um som a cada toque de calcanhar
+            passoAntes_ = loco_.passo();
+            if (loco_.vel > 0.1f) sons_.passo(loco_.vel > 3.f ? 0.55f : 0.35f, dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0);
         }
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);

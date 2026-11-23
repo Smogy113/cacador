@@ -336,33 +336,23 @@ Pose Jogo::poseDoJogador(const Esqueleto& ej) const {
         return poseRepouso(ej);
     }
     if (morteT_ >= 0) return poseCair(ej, morteT_ / 0.6f);
+    // andando, as pernas e o tronco vem da locomocao; recarregar e mirar so trocam os bracos
+    const bool andando = loco_.vel > 0.1f;
     if (arma_.recarregando()) {
-        Pose p = jogador_.vel > 0.1f ? poseAndar(ej, passada_, jogador_.vel) : poseRecarregar(ej, 1.f - arma_.recarga / Revolver::TEMPO_RECARGA);
-        if (jogador_.vel > 0.1f) {
-            Pose r = poseRecarregar(ej, 1.f - arma_.recarga / Revolver::TEMPO_RECARGA);
-            for (int o : {BRACO_E, BRACO_D, ANTEBRACO_E, ANTEBRACO_D}) p.rot[o] = r.rot[o];
-        }
+        Pose r = poseRecarregar(ej, 1.f - arma_.recarga / Revolver::TEMPO_RECARGA);
+        if (!andando) return r;
+        Pose p = poseLocomocao(ej, loco_, tempo_);
+        for (int o : {BRACO_E, BRACO_D, ANTEBRACO_E, ANTEBRACO_D}) p.rot[o] = r.rot[o];
         return p;
     }
     if (mira_ > 0.5f || tiroT_ > 0) {
         Pose m = poseMirar(ej, anguloMira_, tiroT_ / 0.18f);
-        if (jogador_.vel > 0.1f) {
-            Pose p = poseAndar(ej, passada_, jogador_.vel);
-            bracoDeMira(p, m);
-            return p;
-        }
-        return m;
+        if (!andando) return m;
+        Pose p = poseLocomocao(ej, loco_, tempo_);
+        bracoDeMira(p, m);
+        return p;
     }
-    if (pesoPassada_ < 0.005f) return poseParado(ej, tempo_);
-    Pose passo = poseAndar(ej, passada_, std::max(jogador_.vel, VEL_ANDAR));
-    if (pesoPassada_ < 0.995f) {
-        Pose repouso = poseParado(ej, tempo_);
-        for (size_t i = 0; i < passo.rot.size(); ++i)
-            passo.rot[i] = repouso.rot[i] + (passo.rot[i] - repouso.rot[i]) * pesoPassada_;
-        passo.raiz = repouso.raiz + (passo.raiz - repouso.raiz) * pesoPassada_;
-        apoiarNoChao(ej, passo);
-    }
-    return passo;
+    return poseLocomocao(ej, loco_, tempo_);
 }
 
 void Jogo::desenharCombatentes(Material& matPele, bool sombraBolha, float distMax) {

@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <cmath>
 #include <memory>
 #include "core/camrig.h"
 #include "core/motion.h"
@@ -17,9 +18,49 @@ TEST_CASE("anda na direção da câmera") {
     MundoColisao col;
     Corpo c{{0, 0, 0}, 0, 0};
     Entrada e; e.frente = 1;
-    moverAPe(c, e, 0, 1.f, plano(), col);
-    CHECK(c.pos.z == doctest::Approx(VEL_ANDAR).epsilon(0.05));
+    moverAPe(c, e, 0, 1.f, plano(), col);  // embala
+    float z0 = c.pos.z;
+    moverAPe(c, e, 0, 1.f, plano(), col);  // ja em velocidade de cruzeiro
+    CHECK(c.pos.z - z0 == doctest::Approx(VEL_ANDAR).epsilon(0.05));
     CHECK(c.pos.x == doctest::Approx(0).epsilon(0.01));
+}
+TEST_CASE("acelera e freia em vez de saltar de velocidade") {
+    MundoColisao col;
+    Corpo c{{0, 0, 0}, 0, 0};
+    Entrada e; e.frente = 1;
+    moverAPe(c, e, 0, 1.f / 60, plano(), col);
+    CHECK(c.vel < 0.15f);  // um quadro depois ainda esta embalando
+    for (int i = 0; i < 30; i++) moverAPe(c, e, 0, 1.f / 60, plano(), col);
+    CHECK(c.vel == doctest::Approx(VEL_ANDAR));  // meio segundo: ja no passo normal
+    // solta o comando: continua em frente, freando, e para em pouco espaco
+    Entrada solto;
+    float z0 = c.pos.z;
+    moverAPe(c, solto, 0, 1.f / 60, plano(), col);
+    CHECK(c.vel > 0.f);
+    CHECK(c.pos.z > z0);
+    for (int i = 0; i < 30; i++) moverAPe(c, solto, 0, 1.f / 60, plano(), col);
+    CHECK(c.vel == 0.f);
+    CHECK(c.pos.z - z0 < 0.3f);
+}
+TEST_CASE("meia-volta: freia antes de girar o corpo") {
+    MundoColisao col;
+    Corpo c{{0, 0, 0}, 0, 0};
+    Entrada e; e.frente = 1;
+    for (int i = 0; i < 60; i++) moverAPe(c, e, 0, 1.f / 60, plano(), col);
+    Entrada volta; volta.frente = -1;
+    moverAPe(c, volta, 0, 1.f / 60, plano(), col);
+    CHECK(c.vel < VEL_ANDAR);  // ninguem da meia-volta em velocidade cheia
+    for (int i = 0; i < 120; i++) moverAPe(c, volta, 0, 1.f / 60, plano(), col);
+    CHECK(c.vel == doctest::Approx(VEL_ANDAR));  // ja virado, volta ao passo normal
+    CHECK(std::abs(std::cos(c.yaw) + 1.f) < 0.01f);  // olhando para -z
+}
+TEST_CASE("mirando anda para trás sem frear nem girar") {
+    MundoColisao col;
+    Corpo c{{0, 0, 0}, 0, 0};
+    Entrada e; e.frente = -1; e.mirar = true;
+    for (int i = 0; i < 60; i++) moverAPe(c, e, 0, 1.f / 60, plano(), col);
+    CHECK(c.pos.z < -1.f);
+    CHECK(c.vel == doctest::Approx(VEL_ANDAR));
 }
 TEST_CASE("direita da câmera") {
     MundoColisao col;
@@ -33,9 +74,12 @@ TEST_CASE("correr é mais rápido") {
     Corpo a{{0, 0, 0}, 0, 0}, b{{0, 0, 0}, 0, 0};
     Entrada ea; ea.frente = 1;
     Entrada eb = ea; eb.correr = true;
+    moverAPe(a, ea, 0, 1.f, plano(), col);  // embala
+    moverAPe(b, eb, 0, 1.f, plano(), col);
+    Vec3f a0 = a.pos, b0 = b.pos;
     moverAPe(a, ea, 0, 1.f, plano(), col);
     moverAPe(b, eb, 0, 1.f, plano(), col);
-    CHECK(dist2D(b.pos, {0, 0, 0}) > 2.5f * dist2D(a.pos, {0, 0, 0}));
+    CHECK(dist2D(b.pos, b0) > 2.5f * dist2D(a.pos, a0));
 }
 TEST_CASE("fica no chão") {
     MundoColisao col;

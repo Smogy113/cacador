@@ -218,3 +218,70 @@ TEST_CASE("andar e correr: o pe de apoio nao escorrega") {
     CHECK(escorregaoPorMetro(1.6f) < 0.12f);
     CHECK(escorregaoPorMetro(5.f) < 0.12f);
 }
+
+// ---------- marcha parecida com a de pessoas (numeros de laboratorio) ----------
+static float alturaQuadril(const Pose& p) { return juntaPose(p, QUADRIL, false).y; }
+static float cadencia(float v) { return v / (3.14159265f / fasePorMetro(v)) * 60.f; }  // passos por minuto
+
+TEST_CASE("andar: a bacia sobe e desce suave, sem tranco na pisada") {
+    const float dfase = 6.2831853f / 200;  // 200 amostras por ciclo (~6 ms cada a 1,6 m/s)
+    float menor = 1e9f, maior = -1e9f, maiorSalto = 0, uMaior = 0;
+    float ant = alturaQuadril(poseAndar(esq(), 1.5707963f - dfase, 1.6f));
+    for (int i = 0; i < 200; i++) {
+        float y = alturaQuadril(poseAndar(esq(), 1.5707963f + dfase * i, 1.6f));
+        maiorSalto = std::max(maiorSalto, std::abs(y - ant));
+        if (y > maior) { maior = y; uMaior = i / 200.f; }
+        menor = std::min(menor, y);
+        ant = y;
+    }
+    CHECK(maior - menor > 0.03f);  // pessoas: ~4-5 cm de sobe e desce andando
+    CHECK(maior - menor < 0.06f);
+    CHECK(maiorSalto < 0.003f);    // antes: ~2,5 cm de queda em 7 ms logo apos cada pisada
+    // mais alta perto do meio do apoio de um dos pes (u ~ 0,25 ou ~ 0,75)
+    float meio = std::fmod(uMaior, 0.5f);
+    CHECK(meio > 0.15f);
+    CHECK(meio < 0.35f);
+}
+TEST_CASE("andar: joelho de apoio quase esticado no meio do apoio") {
+    // u = 0,30 do pe esquerdo: o corpo passa por cima do pe de apoio (pessoas: ~5-15 graus)
+    Pose p = poseAndar(esq(), 1.5707963f + 6.2831853f * 0.30f, 1.6f);
+    CHECK(p.rot[CANELA_E].x < 0.30f);
+    CHECK(p.rot[CANELA_E].x > 0.f);
+}
+TEST_CASE("cadência perto da medida em pessoas") {
+    CHECK(cadencia(1.6f) > 110.f);  // andar rapido: ~115-125 passos/min
+    CHECK(cadencia(1.6f) < 130.f);
+    CHECK(cadencia(5.f) > 170.f);   // correndo a 18 km/h: ~175-200 (antes ~275)
+    CHECK(cadencia(5.f) < 225.f);
+}
+TEST_CASE("correr tem fase de voo; andar sempre tem um pé no chão") {
+    bool voou = false;
+    for (float f = 0; f < 6.3f; f += 0.05f) {
+        if (alturaDosPes(esq(), poseAndar(esq(), f, 5.f)) > 0.01f) voou = true;
+        CHECK(alturaDosPes(esq(), poseAndar(esq(), f, 1.6f)) < 0.005f);
+    }
+    CHECK(voou);
+}
+TEST_CASE("andar: o pé no ar não raspa no chão") {
+    // pe direito no meio do balanco (u do direito entre 0,70 e 0,90 -> u do esquerdo entre 0,20 e 0,40)
+    std::vector<Mat4> m;
+    for (float u = 0.20f; u <= 0.40f; u += 0.01f) {
+        Pose p = poseAndar(esq(), 1.5707963f + 6.2831853f * u, 1.6f);
+        calcularMatrizes(esq(), p, m);
+        const Osso& o = esq().ossos[PE_D];
+        float ponta = m[PE_D].ponto({o.fim.x, 0.f, o.fim.z + 0.01f}).y;
+        float calc = m[PE_D].ponto({o.inicio.x, 0.f, o.inicio.z - 0.045f}).y;
+        CHECK(std::min(ponta, calc) > 0.008f);
+    }
+}
+TEST_CASE("devagar os passos encurtam, a cadência quase não muda e os pés ficam no chão") {
+    // comecando a andar ou parando: passos curtos no mesmo ritmo, como as pessoas
+    CHECK(cadencia(0.5f) == doctest::Approx(cadencia(1.0f)).epsilon(0.02));
+    CHECK(6.2831853f / fasePorMetro(0.5f) < 0.6f * 6.2831853f / fasePorMetro(1.6f));
+    for (float f = 0; f < 6.3f; f += 0.3f) {
+        Pose p = poseAndar(esq(), f, 0.5f);
+        CHECK(alturaDosPes(esq(), p) == doctest::Approx(0).epsilon(0.01));
+        CHECK(std::abs(p.raiz.y) < 0.03f);  // passos curtos: corpo quase na altura de em pe
+    }
+    CHECK(escorregaoPorMetro(0.5f) < 0.12f);
+}

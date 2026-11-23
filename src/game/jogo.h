@@ -9,6 +9,7 @@
 #include "core/daytime.h"
 #include "core/hair_physics.h"
 #include "core/horse.h"
+#include "core/locomocao.h"
 #include "core/motion.h"
 #include "core/npc.h"
 #include "game/actors.h"
@@ -50,6 +51,7 @@ struct OpcoesJogo {
     int recompensa = -1;   // aceita o cartaz N do quadro 0 ao iniciar (testes)
     bool tiroteio = false; // comeca perto do esconderijo, com o bando alerta (testes e benchmark)
     bool mirar = false;    // segura a mira (screenshots)
+    int andar = 0;         // anda sozinho para a frente: 1 = andando, 2 = correndo (screenshots da marcha)
     bool abrirMapa = false;
     bool abrirDepuracao = false;  // comeca com o painel F1 aberto (screenshots)  // comeca com o mapa grande aberto (screenshots)
     float pitch = -999;    // inclinacao da camera em graus (screenshots; < 0 = olhando para cima)
@@ -100,8 +102,7 @@ private:
     int quadroPerto_ = -1, quadroAberto_ = -1, cartazSel_ = 0;
     float tempoTotal_ = 0;
     SombraBolha sombra_;
-    float passada_ = 0;
-    float pesoPassada_ = 0;
+    Locomocao loco_;  // passada, mistura parado/andando e inclinacoes do caçador a pé
     bool pausado_ = false, sair_ = false;
     Entrada lerEntrada();
     void atualizarCamera(float dt, const Entrada& e);

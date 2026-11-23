@@ -71,6 +71,15 @@ com a sombra de cada fileira (cidade); e tábuas sobrepostas nas casas de madeir
 palha e as telhas são desenhadas uma vez numa textura de 1024² ao abrir o jogo; as tábuas usam a
 textura de madeira das paredes. O custo por quadro fica praticamente igual ao de antes.
 
+**Andar de gente (0.27):** o caçador anda e corre com base em medidas de pessoas reais. O pé
+pisa com o calcanhar, fica chato no chão e sai pela ponta sem escorregar. O quadril sobe e desce
+uns 4 cm a cada passo, sem o tranco que havia logo depois de cada pisada, e o joelho de apoio
+quase se estica no meio do passo. Correndo, há uma fase de voo e o ritmo caiu de ~275 para
+~215 passos por minuto. O caçador acelera e freia em vez de mudar de velocidade de uma vez,
+inclina o tronco ao arrancar e ao frear e tomba para dentro nas curvas. Para dar meia-volta,
+ele primeiro diminui o passo. As pessoas da cidade e os bandidos usam o mesmo andar. O cálculo
+da pose ficou ~25% mais barato.
+
 O capim cresce em tufos irregulares, com folhas finas, alturas variadas e algumas pontas
 secas. No Médio e no Alto, perto da câmera aparecem também folhas curvas que balançam com o
 vento. A cobertura fica mais baixa junto às trilhas e aos poços, e muda de tom na margem do rio.
@@ -143,7 +152,8 @@ scripts/screenshot.sh saida.png --hora 18.5  # tira um print sem abrir janela (X
 
 Opções úteis para testes: `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidade baixo|medio|alto`,
 `--montado`, `--abrir-quadro`, `--mapa arquivo.txt`, `--recompensa N` (aceita o cartaz N),
-`--tiroteio` (começa perto do bando, já em combate), `--mirar`, `--estudio --retrato 0.5` (só o
+`--tiroteio` (começa perto do bando, já em combate), `--mirar`, `--andar` e `--correr` (o caçador
+anda sozinho para a frente, para capturar a marcha), `--estudio --retrato 0.5` (só o
 caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`.
 
 Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).
