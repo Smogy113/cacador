@@ -100,6 +100,7 @@ TEST_CASE("cabelo: cortes com silhuetas diferentes geram o proprio perfil") {
             REQUIRE(perfil.guias[i].pais.a < perfil.principais);
             REQUIRE(perfil.guias[i].pais.b < perfil.principais);
         }
+        std::array<bool, MAX_GUIAS_CABELO> ancorados{};
         bool usaSecundario = false;
         for (const auto& v : malha->v) {
             if (v.guiaCabelo[0] == SEM_GUIA_CABELO) continue;
@@ -107,10 +108,29 @@ TEST_CASE("cabelo: cortes com silhuetas diferentes geram o proprio perfil") {
             REQUIRE(v.guiaCabelo[0] < perfil.quantidade);
             REQUIRE(v.guiaCabelo[1] < perfil.quantidade);
             REQUIRE(v.osso[0] == CABECA);
+            if (v.misturaGuias == 0) ancorados[v.guiaCabelo[0]] = true;
         }
         CHECK(usaSecundario);
+        CHECK(std::count(ancorados.begin(), ancorados.end(), true) == perfil.quantidade);
     }
+    CHECK(ondulado.cabelo.quantidade >= std::min<size_t>(80, MAX_GUIAS_CABELO));
     CHECK(comprido.cabelo.guias[0].pontos[2].y < ondulado.cabelo.guias[0].pontos[2].y);
+}
+
+TEST_CASE("cabelo: a dobra divide o comprimento livre da mecha") {
+    MalhaPele malha;
+    loft::ConstrutorCabelo construtor(malha, {0, 1.7f, .02f}, 1.f, 1.f);
+    const Vec3f raiz{.1f, 1.75f, -.08f}, dobra{.1f, 1.71f, -.08f}, ponta{.14f, 1.71f, -.08f};
+    construtor.fita({{raiz, .12f}, {dobra, .20f}, {ponta, 1.f}}, .008f, {}, 1.f);
+    construtor.finalizar();
+
+    REQUIRE(malha.cabelo.quantidade == 1);
+    const auto& guia = malha.cabelo.guias[0];
+    CHECK(guia.comprimentoLivre == doctest::Approx(.08f));
+    CHECK(len(guia.pontos[1] - dobra) < 1e-5f);
+    CHECK(len(malha.v[1].tang) == doctest::Approx(.05f));
+    CHECK(len(malha.v[4].tang) == doctest::Approx(.55f));
+    CHECK(len(malha.v[7].tang) == doctest::Approx(1.05f));
 }
 
 TEST_CASE("cabelo: mechas curtas e rigidas cedem menos ao mesmo vento") {

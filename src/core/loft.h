@@ -129,7 +129,6 @@ public:
 private:
     struct Fita {
         GuiaCabelo guia;
-        float comprimento;
         size_t inicio, fim;
     };
     MalhaPele& m_;

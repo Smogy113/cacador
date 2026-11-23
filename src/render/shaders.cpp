@@ -1855,7 +1855,7 @@ void main() {
 
 // ---------- personagens com esqueleto (deformados na placa de video) ----------
 // vertexTexCoord2: x = osso A, y = osso B + 0.99 * peso de A.
-// Nas fitas de cabelo, y negativo guarda os guias e o osso A carrega a fita.
+// Nas fitas de cabelo, y negativo guarda os guias e a fração de x guarda o arco livre.
 #define CORPO_SKIN R"(
 ATTR vec3 vertexPosition;
 ATTR vec2 vertexTexCoord;
@@ -1867,7 +1867,7 @@ uniform mat4 mvp;
 uniform mat4 matModel;
 uniform mat4 ossos[17];
 mat4 matrizPele() {
-    int a = int(vertexTexCoord2.x + 0.5);
+    int a = int(vertexTexCoord2.x);
     float fy = vertexTexCoord2.y;
     if (fy < 0.0) return ossos[a];
     int b = int(floor(fy));
@@ -1876,10 +1876,17 @@ mat4 matrizPele() {
 }
 )"
 
+#if defined(PLATFORM_WEB)
+#define CAPACIDADE_CABELO "#define GUIAS_CABELO 32\n"
 static_assert(MAX_GUIAS_CABELO == 32, "Sincronizar com GUIAS_CABELO no shader");
-static_assert(17 * 4 + 2 * 4 + MAX_GUIAS_CABELO * 3 / 2 + 3 <= 128, "Uniforms de vertice do WebGL 1");
-#define FISICA_MECHA R"(
-#define GUIAS_CABELO 32
+constexpr int MAX_VETORES_VERTICE = 128;
+#else
+#define CAPACIDADE_CABELO "#define GUIAS_CABELO 96\n"
+static_assert(MAX_GUIAS_CABELO == 96, "Sincronizar com GUIAS_CABELO no shader");
+constexpr int MAX_VETORES_VERTICE = 256;
+#endif
+static_assert(17 * 4 + 2 * 4 + MAX_GUIAS_CABELO * 3 / 2 + 3 <= MAX_VETORES_VERTICE, "Uniforms de vértice");
+#define FISICA_MECHA CAPACIDADE_CABELO R"(
 uniform vec4 cabeloCurvas[GUIAS_CABELO], cabeloPontasYZ[GUIAS_CABELO / 2];
 uniform vec3 cabeloCentro, cabeloRaios;
 uniform float cabeloAtivo;
@@ -1888,18 +1895,24 @@ vec3 pontaGuia(int guia, float x) {
     vec4 yz = cabeloPontasYZ[par];
     return vec3(x, guia == par * 2 ? yz.xy : yz.zw);
 }
-vec3 deslocarMecha() {
-    float t = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
+vec3 deslocarMecha(float t, out vec3 inclinacao) {
+    inclinacao = vec3(0.0);
     if (t <= 0.0) return vec3(0.0);
     float codigo = -vertexTexCoord2.y - 1.0;
     int par = int(floor(codigo));
     int a = par / GUIAS_CABELO, b = par - GUIAS_CABELO * a;
     float peso = fract(codigo) / 0.99;
-    vec4 curvaA = cabeloCurvas[a], curvaB = cabeloCurvas[b];
-    vec3 meio = mix(curvaA.xyz, curvaB.xyz, peso);
-    vec3 ponta = mix(pontaGuia(a, curvaA.w), pontaGuia(b, curvaB.w), peso);
-    // Curva quadrática que passa pela raiz, dobra e ponta.
-    vec3 desloc = t * (4.0 * (1.0 - t) * meio + (2.0 * t - 1.0) * ponta);
+    vec4 curvaA = cabeloCurvas[a];
+    vec3 meio = curvaA.xyz;
+    vec3 ponta = pontaGuia(a, curvaA.w);
+    if (peso > 0.0) {
+        vec4 curvaB = cabeloCurvas[b];
+        meio = mix(meio, curvaB.xyz, peso);
+        ponta = mix(ponta, pontaGuia(b, curvaB.w), peso);
+    }
+    // Curva cúbica com raiz fixa e tangente contínua no ponto de fixação.
+    vec3 desloc = (t * t) * (8.0 * (1.0 - t) * meio + (2.0 * t - 1.0) * ponta);
+    inclinacao = t * ((16.0 - 24.0 * t) * meio + (6.0 * t - 2.0) * ponta);
 
     // Mantém cada vértice fora do elipsoide ou com a folga original do corte.
     vec3 raios = max(cabeloRaios, vec3(0.0001));
@@ -1933,9 +1946,13 @@ void main() {
     vec3 normal = normalize(mat3(S) * vertexNormal);
     if (cabeloAtivo > 0.5 && vertexTexCoord2.y < 0.0) {
         float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
-        vec3 desloc = mat3(S) * deslocarMecha();
-        pl.xyz += desloc;
-        vec3 fio = normalize(tangente + desloc * 2.8);
+        vec3 inclinacao;
+        pl.xyz += mat3(S) * deslocarMecha(w, inclinacao);
+        float arco = fract(vertexTexCoord2.x);
+        float inversoArco = (1.0 - arco) / max(arco, 0.017);
+        vec3 repouso = tangente / (0.05 + w);
+        vec3 direcao = repouso + mat3(S) * inclinacao * inversoArco;
+        vec3 fio = dot(direcao, direcao) > 1e-6 ? normalize(direcao) : repouso;
         normal = normalize(normal - fio * dot(normal, fio) * w);
         tangente = fio;
     }
@@ -1974,10 +1991,16 @@ void main() {
     mechaUV = vec2(vertexColor.a, vertexTangent.w);
     mat4 S = matrizPele();
     vec4 pl = S * vec4(vertexPosition, 1.0);
-    if (cabeloAtivo > 0.5 && vertexTexCoord2.y < 0.0) pl.xyz += mat3(S) * deslocarMecha();
+    if (cabeloAtivo > 0.5 && vertexTexCoord2.y < 0.0) {
+        float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
+        vec3 inclinacao;
+        pl.xyz += mat3(S) * deslocarMecha(w, inclinacao);
+    }
     gl_Position = mvp * pl;
 }
 )";
+#undef FISICA_MECHA
+#undef CAPACIDADE_CABELO
 
 // ---------- oclusao de ambiente em tela (SSAO) ----------
 const char* FS_SSAO = PROFUNDIDADE_CAMERA R"(

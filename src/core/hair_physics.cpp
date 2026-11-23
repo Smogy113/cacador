@@ -58,7 +58,8 @@ FisicaCabelo::FisicaCabelo(const PerfilCabelo& perfil) : perfil_(perfil) {
         float l0 = len(p[1] - p[0]), l1 = len(p[2] - p[1]);
         float comprimento = l0 + l1;
         float flex = clamp01(guia.flexibilidade);
-        float solto = smoothstep(.032f, .20f, comprimento) * lerp(.3f, 1.f, flex);
+        float arco = std::max(comprimento, guia.comprimentoLivre);
+        float solto = smoothstep(.032f, .20f, arco) * lerp(.3f, 1.f, flex);
         float rigidezPonta = lerp(290.f, 105.f, solto);
         float desvio = comprimento * lerp(.26f, .60f, flex);
         float limitePonta = std::min(.16f, desvio);

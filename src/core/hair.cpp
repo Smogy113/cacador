@@ -39,7 +39,19 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
     size_t inicio = m_.v.size(), n = pts.size();
     if (n < 2 || inicio + n * 3 >= 64000) return;
     float flexPonta = pts.back().flex;
-    float faixaFlexivel = std::max(flexPonta - FLEX_RAIZ, .001f);
+    std::vector<float> arco(n, 0.f);
+    float raiz = 0.f;
+    size_t segmentoRaiz = 1;
+    for (size_t i = 1; i < n; ++i) {
+        float segmento = len(escalar(pts[i].p - pts[i - 1].p));
+        arco[i] = arco[i - 1] + segmento;
+        if (pts[i - 1].flex < FLEX_RAIZ && pts[i].flex >= FLEX_RAIZ) {
+            float fracao = (FLEX_RAIZ - pts[i - 1].flex) / (pts[i].flex - pts[i - 1].flex);
+            raiz = arco[i - 1] + segmento * fracao;
+            segmentoRaiz = i;
+        }
+    }
+    float comprimentoLivre = arco.back() - raiz;
     for (size_t i = 0; i < n; ++i) {
         Vec3f p = pts[i].p;
         Vec3f anterior = pts[i ? i - 1 : 0].p, seguinte = pts[std::min(i + 1, n - 1)].p;
@@ -60,7 +72,7 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
             v.ao = ao;
             v.pelos = (q + 1) * .5f;
             v.tv = t;
-            float progresso = clamp01((pts[i].flex - FLEX_RAIZ) / faixaFlexivel);
+            float progresso = clamp01((arco[i] - raiz) / std::max(comprimentoLivre, .001f));
             v.tang = normalizar(escalar(tg)) * (.05f + progresso);
             v.osso[0] = v.osso[1] = CABECA;
             m_.v.push_back(v);
@@ -74,20 +86,19 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
             if (livre) m_.idx.insert(m_.idx.end(), {a, c, b, a, d, c});
         }
     }
-    if (flexPonta <= FLEX_RAIZ) return;
-    auto amostrar = [&](float flex) {
-        if (pts.front().flex >= flex) return escalar(pts.front().p);
-        for (size_t i = 1; i < n; ++i) {
-            if (pts[i].flex < flex) continue;
-            float t = (flex - pts[i - 1].flex) / (pts[i].flex - pts[i - 1].flex);
+    if (flexPonta <= FLEX_RAIZ || comprimentoLivre <= .018f) return;
+    auto amostrar = [&](float distancia) {
+        for (size_t i = segmentoRaiz; i < n; ++i) {
+            if (arco[i] < distancia) continue;
+            float t = (distancia - arco[i - 1]) / std::max(arco[i] - arco[i - 1], 1e-8f);
             return escalar(pts[i - 1].p + (pts[i].p - pts[i - 1].p) * t);
         }
         return escalar(pts.back().p);
     };
-    GuiaCabelo guia{{amostrar(FLEX_RAIZ), amostrar(lerp(FLEX_RAIZ, flexPonta, .5f)), escalar(pts.back().p)},
-                    clamp01(flexPonta), {}};
+    GuiaCabelo guia{{amostrar(raiz), amostrar(raiz + comprimentoLivre * .5f), escalar(pts.back().p)},
+                    clamp01(flexPonta), {}, comprimentoLivre};
     float a = len(guia.pontos[1] - guia.pontos[0]), b = len(guia.pontos[2] - guia.pontos[1]);
-    if (a > .003f && b > .003f && a + b > .018f) fitas_.push_back({guia, a + b, inicio, m_.v.size()});
+    if (a > .003f && b > .003f) fitas_.push_back({guia, inicio, m_.v.size()});
 }
 
 void ConstrutorCabelo::finalizar() {
@@ -108,7 +119,7 @@ void ConstrutorCabelo::finalizar() {
     // Amostra as curvas mais afastadas das já escolhidas no espaço de repouso.
     // Isso cobre direções e comprimentos distintos com um orçamento fixo.
     const auto maior = std::max_element(fitas_.begin(), fitas_.end(),
-                                        [](const Fita& a, const Fita& b) { return a.comprimento < b.comprimento; });
+        [](const Fita& a, const Fita& b) { return a.guia.comprimentoLivre < b.guia.comprimentoLivre; });
     perfil.guias[0] = maior->guia;
     perfil.quantidade = 1;
     // A distância ao guia mais próximo é atualizada uma vez por novo guia.
@@ -129,7 +140,8 @@ void ConstrutorCabelo::finalizar() {
     };
     selecionar(MAX_GUIAS_PRINCIPAIS, .029f);
     perfil.principais = perfil.quantidade;
-    selecionar(MAX_GUIAS_CABELO, .011f);
+    // Mantém um guia por fita distinta sempre que a paleta comportar o corte.
+    selecionar(MAX_GUIAS_CABELO, .0001f);
     for (size_t i = perfil.principais; i < perfil.quantidade; ++i)
         perfil.guias[i].pais = vincular(perfil.guias[i], perfil, perfil.principais);
 
@@ -278,6 +290,22 @@ void cabeloOndulado(MalhaPele& m, float escala, Rgb cor) {
                 }
                 float tom = (porCima ? .92f : .80f) + .095f * std::cos(fase);
                 cabelo.fita(pontos, porCima ? .0135f : .0145f, cor * tom, porCima ? .95f : .8f);
+
+                if (!porCima) {
+                    // Estas mechas finas saem da mesma camada e se separam só no comprimento livre.
+                    std::vector<PontoCabelo> finos;
+                    size_t primeira = amostrasArco - 2;
+                    float alcance = .006f + .011f * (.5f + .5f * std::sin(fase));
+                    for (size_t i = primeira; i < pontos.size(); ++i) {
+                        float t = float(i - primeira) / (pontos.size() - 1 - primeira);
+                        float solto = smoothstep(.25f, 1.f, t);
+                        Vec3f p = pontos[i].p + fora * (.0015f + solto * .006f)
+                                + ladoDaMecha * (.002f + solto * alcance * std::cos(fase))
+                                + Vec3f{0, -solto * alcance, 0};
+                        finos.push_back({p, lerp(pontos[i].flex, 1.f, solto * .85f)});
+                    }
+                    cabelo.fita(finos, .00105f + .0006f * std::abs(std::sin(fase)), cor * (tom + .13f), .95f);
+                }
             }
         }
 

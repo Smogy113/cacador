@@ -37,8 +37,8 @@ void enviarCabelo(Shader shader, const UniformesCabelo& loc, const FisicaCabelo&
     float ativo = 1.f;
     const auto& deformacao = cabelo.deformacao();
     const auto& perfil = cabelo.perfil();
-    // Seis componentes por guia em 1,5 vec4. Incluindo os ossos, o shader
-    // fica dentro do limite mínimo de 128 vetores de uniforms do WebGL 1.
+    // Seis componentes por guia em 1,5 vec4. A paleta respeita o orçamento
+    // de uniforms de cada backend, incluindo os ossos.
     float curvas[MAX_GUIAS_CABELO][4], pontasYZ[MAX_GUIAS_CABELO / 2][4];
     size_t pares = (perfil.quantidade + 1) / 2;
     for (size_t i = 0; i < pares; ++i) {
@@ -83,10 +83,15 @@ void MalhaEsqueleto::carregar(const MalhaPele& p) {
         m.tangents[i * 4] = v.tang.x; m.tangents[i * 4 + 1] = v.tang.y; m.tangents[i * 4 + 2] = v.tang.z; m.tangents[i * 4 + 3] = v.tv;
         m.texcoords2[i * 2] = float(v.osso[0]);
         if (v.guiaCabelo[0] != SEM_GUIA_CABELO) {
-            // Sinal negativo marca uma fita presa ao osso A. Codifica o par
-            // de guias no inteiro e a mistura na fração, sem outro atributo.
+            // Fita rígida no osso A. A fração de x guarda o comprimento livre
+            // comprimido. Em y, o inteiro guarda o par e a fração, a mistura.
+            const auto& guias = p.cabelo.guias;
+            float peso = v.misturaGuias / 255.f;
+            float comprimento = lerp(guias[v.guiaCabelo[0]].comprimentoLivre,
+                                     guias[v.guiaCabelo[1]].comprimentoLivre, peso);
+            m.texcoords2[i * 2] += comprimento / (1.f + comprimento);
             int par = v.guiaCabelo[0] * MAX_GUIAS_CABELO + v.guiaCabelo[1];
-            m.texcoords2[i * 2 + 1] = -float(1 + par) - v.misturaGuias * (.99f / 255.f);
+            m.texcoords2[i * 2 + 1] = -float(1 + par) - peso * .99f;
         } else {
             m.texcoords2[i * 2 + 1] = float(v.osso[1]) + std::clamp(v.peso, 0.f, 1.f) * .99f;
         }

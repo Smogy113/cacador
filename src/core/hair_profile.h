@@ -5,7 +5,11 @@
 #include "core/math.h"
 
 inline constexpr std::size_t MAX_GUIAS_PRINCIPAIS = 8;
+#if defined(__EMSCRIPTEN__) || defined(PLATFORM_WEB)
 inline constexpr std::size_t MAX_GUIAS_CABELO = 32;
+#else
+inline constexpr std::size_t MAX_GUIAS_CABELO = 96;
+#endif
 inline constexpr uint8_t SEM_GUIA_CABELO = 255;
 
 struct VinculoCabelo {
@@ -17,6 +21,7 @@ struct GuiaCabelo {
     std::array<Vec3f, 3> pontos{};  // raiz fixa, dobra e ponta no espaço de repouso do modelo
     float flexibilidade = 1.f;
     VinculoCabelo pais;  // nos guias secundários, índices dos dois guias principais mais próximos
+    float comprimentoLivre = 0.f;  // arco entre a última região presa e a ponta
 };
 
 // Elipsoide da cabeça para as fitas e cápsulas para os nós simulados.
