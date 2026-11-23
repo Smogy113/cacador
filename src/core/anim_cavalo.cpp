@@ -26,8 +26,10 @@ struct PernaGalope {
 constexpr std::array<PernaGalope, 4> PERNAS{{
     {C_CASCO_TD, .27f, .37f, -.02f},
     {C_CASCO_TE, .26f, .37f, -.02f},
-    {C_CASCO_DD, .27f, .44f, -.076f},
-    {C_CASCO_DE, .26f, .44f, -.076f},
+    // A dianteira direita recebe o peso primeiro. A esquerda alcança mais
+    // à frente e termina o apoio antes da suspensão.
+    {C_CASCO_DD, .265f, .37f, -.125f},
+    {C_CASCO_DE, .24f, .46f, .015f},
 }};
 
 struct AlvoCasco {
@@ -94,7 +96,7 @@ Pose poseGalope(const Esqueleto& e, float fase, float tempo) {
     // O primeiro harmônico eleva o corpo na suspensão. O segundo distribui
     // a compressão entre a saída das patas traseiras e o apoio dianteiro.
     float altura = -.127f + .052f * std::cos(f - .43f) - .021f * std::cos(2.f * (f - 4.92f));
-    altura += .050f * smoothstep(.78f, .99f, std::cos(f - 4.10f)); // extensão no apoio dianteiro
+    altura += .050f * smoothstep(.78f, .99f, std::cos(f - 4.43f)); // extensão no apoio dianteiro
     altura += .052f * smoothstep(.65f, .99f, std::cos(f - 6.10f)); // elevação na suspensão
 
     struct PernaPosada { AlvoCasco alvo; Vec3f quadril, acima, abaixo; float a, b; };

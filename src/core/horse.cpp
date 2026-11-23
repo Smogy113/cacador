@@ -37,7 +37,7 @@ bool inclinacaoPermitida(const Terreno& t, Vec3f de, Vec3f para) {
 static Andadura classificar(float v) {
     if (v < 0.3f) return Andadura::Parado;
     if (v < 3.5f) return Andadura::Passo;
-    if (v < 8.5f) return Andadura::Trote;
+    if (v < INICIO_GALOPE) return Andadura::Trote;
     return Andadura::Galope;
 }
 

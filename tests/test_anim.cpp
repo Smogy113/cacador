@@ -102,15 +102,28 @@ TEST_CASE("galope: os cascos plantam nas batidas e avançam juntos com o chão")
     }
 }
 
+TEST_CASE("galope: as dianteiras alcançam e deixam o chão em tempos distintos") {
+    std::vector<Mat4> matrizes;
+    auto sola = [&](int casco) { return matrizes[casco].ponto(cav().ossos[casco].fim); };
+    float toqueEsquerdo = TOQUES_GALOPE[3] + .001f;
+    calcularMatrizes(cav(), poseCavalo(cav(), toqueEsquerdo, int(Andadura::Galope), 0), matrizes);
+    CHECK(sola(C_CASCO_DE).z - sola(C_CASCO_DD).z > .55f);
+
+    // Na metade do apoio esquerdo, a direita já recolhe o casco.
+    calcularMatrizes(cav(), poseCavalo(cav(), toqueEsquerdo + .78f, int(Andadura::Galope), 0), matrizes);
+    CHECK(std::abs(sola(C_CASCO_DE).y) < .005f);
+    CHECK(sola(C_CASCO_DD).y > .015f);
+}
+
 TEST_CASE("galope: há suspensão e transição suave a partir do trote") {
-    CHECK(alturaDosCascos(cav(), poseCavalo(cav(), 5.95f, int(Andadura::Galope), 0)) > .08f);
+    CHECK(alturaDosCascos(cav(), poseCavalo(cav(), 6.10f, int(Andadura::Galope), 0)) > .08f);
     Cavalo c;
     c.andadura = Andadura::Trote;
     c.passada = 5.95f;
-    c.corpo.vel = 8.49f;
+    c.corpo.vel = INICIO_GALOPE - .01f;
     Pose antes = poseCavalo(cav(), c, 0);
     c.andadura = Andadura::Galope;
-    c.corpo.vel = 8.51f;
+    c.corpo.vel = INICIO_GALOPE + .01f;
     Pose depois = poseCavalo(cav(), c, 0);
     CHECK(len(depois.raiz - antes.raiz) < .008f);
     for (size_t i = 0; i < antes.rot.size(); ++i) CHECK(len(depois.rot[i] - antes.rot[i]) < .04f);

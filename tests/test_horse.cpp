@@ -24,20 +24,25 @@ TEST_CASE("montar só perto") {
     CHECK(tentarMontar(c, perto));
     CHECK(c.montado);
 }
-TEST_CASE("galope chega a 12 m/s") {
+TEST_CASE("galope se estabiliza em 9 m/s e menos de 2,6 ciclos por segundo") {
     Cavalo c = novoCavalo(-200, 0);
     c.montado = true;
     Entrada e; e.frente = 1; e.correr = true;
     for (int i = 0; i < 240; i++) moverCavalo(c, e, 1 / 60.f, planoH(), MundoColisao{});
-    CHECK(c.corpo.vel == doctest::Approx(VEL_GALOPE).epsilon(0.05));
+    CHECK(c.corpo.vel == doctest::Approx(9.f));
     CHECK(c.andadura == Andadura::Galope);
+    float fase = c.passada;
+    float z = c.corpo.pos.z;
+    for (int i = 0; i < 60; ++i) moverCavalo(c, e, 1 / 60.f, planoH(), MundoColisao{});
+    CHECK((c.passada - fase) / 6.283185307f == doctest::Approx(2.58f).epsilon(.01));
+    CHECK(c.corpo.pos.z - z == doctest::Approx(9.f).epsilon(.01));
 }
 TEST_CASE("trote sem Shift") {
     Cavalo c = novoCavalo(-200, 0);
     c.montado = true;
     Entrada e; e.frente = 1;
     for (int i = 0; i < 240; i++) moverCavalo(c, e, 1 / 60.f, planoH(), MundoColisao{});
-    CHECK(c.corpo.vel == doctest::Approx(VEL_TROTE).epsilon(0.05));
+    CHECK(c.corpo.vel == doctest::Approx(5.f));
     CHECK(c.andadura == Andadura::Trote);
 }
 TEST_CASE("aceleração gradual") {
@@ -74,9 +79,9 @@ TEST_CASE("vira mais devagar em galope") {
     CHECK(std::abs(b.corpo.yaw) < std::abs(a.corpo.yaw));
     CHECK(std::abs(a.corpo.yaw) > 0.3f);
 }
-TEST_CASE("cruzar o mapa na diagonal a galope leva ~3 min") {
+TEST_CASE("cruzar o mapa na diagonal a galope leva menos de 4 min") {
     float min = 1400.f * std::sqrt(2.f) / VEL_GALOPE / 60.f;
-    CHECK(min > 2.5f);
+    CHECK(min > 3.5f);
     CHECK(min < 4.f);
 }
 TEST_CASE("desmontar não coloca jogador dentro de parede") {
@@ -129,7 +134,7 @@ TEST_CASE("anda em cima da ponte mesmo com barranco embaixo") {
     c.corpo.yaw = 3.14159265f / 2;  // +x
     c.montado = true;
     Entrada e; e.frente = 1;
-    for (int i = 0; i < 600; i++) moverCavalo(c, e, 1 / 60.f, serra, col);
+    for (int i = 0; i < 660; i++) moverCavalo(c, e, 1 / 60.f, serra, col);
     CHECK(c.corpo.pos.x > 690.f);  // antes da correcao travava em ~673
     CHECK(c.corpo.pos.y == doctest::Approx(topo + 1.f));
 }
@@ -140,8 +145,8 @@ TEST_CASE("batidas do cavalo seguem a cadência de cada andadura") {
     CHECK(contatosCavalo(Andadura::Passo, 0, ciclo).total == 4);
     CHECK(contatosCavalo(Andadura::Trote, 0, ciclo).total == 2);
     CHECK(contatosCavalo(Andadura::Galope, 0, ciclo).total == 4);
-    CHECK(contatosCavalo(Andadura::Galope, 0, ciclo * .55f).total == 4);
-    CHECK(contatosCavalo(Andadura::Galope, ciclo * .55f, ciclo).total == 0);
+    CHECK(contatosCavalo(Andadura::Galope, 0, TOQUES_GALOPE.back()).total == 4);
+    CHECK(contatosCavalo(Andadura::Galope, TOQUES_GALOPE.back(), ciclo).total == 0);
 }
 
 TEST_CASE("batidas do cavalo cruzam quadros e ciclos sem se duplicar") {
