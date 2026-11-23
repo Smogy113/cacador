@@ -51,7 +51,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.equipamento = false;
     r.heroi = true;
     r.corpoBase = true;
-    r.semCabelo = true;
+    r.semCabelo = !op.cabeloOndulado;
+    r.cabeloOndulado = op.cabeloOndulado;
     r.cacadorDeFronteira = false;
     r.revolver = false;
     r.cabeloLongo = false;
@@ -409,19 +410,20 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         if (dot(d, d) < 15.f * 15.f) matCabeca = &luz_.materialCabeca();
     }
     luz_.definirHeroi(true);
+    auto desenhar = [&](Vec3f pos, float yaw, const Pose& pose) {
+        if (op_.cabeloOndulado)
+            luz_.definirCabelo(matPele, rotY(cabeloRaiz_.pos, -yaw), rotY(cabeloPonta_.pos, -yaw), tempo_);
+        modeloJogador_.desenhar(matPele, pos, yaw, pose, hd, matCabeca);
+        if (op_.cabeloOndulado) luz_.definirCabelo(matPele, {}, {}, tempo_);
+    };
     if (montadoEm_ >= 0) {
         const Cavalo& c = cavalos_[montadoEm_];
         Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_ + float(montadoEm_) * 3.7f);
         Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc);
-        luz_.definirCabelo(rotY(cabeloRaiz_.pos, -c.corpo.yaw), rotY(cabeloPonta_.pos, -c.corpo.yaw));
-        modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)), hd, matCabeca);
-        luz_.definirCabelo({}, {});
-        luz_.definirHeroi(false);
-        return;
+        desenhar(q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)));
+    } else {
+        desenhar(jogador_.pos, jogador_.yaw, poseDoJogador(ej));
     }
-    luz_.definirCabelo(rotY(cabeloRaiz_.pos, -jogador_.yaw), rotY(cabeloPonta_.pos, -jogador_.yaw));
-    modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd, matCabeca);
-    luz_.definirCabelo({}, {});
     luz_.definirHeroi(false);
 }
 
@@ -487,7 +489,7 @@ void Jogo::trocarNivel(Nivel n) {
 #endif
     op_.nivel = n;
     configurarGrama();
-    if (!op_.arquivoConfig.empty()) salvarConfig(op_.arquivoConfig, n);
+    if (!op_.arquivoConfig.empty()) salvarConfig(op_.arquivoConfig, {n, op_.cabeloOndulado});
 }
 
 void Jogo::desenhar() {
@@ -601,7 +603,7 @@ void Jogo::configurarGrama() {
 
 // Molas acopladas: a parte curta acompanha a cabeca; o comprimento e as pontas atrasam.
 void Jogo::atualizarCabelo(float dt) {
-    if (dt <= 0.f) return;
+    if (!op_.cabeloOndulado || dt <= 0.f) return;
     const Esqueleto& e = modeloJogador_.esqueleto();
     Vec3f base = jogador_.pos;
     float yaw = jogador_.yaw;
@@ -645,6 +647,7 @@ void Jogo::atualizarCabelo(float dt) {
     Vec3f vento{std::sin(tempo_ * 1.5f) * 0.010f, 0, std::cos(tempo_ * 0.91f) * 0.008f};
     Vec3f alvo = acelCabelo_ * -0.0013f + vel * -0.0033f + direitaJogador() * (giroCabelo_ * 0.009f) + vento;
     alvo.y = std::clamp(alvo.y, -0.030f, 0.043f);
+    alvo = alvo * 0.60f;  // mechas na altura da nuca: movimento curto, sobretudo junto ao rosto
     auto integrar = [](MolaCabelo& m, Vec3f alvo, float rigidez, float amortecimento, float limite, float h) {
         m.vel = (m.vel + (alvo - m.pos) * (rigidez * h)) * std::exp(-amortecimento * h);
         m.pos = m.pos + m.vel * h;

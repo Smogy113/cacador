@@ -31,6 +31,7 @@ struct OpcoesJogo {
     bool temPos = false;
     float x = 0, z = 0, yaw = 0;
     Nivel nivel = Nivel::Baixo;
+    bool cabeloOndulado = false;
     bool congelarHora = false;
     bool semEntrada = false;  // modo screenshot
     bool comecarMontado = false;

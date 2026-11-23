@@ -33,6 +33,26 @@ TEST_CASE("base humana compacta: anatomia completa dentro do orçamento") {
     CHECK(maximo == doctest::Approx(1.8f).epsilon(.002));
 }
 
+TEST_CASE("base humana: cabelo ondulado acrescenta uma camada presa a cabeca") {
+    Visual visual;
+    MalhaPele base = corpoHumanoBase({}, visual);
+    visual.cabeloOndulado = true;
+    MalhaPele penteado = corpoHumanoBase({}, visual);
+    REQUIRE(penteado.v.size() > base.v.size());
+    CHECK(penteado.triangulos() > base.triangulos());
+    CHECK(penteado.triangulos() - base.triangulos() <= 6500);
+    CHECK(penteado.v.size() < 65535);
+    CHECK(std::equal(base.idx.begin(), base.idx.end(), penteado.idx.begin()));
+    for (size_t i = base.v.size(); i < penteado.v.size(); ++i) {
+        const auto& v = penteado.v[i];
+        CHECK(v.osso[0] == CABECA);
+        CHECK(v.osso[1] == CABECA);
+        CHECK(std::isfinite(v.pos.x));
+        CHECK(std::isfinite(v.pos.y));
+        CHECK(std::isfinite(v.pos.z));
+    }
+}
+
 TEST_CASE("base humana: A-pose no estúdio e braços baixos na animação") {
     Esqueleto comum=esqueletoHumano({});
     Esqueleto base=esqueletoHumanoBase({});

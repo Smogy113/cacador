@@ -218,7 +218,16 @@ vec3 reboteCena(vec3 p, vec3 n, vec3 T) {
 }
 )"
 
-const char* FS_LIT = R"(
+#define CORTE_MECHA R"(
+bool foraDaMecha(vec2 uv) {
+    float borda = abs(uv.x - 0.5) * 2.0;
+    float ponta = smoothstep(0.55, 1.0, uv.y);
+    float dente = 0.5 + 0.5 * sin(uv.x * 31.4 + uv.y * 3.0);
+    return borda > 1.0 - 0.75 * ponta * dente;
+}
+)"
+
+const char* FS_LIT = CORTE_MECHA R"(
 #ifdef RAYMARCH
 #define ENTRADA
 #else
@@ -904,14 +913,14 @@ void main() {
         if (m > 24.25) {         // cabelo comprido: mecha cheia (sem buracos entre os fios -> sem serrilhado);
             float u = cor.a, vv = tanRep.w;  // os fios sao listras de cor; so a borda e a ponta recortam
             float borda = abs(u - 0.5) * 2.0;               // 0 no meio da mecha, 1 na lateral
-            float ponta = smoothstep(0.55, 1.0, vv);         // a ponta afina em "dentes" largos
-            float dente = 0.5 + 0.5 * sin(u * 31.4 + vv * 3.0);
-            if (borda > 1.0 - 0.75 * ponta * dente) discard;
+            if (foraDaMecha(vec2(u, vv))) discard;
             float listra = 0.5 + 0.5 * sin(u * 62.8 + sin(vv * 9.0 + u * 7.0) * 1.5);
             float listra2 = 0.5 + 0.5 * sin(u * 23.0 - vv * 4.0);
-            albedo *= mix(0.62, 0.98, vv) * (0.82 + 0.12 * listra + 0.08 * listra2);
+            float fio = sin(u * 303.0 + 1.8 * sin(vv * 19.0 + u * 11.0));
+            float detalhe = (0.10 * fio) * (1.0 - smoothstep(1.4, 3.0, dist));
+            albedo *= mix(0.66, 1.0, vv) * (0.78 + 0.15 * listra + 0.10 * listra2 + detalhe);
             ao *= mix(0.6, 1.0, vv) * (1.0 - 0.25 * borda * borda);
-            kk = 1.0;
+            kk = 0.68;
             Tcab = normalize(tanMundo);
         } else if (m > 23.5) {   // cartao de pelo: ~7 fios por fita, finos na ponta, raiz escura
             float u = cor.a, vv = tanRep.w;
@@ -1209,7 +1218,7 @@ void main() {
         float s1 = pow(sqrt(max(1.0 - TH * TH, 0.0)), 110.0);
         float TH2 = TH + 0.14;
         float s2 = pow(sqrt(max(1.0 - TH2 * TH2, 0.0)), 32.0);
-        c += corSol * sombra * smoothstep(-0.2, 0.3, ndl) * (vec3(s1 * 0.05) + albedo * s2 * 0.22);
+        c += corSol * sombra * smoothstep(-0.2, 0.3, ndl) * (vec3(s1 * 0.05 * kk) + albedo * s2 * 0.22);
     }
     if (olhoHeroi > 0.5) {
         // reflexo da luz de preenchimento (um ponto de luz no olho, como nas cenas de cinema) e do ceu
@@ -1400,15 +1409,19 @@ ATTR vec3 vertexPosition;
 ATTR vec2 vertexTexCoord;
 uniform mat4 mvp;
 VARY float tipo;
+VARY vec2 mechaUV;
 void main() {
     tipo = vertexTexCoord.y;
+    mechaUV = vec2(0.0);
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
 )";
-const char* FS_PROF = R"(
+const char* FS_PROF = CORTE_MECHA R"(
 VARY float tipo;
+VARY vec2 mechaUV;
 void main() {
-    if ((tipo > 1.5 && tipo < 2.5) || tipo > 23.5) discard;  // chamas e cartoes de pelo nao fazem sombra
+    if (tipo > 1.5 && tipo < 2.5) discard;
+    if (tipo > 23.5 && (tipo < 24.25 || tipo > 24.75 || foraDaMecha(mechaUV))) discard;
     FRAG = vec4(1.0);
 }
 )";
@@ -1817,9 +1830,23 @@ mat4 matrizPele() {
 }
 )"
 
-const char* VS_PELE = CORPO_SKIN R"(
+#define VENTO_MECHA R"(
 uniform vec3 cabeloRaiz, cabeloPonta;  // deslocamentos das duas molas no espaco do modelo
 uniform float tempoVento;
+vec3 deslocarMecha(float w, vec3 normal) {
+    float ponta = smoothstep(0.25, 1.0, w);
+    float lado = clamp(vertexPosition.x * 9.0, -1.0, 1.0);
+    vec3 vento = vec3(sin(tempoVento * 3.1 + lado * 2.3), 0.4 * sin(tempoVento * 4.5 + lado * 2.0),
+                      cos(tempoVento * 2.4 + lado * 3.0)) * 0.009;
+    vec3 desloc = cabeloRaiz * smoothstep(0.0, 0.5, w) * (1.0 - ponta)
+                 + (cabeloPonta * (1.0 + lado * 0.20) + vento) * ponta;
+    // A normal limita o movimento para dentro da cabeca.
+    float paraDentro = min(0.0, dot(desloc, normal) + mix(0.002, 0.016, ponta));
+    return desloc - normal * paraDentro;
+}
+)"
+
+const char* VS_PELE = CORPO_SKIN VENTO_MECHA R"(
 VARY vec4 tanRep;
 VARY vec3 tanMundo;
 VARY vec3 posRep;
@@ -1838,15 +1865,7 @@ void main() {
     vec3 normal = normalize(mat3(S) * vertexNormal);
     if (vertexTexCoord.y > 24.25 && vertexTexCoord.y < 24.75) {
         float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
-        float ponta = smoothstep(0.25, 1.0, w);
-        float lado = clamp(vertexPosition.x * 9.0, -1.0, 1.0);
-        vec3 vento = vec3(sin(tempoVento * 3.1 + lado * 2.3), 0.4 * sin(tempoVento * 4.5 + lado * 2.0),
-                          cos(tempoVento * 2.4 + lado * 3.0)) * 0.009;
-        vec3 desloc = cabeloRaiz * smoothstep(0.0, 0.5, w) * (1.0 - ponta)
-                     + (cabeloPonta * (1.0 + lado * 0.20) + vento) * ponta;
-        // Na franja e perto do couro, a normal bloqueia a parte do movimento que entraria na cabeca.
-        float paraDentro = min(0.0, dot(desloc, normal) + mix(0.002, 0.016, ponta));
-        desloc -= normal * paraDentro;
+        vec3 desloc = deslocarMecha(w, normal);
         pl.xyz += desloc;
         vec3 fio = normalize(tangente + desloc * 0.8);
         normal = normalize(normal - fio * dot(normal, fio) * w);
@@ -1879,11 +1898,19 @@ void main() {
 }
 )";
 
-const char* VS_PROF_PELE = CORPO_SKIN R"(
+const char* VS_PROF_PELE = CORPO_SKIN VENTO_MECHA R"(
 VARY float tipo;
+VARY vec2 mechaUV;
 void main() {
     tipo = vertexTexCoord.y;
-    gl_Position = mvp * (matrizPele() * vec4(vertexPosition, 1.0));
+    mechaUV = vec2(vertexColor.a, vertexTangent.w);
+    mat4 S = matrizPele();
+    vec4 pl = S * vec4(vertexPosition, 1.0);
+    if (tipo > 24.25 && tipo < 24.75) {
+        float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
+        pl.xyz += deslocarMecha(w, normalize(mat3(S) * vertexNormal));
+    }
+    gl_Position = mvp * pl;
 }
 )";
 

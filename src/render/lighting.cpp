@@ -1133,7 +1133,8 @@ void Iluminacao::definirJanelas(const std::vector<JanelaLuz>& js, Vec3f foco) {
 #endif
 }
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
-void Iluminacao::definirCabelo(Vec3f raiz, Vec3f ponta) {
-    SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloRaiz"), &raiz, SHADER_UNIFORM_VEC3);
-    SetShaderValue(pele_, GetShaderLocation(pele_, "cabeloPonta"), &ponta, SHADER_UNIFORM_VEC3);
+void Iluminacao::definirCabelo(Material& mat, Vec3f raiz, Vec3f ponta, float tempo) {
+    setV3(mat.shader, "cabeloRaiz", raiz);
+    setV3(mat.shader, "cabeloPonta", ponta);
+    setF(mat.shader, "tempoVento", tempo);
 }

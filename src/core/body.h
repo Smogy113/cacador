@@ -24,6 +24,7 @@ struct Visual {
     bool corpoBase = false;           // manequim anatomico sem roupa, cabelo ou equipamento
     bool semCabelo = false;           // mantem a cabeca limpa para receber penteados por cima
     bool cabeloLongo = false;  // mechas compridas ate a nuca, com fisica (o heroi)
+    bool cabeloOndulado = false;  // penteado da base humana
     bool heroi = false;        // cabeca esculpida em resolucao maxima (o jogador); os outros usam celulas maiores
     bool semPeleCabeca = false;  // a pele esculpida da cabeca nao entra (desenhada por raymarching); olhos, cilios e cabelo sim
     float ladosExtras = 1.f;     // multiplica os lados dos tubos do heroi (silhueta mais redonda)

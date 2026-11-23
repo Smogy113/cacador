@@ -42,21 +42,29 @@ bool temConfig(const std::string& caminho) {
     return bool(f);
 }
 
-Nivel lerConfig(const std::string& caminho, Nivel padrao) {
+ConfigJogo lerConfig(const std::string& caminho, ConfigJogo config) {
     std::ifstream f(caminho);
     std::string linha;
     while (std::getline(f, linha)) {
-        if (linha.rfind("qualidade=", 0) != 0) continue;
-        std::string v = minusculo(linha.substr(10));
-        while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
-        if (v == "baixo") return Nivel::Baixo;
-        if (v == "medio") return Nivel::Medio;
-        if (v == "alto") return Nivel::Alto;
+        size_t separador = linha.find('=');
+        if (separador == std::string::npos) continue;
+        std::string chave = linha.substr(0, separador);
+        std::string valor = minusculo(linha.substr(separador + 1));
+        while (!valor.empty() && std::isspace((unsigned char)valor.back())) valor.pop_back();
+        if (chave == "qualidade") {
+            if (valor == "baixo") config.nivel = Nivel::Baixo;
+            if (valor == "medio") config.nivel = Nivel::Medio;
+            if (valor == "alto") config.nivel = Nivel::Alto;
+        } else if (chave == "cabelo") {
+            if (valor == "sem") config.cabeloOndulado = false;
+            if (valor == "ondulado") config.cabeloOndulado = true;
+        }
     }
-    return padrao;
+    return config;
 }
 
-void salvarConfig(const std::string& caminho, Nivel n) {
+void salvarConfig(const std::string& caminho, ConfigJogo config) {
     std::ofstream f(caminho);
-    f << "qualidade=" << nomeNivel(n) << "\n";
+    f << "qualidade=" << nomeNivel(config.nivel) << "\n"
+      << "cabelo=" << (config.cabeloOndulado ? "ondulado" : "sem") << "\n";
 }

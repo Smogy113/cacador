@@ -19,6 +19,7 @@ extern "C" const unsigned char* glGetString(unsigned int nome);
 
 struct Opcoes {
     bool qualidadeDada = false;
+    bool cabeloDado = false;
     bool benchmark = false;
     bool direto = false;
     std::string screenshot;
@@ -57,7 +58,13 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--sem-paredes") o.jogo.semParedes = true;
         else if (a == "--portas-abertas") o.jogo.portasAbertas = true;
         else if (a == "--yaw") o.jogo.yaw = (float)std::atof(prox());
-        else if (a == "--qualidade") {
+        else if (a == "--cabelo") {
+            std::string c = prox();
+            if (c == "sem" || c == "ondulado") {
+                o.jogo.cabeloOndulado = c == "ondulado";
+                o.cabeloDado = true;
+            }
+        } else if (a == "--qualidade") {
             std::string q = prox();
             o.jogo.nivel = q == "alto" ? Nivel::Alto : (q == "medio" ? Nivel::Medio : Nivel::Baixo);
             o.qualidadeDada = true;
@@ -101,17 +108,21 @@ static void quadroAplicacao() {
         iniciarJogo();
         return;
     }
-    Nivel anterior = g_op.jogo.nivel;
-    auto acao = g_menu.atualizar(g_op.jogo.nivel);
-    if (anterior != g_op.jogo.nivel && !g_op.jogo.arquivoConfig.empty())
-        salvarConfig(g_op.jogo.arquivoConfig, g_op.jogo.nivel);
+    ConfigJogo anterior{g_op.jogo.nivel, g_op.jogo.cabeloOndulado};
+    ConfigJogo config = anterior;
+    auto acao = g_menu.atualizar(config);
+    g_op.jogo.nivel = config.nivel;
+    g_op.jogo.cabeloOndulado = config.cabeloOndulado;
+    if ((anterior.nivel != config.nivel || anterior.cabeloOndulado != config.cabeloOndulado)
+        && !g_op.jogo.arquivoConfig.empty())
+        salvarConfig(g_op.jogo.arquivoConfig, config);
     if (acao == MenuInicial::Acao::Sair) {
         g_sair = true;
         return;
     }
     if (acao == MenuInicial::Acao::Jogar) g_carregando = true;
     BeginDrawing();
-    g_menu.desenhar(g_op.jogo.nivel, g_carregando);
+    g_menu.desenhar(config, g_carregando);
     EndDrawing();
 }
 
@@ -195,14 +206,19 @@ int main(int argc, char** argv) {
     // data/ e config.txt ficam ao lado do executavel
     if (!FileExists(g_op.jogo.arquivoMapa.c_str())) ChangeDirectory(GetApplicationDirectory());
 #endif  // Esc pausa; sair pelo menu de pausa
+    const char* cfg = "config.txt";
+    bool temPreferencias = temConfig(cfg);
+    ConfigJogo config = lerConfig(cfg, {});
+    if (!g_op.cabeloDado) g_op.jogo.cabeloOndulado = config.cabeloOndulado;
     if (!g_op.qualidadeDada) {
-        const char* cfg = "config.txt";
         const unsigned char* r = glGetString(0x1F01);  // GL_RENDERER
         std::string placa = r ? (const char*)r : "";
-        g_op.jogo.nivel = temConfig(cfg) ? lerConfig(cfg, Nivel::Baixo) : sugerirNivel(placa);
-        g_op.jogo.arquivoConfig = cfg;
-        if (!temConfig(cfg)) salvarConfig(cfg, g_op.jogo.nivel);
+        g_op.jogo.nivel = temPreferencias ? config.nivel : sugerirNivel(placa);
         std::printf("placa=%s nivel=%s\n", placa.c_str(), nomeNivel(g_op.jogo.nivel));
+    }
+    if (!g_op.qualidadeDada && !g_op.cabeloDado) {
+        g_op.jogo.arquivoConfig = cfg;
+        if (!temPreferencias) salvarConfig(cfg, {g_op.jogo.nivel, g_op.jogo.cabeloOndulado});
     }
     // O backend de audio, inclusive WebAudio, e inicializado antes do loop.
     if (g_op.screenshot.empty() && !g_op.benchmark) InitAudioDevice();

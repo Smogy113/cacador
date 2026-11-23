@@ -9,12 +9,13 @@ public:
 
     void carregar();
     void descarregar();
-    Acao atualizar(Nivel& nivel);
-    void desenhar(Nivel nivel, bool carregando = false) const;
+    Acao atualizar(ConfigJogo& config);
+    void desenhar(const ConfigJogo& config, bool carregando = false) const;
 
 private:
     Rectangle item(int indice) const;
+    enum class Tela { Principal, Personagem, Configuracoes };
     Texture2D fundo_{};
     int foco_ = 0;
-    bool configuracoes_ = false;
+    Tela tela_ = Tela::Principal;
 };

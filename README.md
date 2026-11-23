@@ -20,6 +20,7 @@ Missões de história e loja vêm depois.
 
 Abra `cacador.exe` (a pasta `data/` precisa estar ao lado dele).
 No menu inicial, use o mouse ou as setas e Enter para jogar ou escolher a qualidade gráfica.
+Em **Personagem**, escolha **Ondulado** ou **Sem cabelo**. A seleção é guardada em `config.txt` no PC.
 
 | Tecla | Ação |
 |---|---|
@@ -118,4 +119,5 @@ caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personage
 
 Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).
 
-Use `--direto` para abrir uma partida sem passar pelo menu inicial.
+Use `--direto` para abrir uma partida sem passar pelo menu inicial e
+`--cabelo ondulado` ou `--cabelo sem` para escolher o visual daquela execução.

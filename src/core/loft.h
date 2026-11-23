@@ -115,6 +115,11 @@ std::vector<Anel> suavizar(const std::vector<Anel>& an, int sub);
 // Cabeca com proporcoes de um rosto real (head_hd.cpp)
 void cabecaHD(Construtor& k, float s, float ms, const Visual& vis);
 void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples);
+void cabeloOndulado(MalhaPele& m, float escala, Rgb cor);
+
+struct PontoCabelo { Vec3f p; float flex; };
+void fitaDeCabelo(MalhaPele& m, const std::vector<PontoCabelo>& pontos, Vec3f centro,
+                  float escala, float massa, float largura, Rgb cor, float ao);
 // Cascas de pelo para todo vertice com pelos > 0 (chamar depois das normais)
 void cascasDePelo(MalhaPele& m, Rgb corPelo);
 // Cartoes de pelo (fitas com fios) para todo vertice com pelos e direcao de crescimento

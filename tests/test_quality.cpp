@@ -35,20 +35,28 @@ TEST_CASE("Intel sugere Baixo, NVIDIA sugere Alto") {
 }
 TEST_CASE("Intel Arc é placa dedicada") { CHECK(sugerirNivel("Intel(R) Arc(TM) A770 Graphics") == Nivel::Alto); }
 TEST_CASE("config inválida usa padrão") {
-    CHECK(lerConfig("nao/existe.txt", Nivel::Medio) == Nivel::Medio);
+    CHECK(lerConfig("nao/existe.txt", {Nivel::Medio}).nivel == Nivel::Medio);
     CHECK_FALSE(temConfig("nao/existe.txt"));
     const char* p = "teste_config_lixo.txt";
     { std::ofstream f(p); f << "qualidade=ultra\nbobagem\n"; }
-    CHECK(lerConfig(p, Nivel::Baixo) == Nivel::Baixo);
+    CHECK(lerConfig(p, {}).nivel == Nivel::Baixo);
+    CHECK_FALSE(lerConfig(p, {}).cabeloOndulado);
     std::remove(p);
 }
 TEST_CASE("salvar e ler config") {
     const char* p = "teste_config.txt";
-    salvarConfig(p, Nivel::Alto);
+    { std::ofstream f(p); f << "qualidade=medio\n"; }
+    CHECK(lerConfig(p, {}).nivel == Nivel::Medio);
+    CHECK_FALSE(lerConfig(p, {}).cabeloOndulado);
+    salvarConfig(p, {Nivel::Alto, true});
     CHECK(temConfig(p));
-    CHECK(lerConfig(p, Nivel::Baixo) == Nivel::Alto);
-    salvarConfig(p, Nivel::Medio);
-    CHECK(lerConfig(p, Nivel::Baixo) == Nivel::Medio);
+    CHECK(lerConfig(p, {}).nivel == Nivel::Alto);
+    CHECK(lerConfig(p, {}).cabeloOndulado);
+    salvarConfig(p, {Nivel::Medio, true});
+    CHECK(lerConfig(p, {}).cabeloOndulado);
+    CHECK(lerConfig(p, {}).nivel == Nivel::Medio);
+    salvarConfig(p, {Nivel::Medio, false});
+    CHECK_FALSE(lerConfig(p, {Nivel::Baixo, true}).cabeloOndulado);
     std::remove(p);
 }
 TEST_CASE("AMD integrada não começa no Alto") {

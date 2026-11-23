@@ -373,45 +373,6 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
             }
         }
     }
-    struct Amostra { Vec3f p; float flex; };
-    auto fita = [&](const std::vector<Amostra>& pts, float largura, float tom, bool base) {
-        size_t inicio = m.v.size(), n = pts.size();
-        if (inicio + n * 3 >= 64000) return;
-        for (size_t i = 0; i < n; ++i) {
-            Vec3f p = pts[i].p;
-            Vec3f anterior = pts[i ? i - 1 : 0].p, seguinte = pts[std::min(i + 1, n - 1)].p;
-            Vec3f tg = normalizar(seguinte - anterior);
-            Vec3f nr = normalizar(p - centro);
-            Vec3f lado = normalizar(cross(tg, nr));
-            float t = float(i) / (n - 1);
-            float w = largura * lerp(0.79f, 1.f, smoothstep(0.f, 0.25f, t)) * (1.f - 0.69f * smoothstep(0.58f, 1.f, t));
-            for (int q = -1; q <= 1; ++q) {
-                // Faixa abaulada no centro, para que o brilho mostre o volume de cada mecha.
-                Vec3f x = p + lado * (float(q) * w) + nr * (q == 0 ? w * 0.25f : 0.f);
-                Vec3f normal = normalizar(nr + lado * (float(q) * 0.38f));
-                VertPele v;
-                v.pos = {x.x * s * ms, x.y * s, x.z * s * ms};
-                v.normal = normalizar({normal.x / ms, normal.y, normal.z / ms});
-                v.cor = cor * tom;
-                v.material = MAT_CARTAO + 0.5f;
-                v.ao = base ? 0.73f : 0.94f;
-                v.pelos = (q + 1) * 0.5f;
-                v.tv = t;
-                v.tang = tg * (0.05f + pts[i].flex);
-                v.osso[0] = v.osso[1] = CABECA;
-                m.v.push_back(v);
-            }
-        }
-        for (size_t i = 0; i + 1 < n; ++i) {
-            bool livre = pts[i + 1].flex > 0.14f;
-            for (size_t q = 0; q < 2; ++q) {
-                uint16_t a = uint16_t(inicio + i * 3 + q), b = a + 1, c = a + 4, d = a + 3;
-                m.idx.insert(m.idx.end(), {a, b, c, a, c, d});
-                if (livre) m.idx.insert(m.idx.end(), {a, c, b, a, d, c});
-            }
-        }
-    };
-
     // Risca fora do centro. A camada interna cobre o couro cabeludo e as mechas de fora
     // atravessam o topo em diagonal, formando um topete baixo com volume.
     for (int camada = 0; camada < (simples ? 1 : 2); ++camada) {
@@ -426,7 +387,7 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
             float onda = 0.003f + 0.005f * rnd();
             float fase = rnd() * 6.2831853f;
             int arco = simples ? 8 : 10, cauda = simples ? 4 : 6;
-            std::vector<Amostra> pts;
+            std::vector<PontoCabelo> pts;
             for (int i = 0; i <= arco; ++i) {
                 float t = float(i) / arco;
                 float giro = lerp(th, alvo, t);
@@ -448,7 +409,8 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
                 pts.push_back({p, lerp(0.14f, 1.f, t * t)});
             }
             float tom = (base ? 0.77f : 1.02f) * lerp(0.91f, 1.18f, rnd());
-            fita(pts, (simples ? 0.020f : 0.016f) * lerp(0.78f, 1.28f, rnd()), tom, base);
+            fitaDeCabelo(m, pts, centro, s, ms, (simples ? 0.020f : 0.016f) * lerp(0.78f, 1.28f, rnd()),
+                         cor * tom, base ? 0.73f : 0.94f);
         }
     }
 
@@ -458,7 +420,7 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
         float lado = k % 2 ? 1.f : -1.f;
         float th0 = lado * lerp(2.f, 15.f, u);
         float th1 = lado * lerp(48.f, 94.f, u);
-        std::vector<Amostra> pts;
+        std::vector<PontoCabelo> pts;
         for (int i = 0; i <= 10; ++i) {
             float t = i / 10.f;
             float ang = lerp(th0, th1, t);
@@ -466,7 +428,8 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
             float volume = lerp(0.009f, 0.007f, t) + 0.017f * std::sin(3.14159265f * t);
             pts.push_back({naCabeca(direcao(ang, altura), volume), 0.49f * smoothstep(0.2f, 1.f, t)});
         }
-        fita(pts, lerp(0.006f, 0.010f, rnd()), lerp(0.90f, 1.18f, rnd()), false);
+        float largura = lerp(0.006f, 0.010f, rnd());
+        fitaDeCabelo(m, pts, centro, s, ms, largura, cor * lerp(0.90f, 1.18f, rnd()), 0.94f);
     }
 }
 

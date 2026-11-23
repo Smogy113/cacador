@@ -5,12 +5,13 @@
 namespace {
 using estilo::Fonte;
 constexpr Color FUNDO{18, 17, 15, 255};
-constexpr const char* PRINCIPAL[] = {"Jogar", "Configurações", "Sair"};
+constexpr const char* PRINCIPAL[] = {"Jogar", "Personagem", "Configurações", "Sair"};
+constexpr const char* CABELOS[] = {"Sem cabelo", "Ondulado", "Voltar"};
 constexpr const char* QUALIDADE[] = {"Baixo", "Médio", "Alto", "Voltar"};
 #if defined(PLATFORM_WEB)
-constexpr int NUM_PRINCIPAL = 2;
-#else
 constexpr int NUM_PRINCIPAL = 3;
+#else
+constexpr int NUM_PRINCIPAL = 4;
 #endif
 float escala() { return std::min(GetScreenWidth() / 850.f, GetScreenHeight() / 720.f); }
 float margem() { return GetScreenWidth() * 0.065f; }
@@ -33,11 +34,14 @@ Rectangle MenuInicial::item(int indice) const {
     return {margem(), topo() + (166.f + indice * 49.f) * s, 292.f * s, 46.f * s};
 }
 
-MenuInicial::Acao MenuInicial::atualizar(Nivel& nivel) {
-    int total = configuracoes_ ? 4 : NUM_PRINCIPAL;
-    if (IsKeyPressed(KEY_ESCAPE) && configuracoes_) {
-        configuracoes_ = false;
-        foco_ = 1;
+MenuInicial::Acao MenuInicial::atualizar(ConfigJogo& config) {
+    int total = tela_ == Tela::Principal ? NUM_PRINCIPAL : (tela_ == Tela::Personagem ? 3 : 4);
+    auto voltar = [&] {
+        foco_ = tela_ == Tela::Personagem ? 1 : 2;
+        tela_ = Tela::Principal;
+    };
+    if (IsKeyPressed(KEY_ESCAPE) && tela_ != Tela::Principal) {
+        voltar();
         return Acao::Nenhuma;
     }
     Vector2 mouse = GetMousePosition();
@@ -57,23 +61,23 @@ MenuInicial::Acao MenuInicial::atualizar(Nivel& nivel) {
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) acionado = foco_;
     if (acionado < 0) return Acao::Nenhuma;
 
-    if (configuracoes_) {
-        if (acionado == 3) {
-            configuracoes_ = false;
-            foco_ = 1;
-        } else {
-            nivel = static_cast<Nivel>(acionado);
-        }
+    if (tela_ != Tela::Principal) {
+        if (acionado == total - 1) voltar();
+        else if (tela_ == Tela::Personagem) config.cabeloOndulado = acionado == 1;
+        else config.nivel = static_cast<Nivel>(acionado);
     } else if (acionado == 1) {
-        configuracoes_ = true;
-        foco_ = static_cast<int>(nivel);
+        tela_ = Tela::Personagem;
+        foco_ = config.cabeloOndulado ? 1 : 0;
+    } else if (acionado == 2) {
+        tela_ = Tela::Configuracoes;
+        foco_ = static_cast<int>(config.nivel);
     } else {
         return acionado == 0 ? Acao::Jogar : Acao::Sair;
     }
     return Acao::Nenhuma;
 }
 
-void MenuInicial::desenhar(Nivel nivel, bool carregando) const {
+void MenuInicial::desenhar(const ConfigJogo& config, bool carregando) const {
     int w = GetScreenWidth(), h = GetScreenHeight();
     float s = escala(), x = margem(), y = topo();
     ClearBackground(FUNDO);
@@ -95,19 +99,28 @@ void MenuInicial::desenhar(Nivel nivel, bool carregando) const {
         estilo::texto(Fonte::Texto, "Carregando o mundo...", x + 2 * s, y + 171.f * s, 28.f * s, estilo::MARFIM);
         return;
     }
-    if (configuracoes_)
+    const char* const* opcoes = PRINCIPAL;
+    int total = NUM_PRINCIPAL, escolhido = -1;
+    if (tela_ == Tela::Personagem) {
+        opcoes = CABELOS;
+        total = 3;
+        escolhido = config.cabeloOndulado ? 1 : 0;
+        estilo::texto(Fonte::Forte, "Cabelo", x + 2 * s, y + 121.f * s, 24.f * s, estilo::MARFIM_ESC);
+    } else if (tela_ == Tela::Configuracoes) {
+        opcoes = QUALIDADE;
+        total = 4;
+        escolhido = static_cast<int>(config.nivel);
         estilo::texto(Fonte::Forte, "Qualidade gráfica", x + 2 * s, y + 121.f * s, 24.f * s, estilo::MARFIM_ESC);
-    int total = configuracoes_ ? 4 : NUM_PRINCIPAL;
+    }
     for (int i = 0; i < total; ++i) {
         Rectangle r = item(i);
         if (foco_ == i) {
             DrawRectangleGradientH(int(r.x), int(r.y), int(r.width), int(r.height), {179, 140, 79, 57}, BLANK);
             DrawRectangleRec({r.x, r.y + 7 * s, 2 * s, r.height - 14 * s}, estilo::OURO);
         }
-        const char* rotulo = configuracoes_ ? QUALIDADE[i] : PRINCIPAL[i];
-        estilo::texto(Fonte::Forte, rotulo, r.x + 15 * s, r.y + 5 * s, 31.f * s,
+        estilo::texto(Fonte::Forte, opcoes[i], r.x + 15 * s, r.y + 5 * s, 31.f * s,
                        foco_ == i ? estilo::MARFIM : estilo::MARFIM_ESC);
-        if (configuracoes_ && i == static_cast<int>(nivel))
+        if (i == escolhido)
             DrawCircleV({r.x + 195 * s, r.y + 22 * s}, 4 * s, estilo::OURO);
     }
     estilo::texto(Fonte::Texto, "Setas para navegar   ·   Enter para selecionar", x, h - 53.f * s,

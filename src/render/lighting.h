@@ -33,7 +33,7 @@ public:
     Nivel nivel() const { return nivel_; }
     void definirRaioGrama(float r);
     float posSolTela_[2] = {-1.f, -1.f};
-    void definirCabelo(Vec3f raiz, Vec3f ponta);
+    void definirCabelo(Material& mat, Vec3f raiz, Vec3f ponta, float tempo);
     void definirHeroi(bool sim);
     void definirFoco(float distHeroi);
     void definirJanelas(const std::vector<JanelaLuz>& janelas, Vec3f foco);

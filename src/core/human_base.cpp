@@ -129,5 +129,6 @@ MalhaPele corpoHumanoBase(const Proporcoes& pr, const Visual& vis) {
                         [](int, float, Vec3f&, Vec3f, Vec3f, float&) { return Rgb{.34f, .22f, .11f}; });
     }
     loft::normaisSuaves(m);
+    if (vis.cabeloOndulado) loft::cabeloOndulado(m, s, vis.cabelo);
     return m;
 }
