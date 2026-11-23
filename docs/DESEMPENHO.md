@@ -153,6 +153,8 @@ dobra e a parametrização no shader usam o comprimento de arco dessa parte. `fi
 seleciona até 96 guias no desktop e 32 no WebGL 1. Cada fita distinta recebe seu próprio
 guia quando há espaço na paleta. As demais usam os dois guias mais próximos.
 No ondulado, cada mecha fina do contorno usa três trechos de fita plana, com duas faces.
+O limiar de fixação do ondulado libera parte do arco lateral e da franja. Perto da raiz,
+o shader deixa a fita deslizar sobre a cabeça e libera gradualmente o afastamento.
 
 Até oito guias principais simulam a dobra e a ponta com subpassos de até 1/120 s e colisores
 aproximados para cabeça, nuca e ombros. Cada guia secundário herda a dobra de dois principais

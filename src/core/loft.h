@@ -119,10 +119,11 @@ void cabeloOndulado(MalhaPele& m, float escala, Rgb cor);
 
 struct PontoCabelo { Vec3f p; float flex; };
 // O corte fornece fitas com flexibilidade crescente da raiz à ponta.
+// O limiar de fixação define até onde a fita acompanha rigidamente o couro cabeludo.
 // Use um construtor por malha e finalize depois de adicionar todas as fitas.
 class ConstrutorCabelo {
 public:
-    ConstrutorCabelo(MalhaPele& malha, Vec3f centro, float escala, float massa);
+    ConstrutorCabelo(MalhaPele& malha, Vec3f centro, float escala, float massa, float limiarFixacao = .12f);
     void fita(const std::vector<PontoCabelo>& pontos, float largura, Rgb cor, float ao, bool fina = false);
     void finalizar();
 
@@ -133,7 +134,7 @@ private:
     };
     MalhaPele& m_;
     Vec3f centro_;
-    float escala_, massa_;
+    float escala_, massa_, limiarFixacao_;
     std::vector<Fita> fitas_;
     Vec3f escalar(Vec3f p) const;
 };

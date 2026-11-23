@@ -1914,14 +1914,16 @@ vec3 deslocarMecha(float t, out vec3 inclinacao) {
     vec3 desloc = (t * t) * (8.0 * (1.0 - t) * meio + (2.0 * t - 1.0) * ponta);
     inclinacao = t * ((16.0 - 24.0 * t) * meio + (6.0 * t - 2.0) * ponta);
 
-    // Mantém cada vértice fora do elipsoide ou com a folga original do corte.
+    // Perto da raiz, a fita desliza mantendo a folga em repouso.
+    // A ponta pode se afastar e ainda respeita o limite do elipsoide.
     vec3 raios = max(cabeloRaios, vec3(0.0001));
     vec3 q0 = (vertexPosition - cabeloCentro) / raios;
     vec3 q = q0 + desloc / raios;
-    float base = min(1.0, dot(q0, q0)), d = dot(q, q);
-    if (d < base) {
+    float repouso = dot(q0, q0), d = dot(q, q);
+    float alvo = mix(repouso, max(min(1.0, repouso), d), smoothstep(0.12, 0.58, t));
+    if (abs(d - alvo) > 1e-6) {
         vec3 direcao = d > 1e-8 ? q * inversesqrt(d) : normalize(q0);
-        desloc = (direcao * sqrt(base) - q0) * raios;
+        desloc = (direcao * sqrt(alvo) - q0) * raios;
     }
     return desloc;
 }

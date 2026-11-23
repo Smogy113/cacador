@@ -114,7 +114,37 @@ TEST_CASE("cabelo: cortes com silhuetas diferentes geram o proprio perfil") {
         CHECK(std::count(ancorados.begin(), ancorados.end(), true) == perfil.quantidade);
     }
     CHECK(ondulado.cabelo.quantidade >= std::min<size_t>(80, MAX_GUIAS_CABELO));
-    CHECK(comprido.cabelo.guias[0].pontos[2].y < ondulado.cabelo.guias[0].pontos[2].y);
+    // O comprido é penteado para trás. Compara a silhueta pelas pontas da malha,
+    // que independem da ordem usada para selecionar os guias.
+    auto pontaMaisAoFundo = [](const MalhaPele& malha) {
+        float z = 0.f;
+        for (const auto& v : malha.v)
+            if (v.guiaCabelo[0] != SEM_GUIA_CABELO && v.tv == 1.f) z = std::min(z, v.pos.z);
+        return z;
+    };
+    CHECK(pontaMaisAoFundo(comprido) < pontaMaisAoFundo(ondulado) - .05f);
+}
+
+TEST_CASE("cabelo: ondulado dobra no meio das mechas e conserva as raízes") {
+    Visual visual;
+    visual.cabeloOndulado = true;
+    const auto malha = corpoHumanoBase({}, visual);
+    int raizes = 0, centros = 0, centrosMoveis = 0;
+    for (const auto& v : malha.v) {
+        // Só a coluna central das fitas largas, incluindo as laterais e a franja.
+        if (v.guiaCabelo[0] == SEM_GUIA_CABELO || v.pelos != .5f) continue;
+        if (v.tv == 0.f) {
+            CHECK(len(v.tang) == doctest::Approx(.05f));
+            ++raizes;
+        }
+        if (v.tv >= .46f && v.tv <= .54f) {
+            ++centros;
+            if (len(v.tang) >= .20f) ++centrosMoveis;
+        }
+    }
+    REQUIRE(raizes > 0);
+    REQUIRE(centros > 0);
+    CHECK(centrosMoveis * 4 >= centros * 3);
 }
 
 TEST_CASE("cabelo: a dobra divide o comprimento livre da mecha") {

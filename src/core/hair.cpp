@@ -4,8 +4,6 @@
 
 namespace loft {
 namespace {
-constexpr float FLEX_RAIZ = .12f;
-
 float distanciaGuias(const GuiaCabelo& a, const GuiaCabelo& b) {
     Vec3f raiz = a.pontos[0] - b.pontos[0], meio = a.pontos[1] - b.pontos[1], ponta = a.pontos[2] - b.pontos[2];
     float flex = (a.flexibilidade - b.flexibilidade) * .03f;
@@ -28,8 +26,8 @@ VinculoCabelo vincular(const GuiaCabelo& guia, const PerfilCabelo& perfil, size_
 }
 }  // namespace
 
-ConstrutorCabelo::ConstrutorCabelo(MalhaPele& malha, Vec3f centro, float escala, float massa)
-    : m_(malha), centro_(centro), escala_(escala), massa_(massa) {}
+ConstrutorCabelo::ConstrutorCabelo(MalhaPele& malha, Vec3f centro, float escala, float massa, float limiarFixacao)
+    : m_(malha), centro_(centro), escala_(escala), massa_(massa), limiarFixacao_(limiarFixacao) {}
 
 Vec3f ConstrutorCabelo::escalar(Vec3f p) const {
     return {p.x * escala_ * massa_, p.y * escala_, p.z * escala_ * massa_};
@@ -47,8 +45,8 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
     for (size_t i = 1; i < n; ++i) {
         float segmento = len(escalar(pts[i].p - pts[i - 1].p));
         arco[i] = arco[i - 1] + segmento;
-        if (pts[i - 1].flex < FLEX_RAIZ && pts[i].flex >= FLEX_RAIZ) {
-            float fracao = (FLEX_RAIZ - pts[i - 1].flex) / (pts[i].flex - pts[i - 1].flex);
+        if (pts[i - 1].flex < limiarFixacao_ && pts[i].flex >= limiarFixacao_) {
+            float fracao = (limiarFixacao_ - pts[i - 1].flex) / (pts[i].flex - pts[i - 1].flex);
             raiz = arco[i - 1] + segmento * fracao;
             segmentoRaiz = i;
         }
@@ -84,15 +82,16 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
         }
     }
     for (size_t i = 0; i + 1 < n; ++i) {
-        bool livre = pts[i + 1].flex > .14f;
+        // A face de trás aparece onde a fita se solta do contorno da cabeça.
+        bool duasFaces = pts[i + 1].flex > .14f;
         for (size_t q = 0; q + 1 < colunas; ++q) {
             uint16_t a = uint16_t(inicio + i * colunas + q), b = a + 1;
             uint16_t c = uint16_t(b + colunas), d = uint16_t(a + colunas);
             m_.idx.insert(m_.idx.end(), {a, b, c, a, c, d});
-            if (livre) m_.idx.insert(m_.idx.end(), {a, c, b, a, d, c});
+            if (duasFaces) m_.idx.insert(m_.idx.end(), {a, c, b, a, d, c});
         }
     }
-    if (flexPonta <= FLEX_RAIZ || comprimentoLivre <= .018f) return;
+    if (flexPonta <= limiarFixacao_ || comprimentoLivre <= .018f) return;
     auto amostrar = [&](float distancia) {
         for (size_t i = segmentoRaiz; i < n; ++i) {
             if (arco[i] < distancia) continue;
@@ -258,7 +257,10 @@ void couroCabeludo(MalhaPele& m, const Cranio& cranio, float escala, Rgb cor) {
 void cabeloOndulado(MalhaPele& m, float escala, Rgb cor) {
     Cranio cranio(m, escala);
     couroCabeludo(m, cranio, escala, cor);
-    ConstrutorCabelo cabelo(m, CENTRO, escala, 1.f);
+    // O arco sobre a cabeça chega a .10 de flexibilidade. A dobra começa no arco,
+    // com a primeira parte presa à risca e a superfície da cabeça protegida no shader.
+    constexpr float LIMIAR_FIXACAO_ONDULADO = .04f;
+    ConstrutorCabelo cabelo(m, CENTRO, escala, 1.f, LIMIAR_FIXACAO_ONDULADO);
 
     // As camadas mais curtas começam junto da risca. As mechas inferiores saem da
     // lateral do couro e terminam em outra altura, com curvaturas alternadas.
@@ -345,7 +347,9 @@ void cabeloOndulado(MalhaPele& m, float escala, Rgb cor) {
                     Vec3f limite = cranio.superficie(d, .006f);
                     if (dot(limite - p, d) > 0.f) p = limite;
                 }
-                pontos.push_back({p, .58f * smoothstep(.3f, 1.f, t)});
+                float flexSobreACabeca = .08f * smoothstep(.06f, .42f, t);
+                float flexDaPonta = .58f * smoothstep(.3f, 1.f, t);
+                pontos.push_back({p, std::max(flexSobreACabeca, flexDaPonta)});
             }
             cabelo.fita(pontos, lerp(.0075f, .012f, u),
                          cor * (.96f + .10f * std::sin(fase)), .97f);
