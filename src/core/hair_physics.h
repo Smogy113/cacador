@@ -10,8 +10,8 @@ struct DeformacaoCabelo {
 class FisicaCabelo {
 public:
     explicit FisicaCabelo(const PerfilCabelo& perfil);
-    void reiniciar() { iniciada_ = false; deformacao_ = {}; }
-    void atualizar(float dt, const Mat4& cabeca, const Mat4& pescoco, const Mat4& peito, Vec3f vento);
+    void reiniciar() { iniciada_ = detalhesAtivos_ = false; deformacao_ = {}; }
+    void atualizar(float dt, const Mat4& cabeca, const Mat4& pescoco, const Mat4& peito, Vec3f vento, float detalhe = 1.f);
     bool iniciada() const { return iniciada_; }
     const PerfilCabelo& perfil() const { return perfil_; }
     const DeformacaoCabelo& deformacao() const { return deformacao_; }
@@ -23,9 +23,18 @@ private:
         std::array<Vec3f, 3> alvosAnteriores{};
         std::array<float, 2> comprimentos{}, rigidez{}, limites{};
     };
+    struct EstadoSecundario {
+        No ponta{};
+        float comprimento = 0, rigidez = 0, limite = 0;
+        float escalaMeio = 1, escalaPonta = 1;
+    };
     PerfilCabelo perfil_;
-    std::array<EstadoGuia, MAX_GUIAS_CABELO> guias_{};
+    std::array<EstadoGuia, MAX_GUIAS_PRINCIPAIS> guias_{};
+    std::array<EstadoSecundario, MAX_GUIAS_CABELO> secundarios_{};
     std::array<Vec3f, 5> colisoresAnteriores_{};
-    bool iniciada_ = false;
+    bool iniciada_ = false, detalhesAtivos_ = false;
     DeformacaoCabelo deformacao_{};
+
+    void atualizarSecundarios(float dt, const Mat4& cabeca, Vec3f forca, float detalhe,
+                              const std::array<Vec3f, 5>& colisores);
 };

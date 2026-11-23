@@ -10,7 +10,7 @@ PerfilCabelo perfilDeTeste() {
     perfil.guias[0].pontos = {{{ .071f, 1.748f, .113f}, { .103f, 1.686f, .093f}, { .117f, 1.638f, .061f}}};
     perfil.guias[1].pontos = {{{-.071f, 1.748f, .113f}, {-.103f, 1.686f, .093f}, {-.117f, 1.638f, .061f}}};
     perfil.guias[2].pontos = {{{ 0, 1.735f, -.054f}, {0, 1.654f, -.070f}, {0, 1.572f, -.075f}}};
-    perfil.quantidade = 3;
+    perfil.quantidade = perfil.principais = 3;
     return perfil;
 }
 }  // namespace
@@ -61,15 +61,20 @@ TEST_CASE("cabelo: lados reagem separadamente ao giro e guias reiniciam no telep
     }
 }
 
-TEST_CASE("cabelo: subpassos limitam o desvio quando a taxa de quadros cai") {
+TEST_CASE("cabelo: os dois niveis de simulacao limitam o desvio em diferentes taxas de quadros") {
+    auto perfil = perfilDeTeste();
+    auto& secundario = perfil.guias[perfil.quantidade++];
+    secundario = perfil.guias[2];
+    secundario.pais = {2, 2, 0};
+    for (auto& p : secundario.pontos) p.x += .028f;
     for (float dt : {1.f / 120.f, 1.f / 60.f, 1.f / 30.f, 1.f / 15.f}) {
-        FisicaCabelo fisica(perfilDeTeste());
+        FisicaCabelo fisica(perfil);
         for (int i = 0; i < 80; ++i) {
             float tempo = i * dt;
             Mat4 movimento = Mat4::trans({.42f * std::sin(tempo * 12.f), 0, tempo * 3.3f}) *
                              Mat4::rotY(.65f * std::sin(tempo * 10.f));
             fisica.atualizar(dt, movimento, movimento, movimento, {1.4f, 0, -.8f});
-            for (Vec3f p : fisica.deformacao().ponta) CHECK(len(p) < .105f);
+            for (size_t g = 0; g < perfil.quantidade; ++g) CHECK(len(fisica.deformacao().ponta[g]) < .105f);
         }
     }
 }
@@ -88,17 +93,22 @@ TEST_CASE("cabelo: cortes com silhuetas diferentes geram o proprio perfil") {
     const MalhaPele* cortes[] = {&ondulado, &comprido};
     for (const auto* malha : cortes) {
         const auto& perfil = malha->cabelo;
-        REQUIRE(perfil.quantidade > 0);
+        REQUIRE(perfil.principais == MAX_GUIAS_PRINCIPAIS);
+        REQUIRE(perfil.quantidade > perfil.principais);
         REQUIRE(perfil.quantidade <= MAX_GUIAS_CABELO);
-        size_t dinamicos = 0;
+        for (size_t i = perfil.principais; i < perfil.quantidade; ++i) {
+            REQUIRE(perfil.guias[i].pais.a < perfil.principais);
+            REQUIRE(perfil.guias[i].pais.b < perfil.principais);
+        }
+        bool usaSecundario = false;
         for (const auto& v : malha->v) {
             if (v.guiaCabelo[0] == SEM_GUIA_CABELO) continue;
-            ++dinamicos;
+            usaSecundario |= v.guiaCabelo[0] >= perfil.principais;
             REQUIRE(v.guiaCabelo[0] < perfil.quantidade);
             REQUIRE(v.guiaCabelo[1] < perfil.quantidade);
             REQUIRE(v.osso[0] == CABECA);
         }
-        CHECK(dinamicos > 0);
+        CHECK(usaSecundario);
     }
     CHECK(comprido.cabelo.guias[0].pontos[2].y < ondulado.cabelo.guias[0].pontos[2].y);
 }
@@ -129,8 +139,10 @@ TEST_CASE("cabelo: mechas curtas e rigidas cedem menos ao mesmo vento") {
 
 TEST_CASE("cabelo: a ponta desliza pelo colisor do ombro sem atravessa-lo") {
     PerfilCabelo perfil;
-    perfil.quantidade = 1;
+    perfil.quantidade = 2;
+    perfil.principais = 1;
     perfil.guias[0].pontos = {{{.12f, 1.72f, .102f}, {.12f, 1.58f, .102f}, {.12f, 1.44f, .102f}}};
+    perfil.guias[1].pontos = {{{-.12f, 1.72f, .102f}, {-.12f, 1.58f, .102f}, {-.12f, 1.44f, .102f}}};
     perfil.colisores.ombroE = {-.17f, 1.44f, 0};
     perfil.colisores.ombroD = { .17f, 1.44f, 0};
     FisicaCabelo livre(perfil);
@@ -142,8 +154,50 @@ TEST_CASE("cabelo: a ponta desliza pelo colisor do ombro sem atravessa-lo") {
     for (int i = 0; i < 90; ++i) {
         livre.atualizar(1.f / 60.f, id, id, id, {0, 0, -9.f});
         comColisao.atualizar(1.f / 60.f, id, id, id, {0, 0, -9.f});
-        auto desvio = comColisao.deformacao().ponta[0];
-        CHECK(len({0, desvio.y, .102f + desvio.z}) >= raio - 1e-5f);
+        for (size_t g = 0; g < perfil.quantidade; ++g) {
+            auto desvio = comColisao.deformacao().ponta[g];
+            CHECK(len({0, desvio.y, .102f + desvio.z}) >= raio - 1e-5f);
+        }
     }
-    CHECK(comColisao.deformacao().ponta[0].z > livre.deformacao().ponta[0].z + .02f);
+    for (size_t g = 0; g < perfil.quantidade; ++g)
+        CHECK(comColisao.deformacao().ponta[g].z > livre.deformacao().ponta[g].z + .02f);
+}
+
+TEST_CASE("cabelo: pontas secundarias respondem separadamente e voltam ao movimento herdado") {
+    PerfilCabelo perfil;
+    perfil.principais = 1;
+    perfil.quantidade = 3;
+    for (size_t i = 0; i < perfil.quantidade; ++i) {
+        float x = .03f * i;
+        perfil.guias[i].pontos = {{{x, 1.78f, -.12f}, {x, 1.68f, -.12f}, {x, 1.58f, -.12f}}};
+    }
+    perfil.guias[1].flexibilidade = .35f;
+
+    const Mat4 id = Mat4::id();
+    constexpr float dt = 1.f / 60.f;
+    const Vec3f vento{0, 0, -4.f};
+    FisicaCabelo proximo(perfil), distante(perfil);
+    for (int i = 0; i < 90; ++i) {
+        proximo.atualizar(dt, id, id, id, vento);
+        distante.atualizar(dt, id, id, id, vento, 0.f);
+    }
+    const auto& perto = proximo.deformacao();
+    const auto& longe = distante.deformacao();
+    CHECK(perto.meio[1] == perto.meio[2]);
+    CHECK(perto.ponta[2].z < perto.ponta[1].z - .009f);
+    CHECK(perto.ponta[0] == longe.ponta[0]);
+    CHECK(longe.ponta[0] == longe.ponta[2]);
+
+    for (float detalhe : {.25f, .01f, 0.f}) {
+        proximo.atualizar(dt, id, id, id, vento, detalhe);
+        distante.atualizar(dt, id, id, id, vento, 0.f);
+        CHECK(len(perto.ponta[2] - longe.ponta[2]) <= .16f * detalhe + 1e-5f);
+    }
+    proximo.atualizar(dt, id, id, id, vento);
+    distante.atualizar(dt, id, id, id, vento, 0.f);
+    CHECK(perto.ponta[2] == longe.ponta[2]);
+
+    const Mat4 destino = Mat4::trans({18, 0, 12});
+    proximo.atualizar(dt, destino, destino, destino, vento);
+    for (size_t i = 0; i < perfil.quantidade; ++i) CHECK(perto.ponta[i] == Vec3f{});
 }

@@ -1,5 +1,6 @@
 #include "render/shaders.h"
 #include <string>
+#include "core/hair_profile.h"
 
 #if defined(PLATFORM_WEB)
 static const char* CAB_VS = "#version 100\n#define ATTR attribute\n#define VARY varying\n";
@@ -1875,19 +1876,28 @@ mat4 matrizPele() {
 }
 )"
 
+static_assert(MAX_GUIAS_CABELO == 32, "Sincronizar com GUIAS_CABELO no shader");
+static_assert(17 * 4 + 2 * 4 + MAX_GUIAS_CABELO * 3 / 2 + 3 <= 128, "Uniforms de vertice do WebGL 1");
 #define FISICA_MECHA R"(
-uniform vec3 cabeloMeio[8], cabeloPonta[8];
+#define GUIAS_CABELO 32
+uniform vec4 cabeloCurvas[GUIAS_CABELO], cabeloPontasYZ[GUIAS_CABELO / 2];
 uniform vec3 cabeloCentro, cabeloRaios;
 uniform float cabeloAtivo;
+vec3 pontaGuia(int guia, float x) {
+    int par = guia / 2;
+    vec4 yz = cabeloPontasYZ[par];
+    return vec3(x, guia == par * 2 ? yz.xy : yz.zw);
+}
 vec3 deslocarMecha() {
     float t = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
     if (t <= 0.0) return vec3(0.0);
     float codigo = -vertexTexCoord2.y - 1.0;
     int par = int(floor(codigo));
-    int a = par / 8, b = par - 8 * a;
+    int a = par / GUIAS_CABELO, b = par - GUIAS_CABELO * a;
     float peso = fract(codigo) / 0.99;
-    vec3 meio = mix(cabeloMeio[a], cabeloMeio[b], peso);
-    vec3 ponta = mix(cabeloPonta[a], cabeloPonta[b], peso);
+    vec4 curvaA = cabeloCurvas[a], curvaB = cabeloCurvas[b];
+    vec3 meio = mix(curvaA.xyz, curvaB.xyz, peso);
+    vec3 ponta = mix(pontaGuia(a, curvaA.w), pontaGuia(b, curvaB.w), peso);
     // Curva quadrática que passa pela raiz, dobra e ponta.
     vec3 desloc = t * (4.0 * (1.0 - t) * meio + (2.0 * t - 1.0) * ponta);
 

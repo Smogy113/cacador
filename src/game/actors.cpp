@@ -40,12 +40,15 @@ void ModeloHumano::descarregar() {
     cabeca_.descarregar();
 }
 
-void ModeloHumano::atualizarCabelo(float dt, Vec3f pos, float yaw, const Pose& pose, Vec3f vento) {
+void ModeloHumano::atualizarCabelo(float dt, Vec3f pos, float yaw, const Pose& pose, Vec3f vento, Vec3f camera) {
     calcularMatrizes(esq_, pose, ossos_);
     Mat4 mundo = Mat4::trans(pos) * Mat4::rotY(yaw);
     Mat4 cabeca = mundo * ossos_[CABECA], pescoco = mundo * ossos_[PESCOCO], peito = mundo * ossos_[PEITO];
+    Vec3f distancia = camera - cabeca.ponto(esq_.ossos[CABECA].inicio);
+    // De 5 a 12 m o movimento próprio das pontas cede lugar ao dos guias principais.
+    float detalhe = 1.f - smoothstep(5.f * 5.f, 12.f * 12.f, dot(distancia, distancia));
     for (auto* malha : {&malha_, &hd_, &hdSemPele_})
-        malha->atualizarCabelo(dt, cabeca, pescoco, peito, vento);
+        malha->atualizarCabelo(dt, cabeca, pescoco, peito, vento, detalhe);
 }
 
 void ModeloHumano::reiniciarCabelo() {

@@ -15,7 +15,7 @@ public:
     void desenhar(Material& mat, const std::vector<Mat4>& ossos, Matrix modelo) const;
     int triangulos() const { return mesh_.triangleCount; }
     bool temCabelo() const { return bool(cabelo_); }
-    void atualizarCabelo(float dt, const Mat4& cabeca, const Mat4& pescoco, const Mat4& peito, Vec3f vento);
+    void atualizarCabelo(float dt, const Mat4& cabeca, const Mat4& pescoco, const Mat4& peito, Vec3f vento, float detalhe);
     void reiniciarCabelo();
 
 private:

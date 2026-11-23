@@ -406,13 +406,13 @@ void Jogo::atualizar(float dt) {
     }
     atualizarPortas(dt, montadoEm_ < 0 && e.interagir);
     atualizarCombate(dt, e);
-    atualizarCabelo(dt);
     atualizarRota(dt);
     atualizarAmbienteSonoro(dt);
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
         if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);
     atualizarCamera(dt, e);
+    atualizarCabelo(dt);
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_);
     cenario_.atualizar(jogador_.pos, tempo_);
     grama_.atualizar(jogador_.pos, 3);
@@ -669,7 +669,8 @@ void Jogo::atualizarCabelo(float dt) {
         pose = poseDoJogador(e);
     }
     Vec3f vento{1.0f + .7f * std::sin(tempo_ * 1.9f), 0, .8f * std::cos(tempo_ * 1.1f)};
-    modeloJogador_.atualizarCabelo(dt, base, yaw, pose, vento);
+    Vec3f camera{cam_.position.x, cam_.position.y, cam_.position.z};
+    modeloJogador_.atualizarCabelo(dt, base, yaw, pose, vento, camera);
 }
 
 // Rota ate o objetivo da recompensa (esconderijo -> procurado -> xerife), recalculada quando o

@@ -8,7 +8,23 @@ constexpr float FLEX_RAIZ = .12f;
 
 float distanciaGuias(const GuiaCabelo& a, const GuiaCabelo& b) {
     Vec3f raiz = a.pontos[0] - b.pontos[0], meio = a.pontos[1] - b.pontos[1], ponta = a.pontos[2] - b.pontos[2];
-    return dot(raiz, raiz) * .65f + dot(meio, meio) * .5f + dot(ponta, ponta);
+    float flex = (a.flexibilidade - b.flexibilidade) * .03f;
+    return dot(raiz, raiz) * .65f + dot(meio, meio) * .5f + dot(ponta, ponta) + flex * flex;
+}
+
+VinculoCabelo vincular(const GuiaCabelo& guia, const PerfilCabelo& perfil, size_t quantidade) {
+    VinculoCabelo v;
+    float da = distanciaGuias(guia, perfil.guias[0]), db = 1e6f;
+    for (uint8_t i = 1; i < quantidade; ++i) {
+        float distancia = distanciaGuias(guia, perfil.guias[i]);
+        if (distancia < da) {
+            db = da; v.b = v.a; da = distancia; v.a = i;
+        } else if (distancia < db) {
+            db = distancia; v.b = i;
+        }
+    }
+    if (v.a != v.b) v.pesoB = da / std::max(1e-8f, da + db);
+    return v;
 }
 }  // namespace
 
@@ -69,7 +85,7 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
         return escalar(pts.back().p);
     };
     GuiaCabelo guia{{amostrar(FLEX_RAIZ), amostrar(lerp(FLEX_RAIZ, flexPonta, .5f)), escalar(pts.back().p)},
-                    clamp01(flexPonta)};
+                    clamp01(flexPonta), {}};
     float a = len(guia.pontos[1] - guia.pontos[0]), b = len(guia.pontos[2] - guia.pontos[1]);
     if (a > .003f && b > .003f && a + b > .018f) fitas_.push_back({guia, a + b, inicio, m_.v.size()});
 }
@@ -95,40 +111,35 @@ void ConstrutorCabelo::finalizar() {
                                         [](const Fita& a, const Fita& b) { return a.comprimento < b.comprimento; });
     perfil.guias[0] = maior->guia;
     perfil.quantidade = 1;
-    float separacao = .029f * escala_;
-    for (; perfil.quantidade < MAX_GUIAS_CABELO; ++perfil.quantidade) {
-        float maiorDist = separacao * separacao;
-        const Fita* candidata = nullptr;
-        for (const auto& fita : fitas_) {
-            float dist = distanciaGuias(fita.guia, perfil.guias[0]);
-            for (size_t i = 1; i < perfil.quantidade; ++i)
-                dist = std::min(dist, distanciaGuias(fita.guia, perfil.guias[i]));
-            if (dist > maiorDist) {
-                candidata = &fita;
-                maiorDist = dist;
+    // A distância ao guia mais próximo é atualizada uma vez por novo guia.
+    std::vector<float> distancias;
+    distancias.reserve(fitas_.size());
+    for (const auto& fita : fitas_) distancias.push_back(distanciaGuias(fita.guia, perfil.guias[0]));
+    auto selecionar = [&](size_t limite, float separacao) {
+        separacao *= escala_;
+        while (perfil.quantidade < limite) {
+            auto maisLonge = std::max_element(distancias.begin(), distancias.end());
+            if (*maisLonge <= separacao * separacao) break;
+            const auto& guia = fitas_[maisLonge - distancias.begin()].guia;
+            perfil.guias[perfil.quantidade++] = guia;
+            for (size_t i = 0; i < fitas_.size(); ++i) {
+                distancias[i] = std::min(distancias[i], distanciaGuias(fitas_[i].guia, guia));
             }
         }
-        if (!candidata) break;
-        perfil.guias[perfil.quantidade] = candidata->guia;
-    }
+    };
+    selecionar(MAX_GUIAS_PRINCIPAIS, .029f);
+    perfil.principais = perfil.quantidade;
+    selecionar(MAX_GUIAS_CABELO, .011f);
+    for (size_t i = perfil.principais; i < perfil.quantidade; ++i)
+        perfil.guias[i].pais = vincular(perfil.guias[i], perfil, perfil.principais);
 
     // Todos os vértices de uma fita compartilham os dois guias e o peso.
     for (const auto& fita : fitas_) {
-        uint8_t a = 0, b = 0;
-        float da = distanciaGuias(fita.guia, perfil.guias[0]);
-        float db = 1e6f;
-        for (uint8_t i = 1; i < perfil.quantidade; ++i) {
-            float dist = distanciaGuias(fita.guia, perfil.guias[i]);
-            if (dist < da) {
-                db = da; b = a; da = dist; a = i;
-            } else if (dist < db) {
-                db = dist; b = i;
-            }
-        }
-        uint8_t peso = a == b ? 0 : uint8_t(std::lround(255.f * da / std::max(1e-8f, da + db)));
+        VinculoCabelo v = vincular(fita.guia, perfil, perfil.quantidade);
+        uint8_t peso = uint8_t(std::lround(255.f * v.pesoB));
         for (size_t i = fita.inicio; i < fita.fim; ++i) {
-            m_.v[i].guiaCabelo[0] = a;
-            m_.v[i].guiaCabelo[1] = b;
+            m_.v[i].guiaCabelo[0] = v.a;
+            m_.v[i].guiaCabelo[1] = v.b;
             m_.v[i].misturaGuias = peso;
         }
     }

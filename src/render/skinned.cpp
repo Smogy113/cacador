@@ -18,7 +18,7 @@ namespace {
 
 struct UniformesCabelo {
     unsigned int shader = 0;
-    int ativo, meio, ponta, centro, raios;
+    int ativo, curvas, pontasYZ, centro, raios;
 };
 
 const UniformesCabelo& uniformesCabelo(Shader shader) {
@@ -27,8 +27,8 @@ const UniformesCabelo& uniformesCabelo(Shader shader) {
     static size_t proximo = 0;
     for (const auto& loc : cache) if (loc.shader == shader.id) return loc;
     auto& loc = cache[proximo++ % cache.size()];
-    loc = {shader.id, GetShaderLocation(shader, "cabeloAtivo"), GetShaderLocation(shader, "cabeloMeio[0]"),
-           GetShaderLocation(shader, "cabeloPonta[0]"), GetShaderLocation(shader, "cabeloCentro"),
+    loc = {shader.id, GetShaderLocation(shader, "cabeloAtivo"), GetShaderLocation(shader, "cabeloCurvas[0]"),
+           GetShaderLocation(shader, "cabeloPontasYZ[0]"), GetShaderLocation(shader, "cabeloCentro"),
            GetShaderLocation(shader, "cabeloRaios")};
     return loc;
 }
@@ -37,17 +37,26 @@ void enviarCabelo(Shader shader, const UniformesCabelo& loc, const FisicaCabelo&
     float ativo = 1.f;
     const auto& deformacao = cabelo.deformacao();
     const auto& perfil = cabelo.perfil();
-    float meio[MAX_GUIAS_CABELO][3], ponta[MAX_GUIAS_CABELO][3];
+    // Seis componentes por guia em 1,5 vec4. Incluindo os ossos, o shader
+    // fica dentro do limite mínimo de 128 vetores de uniforms do WebGL 1.
+    float curvas[MAX_GUIAS_CABELO][4], pontasYZ[MAX_GUIAS_CABELO / 2][4];
+    size_t pares = (perfil.quantidade + 1) / 2;
+    for (size_t i = 0; i < pares; ++i) {
+        size_t a = 2 * i, b = std::min(a + 1, perfil.quantidade - 1);
+        Vec3f pa = deformacao.ponta[a], pb = deformacao.ponta[b];
+        pontasYZ[i][0] = pa.y; pontasYZ[i][1] = pa.z;
+        pontasYZ[i][2] = pb.y; pontasYZ[i][3] = pb.z;
+    }
     for (size_t i = 0; i < perfil.quantidade; ++i) {
-        Vec3f m = deformacao.meio[i], p = deformacao.ponta[i];
-        meio[i][0] = m.x; meio[i][1] = m.y; meio[i][2] = m.z;
-        ponta[i][0] = p.x; ponta[i][1] = p.y; ponta[i][2] = p.z;
+        Vec3f meio = deformacao.meio[i];
+        curvas[i][0] = meio.x; curvas[i][1] = meio.y; curvas[i][2] = meio.z;
+        curvas[i][3] = deformacao.ponta[i].x;
     }
     Vec3f centro = perfil.colisores.centroCabeca, raios = perfil.colisores.raiosCabeca;
     float centroShader[] = {centro.x, centro.y, centro.z}, raiosShader[] = {raios.x, raios.y, raios.z};
     SetShaderValue(shader, loc.ativo, &ativo, SHADER_UNIFORM_FLOAT);
-    SetShaderValueV(shader, loc.meio, meio, SHADER_UNIFORM_VEC3, int(perfil.quantidade));
-    SetShaderValueV(shader, loc.ponta, ponta, SHADER_UNIFORM_VEC3, int(perfil.quantidade));
+    SetShaderValueV(shader, loc.curvas, curvas, SHADER_UNIFORM_VEC4, int(perfil.quantidade));
+    SetShaderValueV(shader, loc.pontasYZ, pontasYZ, SHADER_UNIFORM_VEC4, int(pares));
     SetShaderValue(shader, loc.centro, centroShader, SHADER_UNIFORM_VEC3);
     SetShaderValue(shader, loc.raios, raiosShader, SHADER_UNIFORM_VEC3);
 }
@@ -76,7 +85,6 @@ void MalhaEsqueleto::carregar(const MalhaPele& p) {
         if (v.guiaCabelo[0] != SEM_GUIA_CABELO) {
             // Sinal negativo marca uma fita presa ao osso A. Codifica o par
             // de guias no inteiro e a mistura na fração, sem outro atributo.
-            static_assert(MAX_GUIAS_CABELO == 8, "Sincronizar com FISICA_MECHA");
             int par = v.guiaCabelo[0] * MAX_GUIAS_CABELO + v.guiaCabelo[1];
             m.texcoords2[i * 2 + 1] = -float(1 + par) - v.misturaGuias * (.99f / 255.f);
         } else {
@@ -97,8 +105,8 @@ void MalhaEsqueleto::descarregar() {
     ok_ = false;
 }
 
-void MalhaEsqueleto::atualizarCabelo(float dt, const Mat4& cabeca, const Mat4& pescoco, const Mat4& peito, Vec3f vento) {
-    if (cabelo_) cabelo_->atualizar(dt, cabeca, pescoco, peito, vento);
+void MalhaEsqueleto::atualizarCabelo(float dt, const Mat4& cabeca, const Mat4& pescoco, const Mat4& peito, Vec3f vento, float detalhe) {
+    if (cabelo_) cabelo_->atualizar(dt, cabeca, pescoco, peito, vento, detalhe);
 }
 
 void MalhaEsqueleto::reiniciarCabelo() {

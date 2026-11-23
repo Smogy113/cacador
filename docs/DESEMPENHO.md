@@ -148,13 +148,19 @@ desenho permaneceu igual nas duas cenas.
 
 Cada corte descreve suas fitas do couro cabeludo até as pontas com `loft::ConstrutorCabelo`.
 Os pontos fornecem a posição em repouso e a flexibilidade crescente ao longo da fita.
-`finalizar()` seleciona até oito guias representativos e vincula cada fita aos dois mais
+`finalizar()` seleciona até 32 guias representativos e vincula cada fita aos dois mais
 próximos. As fitas rentes ao couro cabeludo podem ficar presas à cabeça sem criar guias.
 
-`hair_physics.cpp` atualiza somente a dobra e a ponta de cada guia, com subpassos de até
-1/120 s e colisores aproximados para cabeça, nuca e ombros. O comprimento e a flexibilidade
-de cada mecha determinam a rigidez e o desvio máximo. O shader interpola os deslocamentos
-nos passes de cor e de sombra, sem reenviar a malha a cada quadro ou acrescentar chamadas de desenho.
+Até oito guias principais simulam a dobra e a ponta com subpassos de até 1/120 s e colisores
+aproximados para cabeça, nuca e ombros. Cada guia secundário herda a dobra de dois principais
+e resolve uma única ponta com inércia, vento e colisão em um passo implícito por quadro.
+O comprimento e a flexibilidade determinam quanto ela pode se mover. Entre 5 e 12 m da câmera,
+o deslocamento das pontas volta gradualmente ao movimento dos guias principais. Além de 12 m,
+os secundários são interpolados sem simular a ponta.
+
+Os passes de cor e de sombra compartilham a deformação na GPU, com até 768 bytes de curvas
+por envio, sem reenviar a malha nem acrescentar chamadas de desenho. O empacotamento usa
+48 vetores de uniforms para os 32 guias e mantém o shader dentro do limite do WebGL 1.
 
 Ao ajustar rigidez, amortecimento ou colisão, use `--cabelo ondulado --retrato .65 --girar-camera 75 --direto`
 para observar uma corrida, uma parada e uma virada de perto. Confira também o movimento a cavalo.

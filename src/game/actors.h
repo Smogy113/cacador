@@ -19,7 +19,7 @@ public:
     void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose, bool hd = false, Material* matCabeca = nullptr) const;
 
     bool temCabelo() const { return malha_.temCabelo() || hd_.temCabelo() || hdSemPele_.temCabelo(); }
-    void atualizarCabelo(float dt, Vec3f pos, float yaw, const Pose& pose, Vec3f vento);
+    void atualizarCabelo(float dt, Vec3f pos, float yaw, const Pose& pose, Vec3f vento, Vec3f camera);
     void reiniciarCabelo();
 
     const Esqueleto& esqueleto() const { return esq_; }
