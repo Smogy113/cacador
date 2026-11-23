@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <vector>
 #include "core/math.h"
+#include "core/medidas_mundo.h"
 
 struct AABB {
     Vec3f min, max;
@@ -15,21 +16,22 @@ struct CaixaGirada {
 // Caixas solidas do mundo (construcoes, troncos, cercas), com grade espacial para busca rapida.
 class MundoColisao {
 public:
-    static constexpr float LIMITE = 700.f;
+    static constexpr float LIMITE = medidas::MEIO_AREA_JOGAVEL;
     void adicionar(AABB c);
     void adicionarGirada(const CaixaGirada& c);
     // caixas que mudam a cada quadro (folhas de porta): substitui a lista inteira
     void definirDinamicas(std::vector<CaixaGirada> v) { dinamicas_ = std::move(v); }
-    // Empurra um circulo (raio, no plano xz) para fora das caixas e para dentro do mapa.
-    Vec3f resolver(Vec3f pos, float raio) const;
+    // Empurra a seção circular de um corpo para fora de caixas na sua faixa de altura.
+    Vec3f resolver(Vec3f pos, float raio, float altura = medidas::ALTURA_ADULTO) const;
     // Segmento a->b nao atravessa nenhuma caixa?
     bool raioLivre(Vec3f a, Vec3f b) const;
-    size_t tamanho() const { return caixas_.size(); }
+    size_t tamanho() const { return caixas_.size() + giradas_.size(); }
     // Caixas que encostam no quadrado de lado 2r em volta de p (plano xz).
     std::vector<AABB> caixasPerto(Vec3f p, float r) const;
     // Pisos andaveis (tabuleiro de ponte): o topo da caixa vira chao.
     void adicionarPiso(AABB p);
-    void adicionarPisoGirado(const CaixaGirada& p);  // o topo (y1) vira chao
+    // y1 é a altura no centro; decliveZ é a subida por metro em +z local.
+    void adicionarPisoGirado(const CaixaGirada& p, float decliveZ = 0.f);
     // Topo do piso mais alto em (x,z) que esteja no maximo 0.7 m acima de yAtual; senao -1e9.
     float alturaPiso(float x, float z, float yAtual) const;
 
@@ -37,6 +39,8 @@ private:
     static constexpr float CEL = 32.f;
     long chave(int i, int j) const { return (long)i * 100003L + j; }
     std::vector<AABB> caixas_, pisos_;
-    std::vector<CaixaGirada> giradas_, pisosGirados_, dinamicas_;
+    struct PisoGirado { CaixaGirada caixa; float decliveZ; };
+    std::vector<CaixaGirada> giradas_, dinamicas_;
+    std::vector<PisoGirado> pisosGirados_;
     std::unordered_map<long, std::vector<int>> grade_, gradeGirada_;
 };

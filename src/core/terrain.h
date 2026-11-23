@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <vector>
 #include "core/math.h"
+#include "core/medidas_mundo.h"
 #include "core/places.h"
 
 struct CercaCapim {
@@ -23,8 +24,8 @@ Rgb corCapimUmido(Rgb cor, float umidade);
 
 class Terreno {
 public:
-    static constexpr float META = 750.f;  // mundo de -META..META
-    static constexpr int RES = 1501;      // 1 amostra por metro
+    static constexpr float META = medidas::MEIO_TERRENO;
+    static constexpr int RES = 2 * medidas::MEIO_TERRENO + 1;  // 1 amostra por metro
     Terreno(const Mapa& mapa, uint32_t semente);
     float altura(float x, float z) const;
     Vec3f normal(float x, float z) const;

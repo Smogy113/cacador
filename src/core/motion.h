@@ -18,7 +18,7 @@ struct Corpo {
     Vec3f dir{0, 0, 1};     // direcao do movimento (a pe): continua valendo enquanto o corpo freia
 };
 
-constexpr float VEL_ANDAR = 1.6f, VEL_CORRER = 5.f, RAIO_PESSOA = 0.4f;
+constexpr float VEL_ANDAR = 1.6f, VEL_CORRER = 5.f, RAIO_PESSOA = medidas::RAIO_ADULTO;
 // Aceleracao a pe (m/s^2). Uma pessoa chega ao passo normal em cerca de um passo e para em meio passo;
 // correndo leva mais tempo para embalar e para frear (de 5 m/s ate parar: ~0,6 s e ~1,5 m).
 constexpr float ACEL_ANDAR = 4.5f, ACEL_CORRER = 6.f, FREIO_A_PE = 8.f;

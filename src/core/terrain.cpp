@@ -5,8 +5,8 @@
 
 namespace {
 constexpr float NIVEL_AGUA = 3.f;
-constexpr float RIO_MEIA_LARGURA = 9.f;
-constexpr float ESTRADA_MEIA_LARGURA = 2.f;
+constexpr float RIO_MEIA_LARGURA = medidas::RIO_LARGURA * .5f;
+constexpr float ESTRADA_MEIA_LARGURA = medidas::ESTRADA_LARGURA * .5f;
 
 // Curso do rio (oeste -> leste), passando pela Ponte Velha em (60,-120).
 const Vec3f RIO[] = {{-770, 0, -330}, {-520, 0, -240}, {-300, 0, -185}, {-120, 0, -150}, {60, 0, -120},
@@ -81,7 +81,9 @@ Rgb corCapimUmido(Rgb cor, float umidade) {
 
 float Terreno::nivelAgua() const { return NIVEL_AGUA; }
 
-bool Terreno::dentroDoJogavel(float x, float z) const { return std::abs(x) <= 700.f && std::abs(z) <= 700.f; }
+bool Terreno::dentroDoJogavel(float x, float z) const {
+    return std::abs(x) <= medidas::MEIO_AREA_JOGAVEL && std::abs(z) <= medidas::MEIO_AREA_JOGAVEL;
+}
 
 static inline int idx(int i, int j) { return j * Terreno::RES + i; }
 

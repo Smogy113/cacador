@@ -2,10 +2,9 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include "core/medidas_mundo.h"
 
 namespace {
-constexpr float LIMITE = 700.f;  // area jogavel
-
 bool tipoDe(const std::string& s, TipoLugar& t) {
     static const struct { const char* n; TipoLugar t; } TAB[] = {
         {"cidade", TipoLugar::Cidade},       {"vilarejo", TipoLugar::Vilarejo},
@@ -50,7 +49,7 @@ Mapa lerMapa(const std::string& texto) {
                 m.erros.push_back({n, "tipo de lugar desconhecido: " + tipo});
                 continue;
             }
-            if (std::abs(l.x) > LIMITE || std::abs(l.z) > LIMITE) {
+            if (std::abs(l.x) > medidas::MEIO_AREA_JOGAVEL || std::abs(l.z) > medidas::MEIO_AREA_JOGAVEL) {
                 m.erros.push_back({n, "lugar fora do mundo: " + nome});
                 continue;
             }

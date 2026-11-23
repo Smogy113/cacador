@@ -96,6 +96,19 @@ TEST_CASE("desmontar não coloca jogador dentro de parede") {
     CHECK(len(col.resolver(j.pos, RAIO_PESSOA) - j.pos) < 1e-4f);
     CHECK(len(j.pos - c.corpo.pos) < 3.f);
 }
+TEST_CASE("cavalo respeita a largura de perfil e o comprimento ao girar") {
+    MundoColisao col;
+    col.adicionar({{-2.f, -1.f, -2.f}, {-.54f, 3.f, 2.f}});
+    col.adicionar({{.54f, -1.f, -2.f}, {2.f, 3.f, 2.f}});
+    CHECK(len(resolverCavalo({}, 0.f, col)) < 1e-4f);
+    CHECK(len(resolverCavalo({}, 1.5707963f, col)) > .2f);
+}
+TEST_CASE("cavalo montado precisa de espaço para o cavaleiro sob a verga") {
+    MundoColisao col;
+    col.adicionarGirada({{0, 0, .18f}, 1.f, .08f, 0.f, medidas::PORTA_ALTURA, 3.f});
+    CHECK(len(resolverCavalo({}, 0.f, col)) < 1e-4f);
+    CHECK(len(resolverCavalo({}, 0.f, col, true)) > .1f);
+}
 TEST_CASE("paredão é bloqueado, rampa suave não") {
     const Terreno& t = planoH();
     Vec3f a{0, t.altura(0, 0), 0};

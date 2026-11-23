@@ -59,16 +59,19 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.cabeloLongo = false;
     r.chapeuAba = false;
     r.sobretudo = false;
-    modeloJogador_.carregarHeroi(Proporcoes{1.82f, 1.07f, 1.f, 1.10f}, r);
+    modeloJogador_.carregarHeroi(Proporcoes{medidas::ALTURA_CACADOR, 1.07f, 1.f, 1.10f}, r);
     {   // folha de porta: tabuas, travessas, dobradicas de ferro (dobradica na origem, folha ao longo de +x)
         MeshBuilder m;
         const Rgb tons[4] = {{0.36f, 0.25f, 0.16f}, {0.32f, 0.22f, 0.14f}, {0.39f, 0.27f, 0.17f}, {0.34f, 0.23f, 0.15f}};
-        for (int k = 0; k < 4; k++) m.caixa({0.1375f + k * 0.275f, 1.075f, 0}, {0.27f, 2.15f, 0.05f}, 0, tons[k]);
+        constexpr float largura = medidas::PORTA_LARGURA, altura = medidas::PORTA_ALTURA;
+        constexpr float tabua = largura / 4.f;
+        for (int k = 0; k < 4; k++)
+            m.caixa({(k + .5f) * tabua, altura * .5f, 0}, {tabua, altura, medidas::PORTA_ESPESSURA}, 0, tons[k]);
         for (float y : {0.45f, 1.7f})
-            for (float z : {-0.035f, 0.035f}) m.caixa({0.55f, y, z}, {1.0f, 0.14f, 0.03f}, 0, Rgb{0.27f, 0.19f, 0.13f});
+            for (float z : {-0.035f, 0.035f}) m.caixa({largura * .5f, y, z}, {largura - .10f, .14f, .03f}, 0, Rgb{0.27f, 0.19f, 0.13f});
         for (float y : {0.45f, 1.7f})
             for (float z : {-0.055f, 0.055f}) m.caixa({0.3f, y, z}, {0.55f, 0.05f, 0.012f}, 0, Rgb{0.15f, 0.15f, 0.16f});
-        m.caixa({0.95f, 1.05f, 0.06f}, {0.05f, 0.16f, 0.03f}, 0, Rgb{0.15f, 0.15f, 0.16f});  // puxador
+        m.caixa({largura - .14f, 1.05f, .06f}, {.05f, .16f, .03f}, 0, Rgb{0.15f, 0.15f, 0.16f});  // puxador
         m.calcularAO(nullptr, 6);
         malhaPorta_ = paraMesh(m);
     }
@@ -782,8 +785,8 @@ void Jogo::desenharPortas(Material& mat, float raio) {
     for (auto& p : cenario_.portas()) {
         if (std::hypot(p.dobradica.x - c.x, p.dobradica.z - c.z) > raio) continue;
         float ang = p.rot + p.abertura * PI * 0.5f * p.sentido;
-        Matrix t = MatrixMultiply(MatrixMultiply(MatrixScale(p.largura / 1.1f, p.altura / 2.15f, 1.f), MatrixRotateY(ang)),
-                                  MatrixTranslate(p.dobradica.x, p.dobradica.y, p.dobradica.z));
+        Matrix escala = MatrixScale(p.largura / medidas::PORTA_LARGURA, p.altura / medidas::PORTA_ALTURA, 1.f);
+        Matrix t = MatrixMultiply(MatrixMultiply(escala, MatrixRotateY(ang)), MatrixTranslate(p.dobradica.x, p.dobradica.y, p.dobradica.z));
         DrawMesh(malhaPorta_, mat, t);
         chamadasAtores_++;
     }

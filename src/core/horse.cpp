@@ -34,6 +34,26 @@ bool inclinacaoPermitida(const Terreno& t, Vec3f de, Vec3f para) {
     return dh / d <= INCLINACAO_MAX;
 }
 
+Vec3f resolverCavalo(Vec3f pes, float yaw, const MundoColisao& col, bool montado) {
+    // As seções acompanham o comprimento da malha. A cabeça fica acima do chão
+    // e a seção do dorso inclui a altura do cavaleiro quando equipado.
+    struct Secao { float z, base, raio, altura; };
+    const Secao secoes[] = {
+        {-.68f, 0.f, .41f, 1.66f}, {-.02f, 0.f, .43f, montado ? 2.62f : 1.77f},
+        {.62f, 0.f, .38f, 1.78f}, {1.24f, 1.23f, .28f, 1.01f},
+    };
+    Vec3f frente = frenteDe(yaw);
+    for (int it = 0; it < 2; ++it) {
+        Vec3f antes = pes;
+        for (const auto& s : secoes) {
+            Vec3f centro = pes + frente * s.z + Vec3f{0, s.base, 0};
+            pes = pes + (col.resolver(centro, s.raio, s.altura) - centro);
+        }
+        if (len(pes - antes) < 1e-4f) break;
+    }
+    return pes;
+}
+
 static Andadura classificar(float v) {
     if (v < 0.3f) return Andadura::Parado;
     if (v < 3.5f) return Andadura::Passo;
@@ -43,6 +63,7 @@ static Andadura classificar(float v) {
 
 void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const MundoColisao& col) {
     Corpo& k = c.corpo;
+    const float yawAntes = k.yaw;
     float chao = std::max(t.altura(k.pos.x, k.pos.z), col.alturaPiso(k.pos.x, k.pos.z, std::max(k.pos.y, t.altura(k.pos.x, k.pos.z))));
     float alvo = 0, taxa = 8.f;
     if (c.montado) {
@@ -56,6 +77,8 @@ void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const 
     else k.vel = std::max(alvo, k.vel - (alvo > 0 ? ACEL_CAVALO : taxa) * dt);
 
     float total = k.vel * dt;
+    if (total == 0.f && k.yaw != yawAntes && len(resolverCavalo(k.pos, k.yaw, col, c.montado) - k.pos) > .04f)
+        k.yaw = yawAntes;
     int passos = std::max(1, int(std::ceil(total / 0.25f)));
     Vec3f f = frenteDe(k.yaw);
     for (int i = 0; i < passos && total > 0; i++) {
@@ -63,7 +86,7 @@ void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const 
         // sobre um piso (tabuleiro de ponte) o relevo de baixo nao importa
         bool noPiso = col.alturaPiso(prox.x, prox.z, k.pos.y) > t.altura(prox.x, prox.z);
         if (!noPiso && !inclinacaoPermitida(t, k.pos, prox)) { k.vel = 0; break; }
-        prox = col.resolver(prox, RAIO_CAVALO);
+        prox = resolverCavalo(prox, k.yaw, col, c.montado);
         prox.y = std::max(t.altura(prox.x, prox.z), col.alturaPiso(prox.x, prox.z, k.pos.y));
         k.pos = prox;
     }

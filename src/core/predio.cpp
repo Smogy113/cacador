@@ -77,7 +77,7 @@ Planta gerarPredio(const Lote& l) {
     const float t = pedra ? 0.4f : (med ? 0.24f : 0.18f);
     // Altura de piso a piso, em metros. O pe-direito desconta a espessura do forro.
     float alturaAndar = 2.95f;
-    if (tipo == TipoPredio::Casa) alturaAndar = med ? 3.10f : 3.20f;
+    if (tipo == TipoPredio::Casa) alturaAndar = med ? 2.82f : 2.90f;
     if (tipo == TipoPredio::Capela) alturaAndar = 4.3f;
     if (tipo == TipoPredio::Celeiro) alturaAndar = 4.0f;
     const int andares = (tipo == TipoPredio::Capela || tipo == TipoPredio::Celeiro || tipo == TipoPredio::Barracao) ? 1 : std::max(1, l.andares);
@@ -90,8 +90,8 @@ Planta gerarPredio(const Lote& l) {
     const bool enxaimel = med && !pedra;
 
     // ---------------- vaos por fachada ----------------
-    float largPorta = tipo == TipoPredio::Celeiro ? 2.6f : (tipo == TipoPredio::Capela ? 1.4f : (tipo == TipoPredio::Taverna ? 1.3f : 1.1f));
-    float altPorta = tipo == TipoPredio::Celeiro ? 3.0f : (tipo == TipoPredio::Capela ? 2.6f : 2.15f);
+    float largPorta = tipo == TipoPredio::Celeiro ? 2.6f : (tipo == TipoPredio::Capela ? 1.4f : (tipo == TipoPredio::Taverna ? 1.3f : medidas::PORTA_LARGURA));
+    float altPorta = tipo == TipoPredio::Celeiro ? 3.0f : (tipo == TipoPredio::Capela ? 2.6f : medidas::PORTA_ALTURA);
     float largJan = tipo == TipoPredio::Capela ? 0.6f : (tipo == TipoPredio::Cadeia ? 0.6f : 0.9f);
     float altJan = tipo == TipoPredio::Capela ? 1.8f : (tipo == TipoPredio::Cadeia ? 0.7f : 1.1f);
     float peitoril = tipo == TipoPredio::Capela ? 1.6f : (tipo == TipoPredio::Cadeia || tipo == TipoPredio::Celeiro ? 1.6f : 0.9f);
@@ -162,7 +162,7 @@ Planta gerarPredio(const Lote& l) {
                 Vec3f c = naFachada(lado, um, (h0 + h1) * 0.5f, -t * 0.5f, W, D);
                 Vec3f tm = tamFachada(lado, u1 - u0, h1 - h0, t);
                 k.caixa(c, tm, matParede, corParede, true);
-                if (h0 < piso + 1.9f) k.colisao(c, tm.x * 0.5f, tm.z * 0.5f, h0, h1);
+                k.colisao(c, tm.x * 0.5f, tm.z * 0.5f, h0, h1);
             };
             float u = -Lw * 0.5f;
             for (auto& v : vs) {
@@ -354,11 +354,17 @@ Planta gerarPredio(const Lote& l) {
         frente += pv;
     }
     {
-        float hd = std::max(piso * 0.5f, 0.05f);
-        k.caixa({portaU, (hd - 1.0f) * 0.5f, frente + 0.4f}, {largPorta + 0.5f, hd + 1.0f, 0.8f}, MatPeca::Pedra, PEDRA_ESC);
-        p.pisos.push_back({{portaU, 0, frente + 0.4f}, largPorta * 0.5f + 0.25f, 0.4f, 0.f, -1.f, hd});
+        constexpr float PROF_DEGRAU = .30f, ALT_DEGRAU = .18f;
+        const float ultimo = piso - (frente > D * .5f ? .04f : 0.f);
+        const int espelhos = std::max(1, int(std::ceil(ultimo / ALT_DEGRAU)));
+        for (int i = 1; i < espelhos; ++i) {
+            float topo = ultimo * (espelhos - i) / espelhos;
+            float z = frente + (i - .5f) * PROF_DEGRAU;
+            k.caixa({portaU, (topo - 1.f) * .5f, z}, {largPorta + .5f, topo + 1.f, PROF_DEGRAU}, MatPeca::Pedra, PEDRA_ESC);
+            p.pisos.push_back({{portaU, 0, z}, largPorta * .5f + .25f, PROF_DEGRAU * .5f, 0.f, -1.f, topo});
+        }
         p.pisos.push_back({{portaU, 0, D * 0.5f - t * 0.5f}, largPorta * 0.5f, t * 0.5f + 0.02f, 0.f, -1.f, piso});  // soleira
-        p.entrada = {portaU, 0, frente + 1.3f};
+        p.entrada = {portaU, 0, frente + (espelhos - 1) * PROF_DEGRAU + .65f};
     }
     // placa (taverna, xerife)
     if (tipo == TipoPredio::Taverna || tipo == TipoPredio::Xerife) {
@@ -451,7 +457,7 @@ CaixaGirada folhaPorta(const PortaMundo& p) {
     float ang = p.rot + p.abertura * PI * 0.5f * p.sentido;
     Vec3f dir = rotY({1, 0, 0}, ang);
     Vec3f c = p.dobradica + dir * (p.largura * 0.5f);
-    return {c, p.largura * 0.5f, 0.035f, ang, p.dobradica.y, p.dobradica.y + p.altura};
+    return {c, p.largura * 0.5f, medidas::PORTA_ESPESSURA * .5f, ang, p.dobradica.y, p.dobradica.y + p.altura};
 }
 
 bool portaPodeFechar(const PortaMundo& p, Vec3f pos, float raio) {

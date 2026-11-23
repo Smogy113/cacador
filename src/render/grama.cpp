@@ -126,7 +126,7 @@ Grama::Bloco Grama::montar(int bi, int bj, bool detalhado) const {
         Vec3f livre = col_->resolver({x, y, z}, 0.32f);
         if (std::hypot(livre.x - x, livre.z - z) > 0.01f) continue;
 
-        float altura = (0.16f + 0.24f * mancha) * ambiente.altura;
+        float altura = lerp(medidas::CAPIM_ALTURA_MIN, medidas::CAPIM_ALTURA_MAX, mancha) * ambiente.altura;
         float azimute = aleatorio01(folhas) * 6.2831853f;
         Rgb verdeTufo = lerp(Rgb{0.25f, 0.39f, 0.13f}, chao, 0.32f);
         int quantas = FOLHAS_BASE + (detalhado ? FOLHAS_EXTRAS : 0);

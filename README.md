@@ -98,6 +98,21 @@ Os lugares ficam em `data/lugares.txt` (dá para editar). Cada linha é
 `lugar <tipo> <nome> <x> <z> <rotação> <raio>` ou `estrada <lugarA> <lugarB>`. Se uma linha tiver
 erro, o jogo abre mesmo assim e mostra o problema na tela.
 
+### Escala do mundo
+
+Uma unidade equivale a um metro nos três eixos. O terreno tem 1,5 km de lado e a área
+jogável tem 1,4 km de lado. O mapa aberto com **M** inclui uma régua de 100 m.
+As medidas compartilhadas pelo cenário e pelas colisões ficam em `src/core/medidas_mundo.h`.
+
+| Elemento | Medida usada no jogo |
+|---|---|
+| Caçador | 1,82 m de altura |
+| Porta residencial | 1,04 m de largura por 2,12 m de altura |
+| Estrada de terra | 4 m no leito, com transição nas bordas |
+| Canal do rio | 18 m de largura nominal |
+| Ponte | tabuleiro de 4,20 m e guarda-corpo de 1,05 m |
+| Árvores | pinheiros em torno de 10–17 m e carvalhos de 8–14 m |
+
 ## Onde mexer
 
 - **Prédios** (`src/core/predio.cpp`): gramática lote → volume → fachadas → peças. A cobertura do
@@ -117,8 +132,8 @@ parede a parede, em metros. [Abrir o gerador do cenário](src/render/props.cpp)
 | Lugar | Função | Largura × profundidade |
 | --- | --- | --- |
 | Valdoro | `gerarCidade` | 9–12 × 9–12 m |
-| Pedrabranca | `gerarVilarejo` | 9–12 × 8–10,5 m |
-| Fazendas | `gerarFazenda`, no lote `casa` | 12 × 10,5 m |
+| Pedrabranca | `gerarVilarejo` | 6,8–9,2 × 5,8–7,8 m |
+| Fazendas | `gerarFazenda`, no lote `casa` | 9,5 × 7,5 m |
 
 `Gerador::livre` verifica a distância entre lotes pela margem e amostra estrada e rio na
 pegada informada. Nas fazendas, essa pegada inclui o avanço da varanda e do degrau. Se uma

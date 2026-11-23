@@ -23,21 +23,26 @@ inline void paraMundo(const CaixaGirada& c, float lx, float lz, float& x, float&
     x = c.centro.x + lx * co + lz * si;
     z = c.centro.z - lx * si + lz * co;
 }
+AABB envoltoria(const CaixaGirada& c) {
+    float co = std::abs(std::cos(c.rot)), si = std::abs(std::sin(c.rot));
+    float x = c.meiaX * co + c.meiaZ * si, z = c.meiaX * si + c.meiaZ * co;
+    return {{c.centro.x - x, c.y0, c.centro.z - z}, {c.centro.x + x, c.y1, c.centro.z + z}};
+}
 }  // namespace
 
 void MundoColisao::adicionarGirada(const CaixaGirada& c) {
     int id = int(giradas_.size());
     giradas_.push_back(c);
-    float r = std::sqrt(c.meiaX * c.meiaX + c.meiaZ * c.meiaZ);
-    int i0 = int(std::floor((c.centro.x - r) / CEL)), i1 = int(std::floor((c.centro.x + r) / CEL));
-    int j0 = int(std::floor((c.centro.z - r) / CEL)), j1 = int(std::floor((c.centro.z + r) / CEL));
+    AABB b = envoltoria(c);
+    int i0 = int(std::floor(b.min.x / CEL)), i1 = int(std::floor(b.max.x / CEL));
+    int j0 = int(std::floor(b.min.z / CEL)), j1 = int(std::floor(b.max.z / CEL));
     for (int j = j0; j <= j1; j++)
         for (int i = i0; i <= i1; i++) gradeGirada_[chave(i, j)].push_back(id);
 }
 
-void MundoColisao::adicionarPisoGirado(const CaixaGirada& p) { pisosGirados_.push_back(p); }
+void MundoColisao::adicionarPisoGirado(const CaixaGirada& p, float decliveZ) { pisosGirados_.push_back({p, decliveZ}); }
 
-Vec3f MundoColisao::resolver(Vec3f p, float raio) const {
+Vec3f MundoColisao::resolver(Vec3f p, float raio, float altura) const {
     for (int iter = 0; iter < 3; iter++) {
         int ci = int(std::floor(p.x / CEL)), cj = int(std::floor(p.z / CEL));
         bool mexeu = false;
@@ -47,7 +52,7 @@ Vec3f MundoColisao::resolver(Vec3f p, float raio) const {
                 if (it == grade_.end()) continue;
                 for (int id : it->second) {
                     const AABB& b = caixas_[id];
-                    if (p.y >= b.max.y - 0.3f || p.y + 1.8f < b.min.y) continue;
+                    if (p.y >= b.max.y - 0.3f || p.y + altura < b.min.y) continue;
                     float qx = std::clamp(p.x, b.min.x, b.max.x), qz = std::clamp(p.z, b.min.z, b.max.z);
                     float dx = p.x - qx, dz = p.z - qz, d = std::sqrt(dx * dx + dz * dz);
                     if (d >= raio) continue;
@@ -66,7 +71,7 @@ Vec3f MundoColisao::resolver(Vec3f p, float raio) const {
                 }
             }
         auto empurra = [&](const CaixaGirada& b) {
-            if (p.y >= b.y1 - 0.3f || p.y + 1.8f < b.y0) return;
+            if (p.y >= b.y1 - 0.3f || p.y + altura < b.y0) return;
             float lx, lz;
             paraLocal(b, p.x, p.z, lx, lz);
             float qx = std::clamp(lx, -b.meiaX, b.meiaX), qz = std::clamp(lz, -b.meiaZ, b.meiaZ);
@@ -91,33 +96,13 @@ Vec3f MundoColisao::resolver(Vec3f p, float raio) const {
             for (int i = ci - 1; i <= ci + 1; i++) {
                 auto it = gradeGirada_.find(chave(i, j));
                 if (it == gradeGirada_.end()) continue;
-                for (int id : it->second) {
-                    const CaixaGirada& b = giradas_[id];
-                    if (p.y >= b.y1 - 0.3f || p.y + 1.8f < b.y0) continue;
-                    float lx, lz;
-                    paraLocal(b, p.x, p.z, lx, lz);
-                    float qx = std::clamp(lx, -b.meiaX, b.meiaX), qz = std::clamp(lz, -b.meiaZ, b.meiaZ);
-                    float dx = lx - qx, dz = lz - qz, d = std::sqrt(dx * dx + dz * dz);
-                    if (d >= raio) continue;
-                    if (d > 1e-5f) {
-                        lx = qx + dx / d * raio;
-                        lz = qz + dz / d * raio;
-                    } else {  // centro dentro: sai pela face mais proxima
-                        float e[4] = {lx + b.meiaX, b.meiaX - lx, lz + b.meiaZ, b.meiaZ - lz};
-                        int k = int(std::min_element(e, e + 4) - e);
-                        if (k == 0) lx = -b.meiaX - raio;
-                        else if (k == 1) lx = b.meiaX + raio;
-                        else if (k == 2) lz = -b.meiaZ - raio;
-                        else lz = b.meiaZ + raio;
-                    }
-                    paraMundo(b, lx, lz, p.x, p.z);
-                    mexeu = true;
-                }
+                for (int id : it->second) empurra(giradas_[id]);
             }
         if (!mexeu) break;
     }
-    p.x = std::clamp(p.x, -LIMITE + 0.01f, LIMITE - 0.01f);
-    p.z = std::clamp(p.z, -LIMITE + 0.01f, LIMITE - 0.01f);
+    float borda = std::max(0.f, LIMITE - raio);
+    p.x = std::clamp(p.x, -borda, borda);
+    p.z = std::clamp(p.z, -borda, borda);
     return p;
 }
 
@@ -207,31 +192,38 @@ float MundoColisao::alturaPiso(float x, float z, float y) const {
     float melhor = -1e9f;
     for (auto& p : pisos_)
         if (x >= p.min.x && x <= p.max.x && z >= p.min.z && z <= p.max.z && p.max.y <= y + 0.7f) melhor = std::max(melhor, p.max.y);
-    for (auto& p : pisosGirados_) {
-        if (p.y1 > y + 0.7f || p.y1 <= melhor) continue;
+    for (const auto& piso : pisosGirados_) {
+        const auto& p = piso.caixa;
+        float variacao = std::abs(piso.decliveZ) * p.meiaZ;
+        if (p.y1 + variacao <= melhor || p.y1 - variacao > y + .7f) continue;
+        float alcance = p.meiaX + p.meiaZ;
+        if (std::abs(x - p.centro.x) > alcance || std::abs(z - p.centro.z) > alcance) continue;
         float lx, lz;
         paraLocal(p, x, z, lx, lz);
-        if (std::abs(lx) <= p.meiaX && std::abs(lz) <= p.meiaZ) melhor = p.y1;
+        if (std::abs(lx) > p.meiaX + 1e-4f || std::abs(lz) > p.meiaZ + 1e-4f) continue;
+        float topo = p.y1 + lz * piso.decliveZ;
+        if (topo <= y + 0.7f) melhor = std::max(melhor, topo);
     }
     return melhor;
 }
 
 std::vector<AABB> MundoColisao::caixasPerto(Vec3f p, float r) const {
     std::vector<AABB> res;
-    std::vector<int> vistos;
+    std::vector<int> vistos, vistosGirados;
     int i0 = int(std::floor((p.x - r) / CEL)), i1 = int(std::floor((p.x + r) / CEL));
     int j0 = int(std::floor((p.z - r) / CEL)), j1 = int(std::floor((p.z + r) / CEL));
     for (int j = j0; j <= j1; j++)
         for (int i = i0; i <= i1; i++) {
             auto it = grade_.find(chave(i, j));
-            if (it == grade_.end()) continue;
-            for (int id : it->second) {
-                const AABB& b = caixas_[id];
-                if (b.max.x < p.x - r || b.min.x > p.x + r || b.max.z < p.z - r || b.min.z > p.z + r) continue;
-                if (std::find(vistos.begin(), vistos.end(), id) != vistos.end()) continue;
-                vistos.push_back(id);
+            auto incluir = [&](int id, const AABB& b, std::vector<int>& lista) {
+                if (b.max.x < p.x - r || b.min.x > p.x + r || b.max.z < p.z - r || b.min.z > p.z + r) return;
+                if (std::find(lista.begin(), lista.end(), id) != lista.end()) return;
+                lista.push_back(id);
                 res.push_back(b);
-            }
+            };
+            if (it != grade_.end()) for (int id : it->second) incluir(id, caixas_[id], vistos);
+            auto ig = gradeGirada_.find(chave(i, j));
+            if (ig != gradeGirada_.end()) for (int id : ig->second) incluir(id, envoltoria(giradas_[id]), vistosGirados);
         }
     return res;
 }

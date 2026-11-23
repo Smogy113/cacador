@@ -37,7 +37,7 @@ struct Vao {  // abertura numa fachada: lado 0 frente (+z), 1 fundos, 2 direita 
 
 struct PortaPredio {
     Vec3f dobradica{};      // eixo vertical da folha (local), no chao do piso
-    float largura = 1.1f, altura = 2.15f;
+    float largura = medidas::PORTA_LARGURA, altura = medidas::PORTA_ALTURA;
     float rotFechada = 0;   // rotY da folha fechada (ao longo de +x a partir da dobradica)
     float sentido = 1;      // abre girando para dentro (+1 ou -1)
 };

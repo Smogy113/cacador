@@ -95,6 +95,22 @@ TEST_CASE("predio: vao da porta livre de colisao (>= 1,0 x 2,1)") {
         }
     }
 }
+TEST_CASE("predio: o piso elevado tem degraus com no máximo 18 centímetros") {
+    Lote l;
+    l.piso = .63f;
+    const Planta p = gerarPredio(l);
+    const float x = p.porta.dobradica.x + p.porta.largura * .5f;
+    MundoColisao m;
+    for (const auto& piso : p.pisos) m.adicionarPisoGirado(piso);
+    float anterior = 0.f;
+    for (float z = p.entrada.z; z >= l.profundidade * .5f - .25f; z -= .02f) {
+        float atual = std::max(0.f, m.alturaPiso(x, z, anterior));
+        CHECK(atual >= anterior - 1e-4f);
+        CHECK(atual - anterior <= .1801f);
+        anterior = atual;
+    }
+    CHECK(anterior == doctest::Approx(l.piso));
+}
 TEST_CASE("predio: janelas sem sobreposicao entre si e com a porta") {
     for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);

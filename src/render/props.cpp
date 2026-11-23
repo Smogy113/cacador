@@ -64,17 +64,13 @@ struct Gerador {
     void caixa(MeshBuilder& m, const Frame& f, Vec3f c, Vec3f tam, Rgb cor, float rotExtra = 0) {
         m.caixa(f.P(c.x, c.y, c.z), tam, f.rot + rotExtra, cor);
     }
-    // colisao para um retangulo girado: varias caixas pequenas (AABB girada seria grande demais)
+    void colidirCaixa(const Frame& f, Vec3f c, Vec3f tam, float rotExtra = 0.f) {
+        Vec3f p = f.P(c.x, c.y, c.z);
+        col.adicionarGirada({p, tam.x * .5f, tam.z * .5f, f.rot + rotExtra, p.y - tam.y * .5f, p.y + tam.y * .5f});
+    }
+    // Volume simples para elementos feitos de várias peças, como a bancada.
     void colisaoRet(const Frame& f, float cx, float cz, float w, float d, float alt) {
-        float passo = 1.2f;
-        int nw = std::max(1, int(std::ceil(w / passo))), nd = std::max(1, int(std::ceil(d / passo)));
-        for (int a = 0; a < nw; a++)
-            for (int c = 0; c < nd; c++) {
-                float lx = cx - w / 2 + (a + 0.5f) * w / nw, lz = cz - d / 2 + (c + 0.5f) * d / nd;
-                Vec3f p = f.P(lx, 0, lz);
-                float hw = std::min(w / nw, d / nd) * 0.5f + 0.15f;
-                col.adicionar({{p.x - hw, f.o.y - 2, p.z - hw}, {p.x + hw, f.o.y + alt, p.z + hw}});
-            }
+        colidirCaixa(f, {cx, alt * .5f - 1.f, cz}, {w, alt + 2.f, d});
     }
     bool livre(const Frame& f, float largura, float profundidade, float margem) const {
         // A margem separa construcoes. Estrada e rio sao testados na pegada informada.
@@ -237,26 +233,31 @@ struct Gerador {
     void cerca(Vec3f a, Vec3f c, Rgb cor = MADEIRA) {
         regioesCapim->cercas.push_back({a, c});
         Vec3f d = c - a;
-        float l = len(d);
-        int n = std::max(1, int(l / 2.4f));
+        float l = std::hypot(d.x, d.z);
+        if (l < .01f) return;
+        int n = std::max(1, int(std::ceil(l / 2.4f)));
         float ang = std::atan2(d.x, d.z);
         for (int k = 0; k <= n; k++) {
             Vec3f p = a + d * (k / float(n));
             p.y = h(p.x, p.z);
             b(p).caixa(p + Vec3f{0, 0.5f, 0}, {0.14f, 1.3f, 0.14f}, ang, cor * 0.85f);
+            col.adicionarGirada({p, .07f, .07f, ang, p.y - .15f, p.y + 1.15f});
         }
         for (int k = 0; k < n; k++) {
             Vec3f p0 = a + d * (k / float(n)), p1 = a + d * ((k + 1) / float(n));
+            p0.y = h(p0.x, p0.z);
+            p1.y = h(p1.x, p1.z);
             Vec3f m = (p0 + p1) * 0.5f;
-            m.y = h(m.x, m.z);
-            for (float y : {0.45f, 0.95f}) b(m).caixa(m + Vec3f{0, y, 0}, {0.08f, 0.1f, l / n}, ang, cor);
-            col.adicionar({{m.x - 0.25f, m.y - 1, m.z - 0.25f}, {m.x + 0.25f, m.y + 1.1f, m.z + 0.25f}});
+            float incl = -std::atan2(p1.y - p0.y, l / n);
+            for (float y : {.45f, .95f})
+                b(m).caixaInclinada(m + Vec3f{0, y, 0}, {.08f, .10f, len(p1 - p0)}, ang, incl, cor);
+            col.adicionarGirada({m, .04f, l / (2.f * n), ang, std::min(p0.y, p1.y), std::max(p0.y, p1.y) + 1.f});
         }
     }
 
     void muro(Vec3f a, Vec3f c, float alt, float esp, Rgb cor, bool ameias) {
         Vec3f d = c - a;
-        float l = len(d), ang = std::atan2(d.x, d.z);
+        float l = std::hypot(d.x, d.z), ang = std::atan2(d.x, d.z);
         Vec3f m = (a + c) * 0.5f;
         float y = std::min(h(a.x, a.z), h(c.x, c.z));
         marcar({m, ang}, esp, l);
@@ -272,12 +273,7 @@ struct Gerador {
                 mb.caixa({p.x, y + alt + 0.35f, p.z}, {esp + 0.1f, 0.7f, l / n * 0.9f}, ang, cor * 0.95f);
             }
         }
-        int ns = std::max(1, int(l / 1.2f));
-        for (int k = 0; k <= ns; k++) {
-            Vec3f p = a + d * (k / float(ns));
-            float r = esp * 0.5f + 0.2f;
-            col.adicionar({{p.x - r, y - 2, p.z - r}, {p.x + r, y + alt, p.z + r}});
-        }
+        col.adicionarGirada({m, esp * .5f, l * .5f, ang, y - 2.f, y + alt});
     }
 
     void torre(Vec3f p, float raio, float alt, Rgb cor, bool telhado, Rgb corTelhado = ARDOSIA) {
@@ -305,14 +301,16 @@ struct Gerador {
     void barril(Vec3f p, float rot = 0) {
         (void)rot;
         MeshBuilder& m = b(p);
-        m.cilindro(p, 0.38f, 0.95f, 7, MADEIRA);
-        m.cilindro(p + Vec3f{0, 0.2f, 0}, 0.4f, 0.07f, 7, FERRO);
-        m.cilindro(p + Vec3f{0, 0.7f, 0}, 0.4f, 0.07f, 7, FERRO);
-        col.adicionar({{p.x - .4f, p.y, p.z - .4f}, {p.x + .4f, p.y + 1, p.z + .4f}});
+        constexpr float raio = .31f, altura = .88f, raioAro = .325f;
+        m.cilindro(p, raio, altura, 7, MADEIRA);
+        for (float y : {.18f, .65f}) m.cilindro(p + Vec3f{0, y, 0}, raioAro, .045f, 7, FERRO);
+        col.adicionar({{p.x - raioAro, p.y, p.z - raioAro}, {p.x + raioAro, p.y + altura, p.z + raioAro}});
     }
-    void caixote(Vec3f p, float rot, float s = 0.9f) {
-        b(p).caixa(p + Vec3f{0, s / 2, 0}, {s, s, s}, rot, Rgb{0.55f, 0.42f, 0.27f});
-        col.adicionar({{p.x - s * .6f, p.y, p.z - s * .6f}, {p.x + s * .6f, p.y + s, p.z + s * .6f}});
+    void caixote(Vec3f p, float rot, float s = .62f) {
+        p.y = h(p.x, p.z);
+        Vec3f centro{0, s * .5f, 0}, tamanho{s, s, s};
+        caixa(b(p), {p, rot}, centro, tamanho, {0.55f, 0.42f, 0.27f});
+        colidirCaixa({p, rot}, centro, tamanho);
     }
 
     void quadroRecompensas(const Frame& f, std::vector<Quadro>& quadros, const std::string& lugar) {
@@ -569,7 +567,7 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
             Vec3f p{l.x + std::sin(a) * raioAnel, 0, l.z + std::cos(a) * raioAnel};
             p.y = g.h(p.x, p.z);
             Frame f{p, a + PI + g.r(-0.25f, 0.25f)};
-            float largura = g.r(9.f, 12.f), profundidade = g.r(8.f, 10.5f);
+            float largura = g.r(6.8f, 9.2f), profundidade = g.r(5.8f, 7.8f);
             if (!g.livre(f, largura, profundidade, 3.f)) continue;
             Lote lt;
             lt.largura = largura, lt.profundidade = profundidade, lt.andares = g.r01() < 0.25f ? 2 : 1, lt.estilo = Estilo::Medieval;
@@ -619,8 +617,8 @@ static void gerarFazenda(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec
     celeiro.semente = uint32_t(l.x * 13 + l.z * 7) + 5u;
     celeiro.corParede = Rgb{0.55f, 0.22f, 0.16f}, celeiro.corTelhado = TELHA_M;
     Lote casa;
-    casa.largura = 12;
-    casa.profundidade = 10.5f;
+    casa.largura = 9.5f;
+    casa.profundidade = 7.5f;
     casa.estilo = Estilo::Faroeste;
     casa.tipo = TipoPredio::Casa;
     casa.semente = uint32_t(l.x * 31 + l.z * 17) + 9u;
@@ -633,15 +631,16 @@ static void gerarFazenda(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec
     // plantacao com cerca
     float pw = 24, pd = 16;
     Vec3f c0 = fl.P(-pw / 2, 0, 4), c1 = fl.P(pw / 2, 0, 4), c2 = fl.P(pw / 2, 0, 4 + pd), c3 = fl.P(-pw / 2, 0, 4 + pd);
-    g.cerca(c0, c1);
+    g.cerca(c0, fl.P(-.75f, 0, 4));
+    g.cerca(fl.P(.75f, 0, 4), c1);
     g.cerca(c1, c2);
     g.cerca(c2, c3);
     g.cerca(c3, c0);
     Rgb trigo{0.82f, 0.7f, 0.32f}, verde{0.35f, 0.55f, 0.22f};
-    for (int fila = 0; fila < 7; fila++) {
-        Vec3f p = fl.P(0, 0, 6 + fila * 2.0f);
+    for (int fila = 0; fila < 12; fila++) {
+        Vec3f p = fl.P(0, 0, 6 + fila * 1.05f);
         p.y = g.h(p.x, p.z);
-        g.b(p).caixa(p + Vec3f{0, 0.35f, 0}, {pw - 3, 0.7f, 0.9f}, rot, (fila % 2) ? trigo : verde);
+        g.b(p).caixa(p + Vec3f{0, .30f, 0}, {pw - 3, .60f, .48f}, rot, (fila % 2) ? trigo : verde);
     }
     rota.push_back(fl.P(0, 0, 2));
     // fardos de feno
@@ -873,35 +872,53 @@ static void gerarPonte(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f
     float meio = 8;
     while (meio < 30 && (g.t.mascaraRio(f.P(0, 0, meio).x, f.P(0, 0, meio).z) > 0.01f || g.t.mascaraRio(f.P(0, 0, -meio).x, f.P(0, 0, -meio).z) > 0.01f)) meio += 1;
     meio += 3;
-    g.marcar(f, 4.2f, meio * 2);
-    float yTab = g.t.nivelAgua() + 1.6f;
+    constexpr float largura = medidas::PONTE_LARGURA, espessura = .24f;
+    g.marcar(f, largura, meio * 2);
     MeshBuilder& m = g.b(f.o);
-    // tabuleiro em rampas: sobe da margem ate o meio
-    int n = int(meio * 2 / 1.0f);
-    for (int k = 0; k < n; k++) {
-        float z = -meio + (k + 0.5f) * (2 * meio / n);
+    // As extremidades da mesma peça definem o plano usado pela malha e pelos pés.
+    const int n = int(std::ceil(meio * 2));
+    const float passo = meio * 2 / n;
+    auto alturaMargem = [&](float z) {
         Vec3f p = f.P(0, 0, z);
-        float chao = g.h(p.x, p.z);
-        float y = std::max(yTab - std::max(0.f, std::abs(z) - (meio - 6)) * 0.35f, chao + 0.05f);
-        y = std::min(y, yTab);
-        g.caixa(m, Frame{{f.o.x, 0, f.o.z}, f.rot}, {0, y - 0.15f, z}, {4.2f, 0.3f, 2 * meio / n + 0.05f}, MADEIRA * (k % 2 ? 0.95f : 1.05f));
-        Vec3f mn = p - Vec3f{2.1f, 0, 2.1f}, mx = p + Vec3f{2.1f, 0, 2.1f};
-        g.col.adicionarPiso({{mn.x, y - 1.f, mn.z}, {mx.x, y, mx.z}});
-        // corrimao
+        return g.h(p.x, p.z) + .08f;
+    };
+    const float entradaA = alturaMargem(-meio), entradaB = alturaMargem(meio);
+    const float yTab = std::max({g.t.nivelAgua() + 1.6f, entradaA, entradaB});
+    auto alturaTabuleiro = [&](float z) {
+        float borda = z < 0.f ? entradaA : entradaB;
+        float rampa = lerp(borda, yTab, clamp01((meio - std::abs(z)) / 6.f));
+        return std::max(rampa, alturaMargem(z));
+    };
+    for (int k = 0; k < n; k++) {
+        float z0 = -meio + k * passo, z = z0 + passo * .5f;
+        float y0 = alturaTabuleiro(z0), y1 = alturaTabuleiro(z0 + passo);
+        float y = (y0 + y1) * .5f, desnivel = y1 - y0, incl = -std::atan2(desnivel, passo);
+        float comprimento = std::hypot(passo, desnivel);
+        Vec3f topo = f.P(0, y - f.o.y, z);
+        Vec3f normal = rotY({0, std::cos(incl), std::sin(incl)}, f.rot);
+        m.caixaInclinada(topo - normal * (espessura * .5f), {largura, espessura, comprimento}, f.rot, incl,
+                         MADEIRA * (k % 2 ? .95f : 1.05f));
+        g.col.adicionarPisoGirado({topo, largura * .5f, passo * .5f, f.rot, y - espessura, y}, desnivel / passo);
         if (std::abs(z) < meio - 2.5f) {
+            constexpr float espGuarda = .12f, altura = medidas::PONTE_GUARDA_CORPO;
+            constexpr float lado = (largura - espGuarda) * .5f;
             for (float s : {-1.f, 1.f}) {
-                g.caixa(m, Frame{{f.o.x, 0, f.o.z}, f.rot}, {s * 2.0f, y + 0.5f, z}, {0.12f, 0.1f, 2 * meio / n}, MADEIRA_ESC);
-                Vec3f q = f.P(s * 2.0f, 0, z);
-                g.col.adicionar({{q.x - 0.25f, y - 0.2f, q.z - 0.25f}, {q.x + 0.25f, y + 1.2f, q.z + 0.25f}});
+                Vec3f q = f.P(s * lado, y - f.o.y, z);
+                m.caixaInclinada(q + Vec3f{0, altura - .05f, 0}, {espGuarda, .10f, comprimento}, f.rot, incl, MADEIRA_ESC);
+                if (k % 3 == 0) m.caixa(q + Vec3f{0, altura * .5f, 0}, {espGuarda, altura, espGuarda}, f.rot, MADEIRA_ESC);
+                g.col.adicionarGirada({q, espGuarda * .5f, passo * .5f, f.rot,
+                                       std::min(y0, y1), std::max(y0, y1) + altura});
             }
-            if (k % 3 == 0)
-                for (float s : {-1.f, 1.f}) g.caixa(m, Frame{{f.o.x, 0, f.o.z}, f.rot}, {s * 2.0f, y + 0.3f, z}, {0.15f, 0.7f, 0.15f}, MADEIRA_ESC);
         }
         // pilares na agua
         if (k % 4 == 0 && std::abs(z) < meio - 3)
             for (float s : {-1.6f, 1.6f}) {
                 Vec3f q = f.P(s, 0, z);
-                m.cilindro({q.x, g.h(q.x, q.z) - 0.5f, q.z}, 0.25f, y - g.h(q.x, q.z), 6, MADEIRA_ESC);
+                constexpr float raio = .25f;
+                float base = g.h(q.x, q.z) - .45f, topoPilar = y - espessura * .5f;
+                if (topoPilar <= base) continue;
+                m.cilindro({q.x, base, q.z}, raio, topoPilar - base, 6, MADEIRA_ESC);
+                g.col.adicionar({{q.x - raio, base, q.z - raio}, {q.x + raio, topoPilar, q.z + raio}});
             }
     }
     Vec3f lan = f.P(2.4f, 0, meio - 3);
@@ -914,30 +931,56 @@ static void gerarPonte(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f
 
 // ================== vegetacao ==================
 
+static const medidas::Arvore& medidasArvore(const ArvoreInst& a) {
+    return a.tipo == 0 ? medidas::PINHEIRO : medidas::CARVALHO;
+}
+
+static void copaCarvalho(MeshBuilder& m, Vec3f base, float r, float h, float rot, int lados, Rgb cor) {
+    auto ponto = [&](int k, float y, float raio) {
+        float a = rot + 2.f * PI * k / lados;
+        return base + Vec3f{std::cos(a) * raio * r, y * h, std::sin(a) * raio * r};
+    };
+    for (int k = 0; k < lados; ++k) {
+        Vec3f a = ponto(k, .08f, .48f), b = ponto(k + 1, .08f, .48f);
+        Vec3f c = ponto(k, .48f, 1.f), d = ponto(k + 1, .48f, 1.f);
+        Vec3f e = ponto(k, .79f, .70f), f = ponto(k + 1, .79f, .70f);
+        m.triangulo(a, d, b, cor * .88f);
+        m.triangulo(a, c, d, cor * .88f);
+        m.triangulo(c, f, d, cor);
+        m.triangulo(c, e, f, cor);
+        m.triangulo(e, base + Vec3f{0, h, 0}, f, cor * 1.05f);
+        m.triangulo(a, b, base, cor * .82f);
+    }
+}
+
 static void modeloArvore(MeshBuilder& m, const ArvoreInst& a, bool longe) {
     float s = a.escala;
     Vec3f p = a.pos;
+    m.tamanhoMaximoFace(1000.f);  // o tamanho do exemplar não multiplica as faces
     if (a.tipo == 0) {  // pinheiro
         Rgb verde = lerp(Rgb{0.16f, 0.30f, 0.17f}, Rgb{0.24f, 0.38f, 0.2f}, a.tom);
+        const auto& arvore = medidasArvore(a);
+        float h = s * arvore.altura, r = s * arvore.raioCopa;
         if (longe) {
-            m.cone(p + Vec3f{0, 0.8f * s, 0}, 1.7f * s, 5.2f * s, 5, verde);
+            m.cone(p + Vec3f{0, .20f * h, 0}, r, .80f * h, 5, verde);
             return;
         }
-        m.cilindro(p + Vec3f{0, -0.3f, 0}, 0.2f * s, 1.8f * s, 5, Rgb{0.33f, 0.23f, 0.16f});
-        m.cone(p + Vec3f{0, 1.2f * s, 0}, 1.7f * s, 2.5f * s, 7, verde);
-        m.cone(p + Vec3f{0, 2.4f * s, 0}, 1.3f * s, 2.3f * s, 7, verde * 1.06f);
-        m.cone(p + Vec3f{0, 3.6f * s, 0}, 0.9f * s, 2.0f * s, 6, verde * 1.12f);
+        m.cilindro(p - Vec3f{0, .30f, 0}, s * arvore.raioTronco, s * arvore.alturaTronco + .30f, 5, {0.33f, 0.23f, 0.16f});
+        m.cone(p + Vec3f{0, .20f * h, 0}, r, .44f * h, 7, verde);
+        m.cone(p + Vec3f{0, .42f * h, 0}, .74f * r, .40f * h, 7, verde * 1.06f);
+        m.cone(p + Vec3f{0, .59f * h, 0}, .50f * r, .41f * h, 6, verde * 1.12f);
     } else if (a.tipo == 1) {  // carvalho
         Rgb verde = lerp(Rgb{0.27f, 0.42f, 0.18f}, Rgb{0.42f, 0.5f, 0.2f}, a.tom);
-        if (longe) {
-            m.caixa(p + Vec3f{0, 3.4f * s, 0}, Vec3f{3.2f, 2.6f, 3.2f} * s, a.rot, verde);
-            return;
-        }
-        m.cilindro(p + Vec3f{0, -0.3f, 0}, 0.28f * s, 2.8f * s, 6, Rgb{0.36f, 0.26f, 0.18f});
-        m.caixa(p + Vec3f{0, 3.3f * s, 0}, Vec3f{3.0f, 2.2f, 3.0f} * s, a.rot, verde);
-        m.caixa(p + Vec3f{0.8f * s, 2.9f * s, 0.5f * s}, Vec3f{2.0f, 1.6f, 2.0f} * s, a.rot + 0.7f, verde * 0.93f);
-        m.caixa(p + Vec3f{-0.7f * s, 3.0f * s, -0.6f * s}, Vec3f{2.1f, 1.7f, 1.9f} * s, a.rot + 1.3f, verde * 1.05f);
-        m.caixa(p + Vec3f{0.1f * s, 4.5f * s, 0}, Vec3f{1.8f, 1.2f, 1.8f} * s, a.rot + 0.4f, verde * 1.1f);
+        const auto& arvore = medidasArvore(a);
+        float h = s * arvore.altura, r = s * arvore.raioCopa;
+        if (!longe)
+            m.cilindro(p - Vec3f{0, .30f, 0}, s * arvore.raioTronco, s * arvore.alturaTronco + .30f, 6, {0.36f, 0.26f, 0.18f});
+        copaCarvalho(m, p + Vec3f{0, .36f * h, 0}, r, .64f * h, a.rot, longe ? 5 : 8, verde);
+        if (!longe)
+            for (float lado : {-1.f, 1.f}) {
+                Vec3f desvio = rotY({lado * .51f * r, .33f * h, 0}, a.rot);
+                copaCarvalho(m, p + desvio, .45f * r, .43f * h, lado + a.rot, 5, verde * (1.f + lado * .06f));
+            }
     } else if (a.tipo == 2) {  // arbusto
         if (longe) return;
         Rgb verde = lerp(Rgb{0.25f, 0.4f, 0.17f}, Rgb{0.36f, 0.45f, 0.2f}, a.tom);
@@ -956,8 +999,9 @@ static void espalharVegetacao(Gerador& g, const Mapa& mapa, std::vector<std::vec
     for (auto& l : mapa.lugares) if (l.tipo == TipoLugar::Floresta) floresta = &l;
     const float PASSO = 5.f;
     uint32_t rng = semente * 7919u + 17u;
-    for (float z = -715; z < 715; z += PASSO)
-        for (float x = -715; x < 715; x += PASSO) {
+    constexpr float borda = medidas::MEIO_AREA_JOGAVEL + 15.f;
+    for (float z = -borda; z < borda; z += PASSO)
+        for (float x = -borda; x < borda; x += PASSO) {
             float px = x + (aleatorio01(rng) - 0.5f) * PASSO * 0.9f, pz = z + (aleatorio01(rng) - 0.5f) * PASSO * 0.9f;
             float h = g.t.altura(px, pz);
             if (h < g.t.nivelAgua() + 0.8f) continue;
@@ -990,7 +1034,10 @@ static void espalharVegetacao(Gerador& g, const Mapa& mapa, std::vector<std::vec
                                                                                                                      : aleatorio01(rng) < 0.35f;
                 a.tipo = pinho ? 0 : 1;
                 a.pos.y = h - 0.1f;
-                g.col.adicionar({{px - 0.3f * a.escala, h - 1, pz - 0.3f * a.escala}, {px + 0.3f * a.escala, h + 4, pz + 0.3f * a.escala}});
+                const auto& arvore = medidasArvore(a);
+                float r = a.escala * arvore.raioTronco;
+                g.col.adicionar({{px - r, a.pos.y - .30f, pz - r},
+                                 {px + r, a.pos.y + a.escala * arvore.alturaTronco, pz + r}});
             } else if (sorte < dens + 0.02f + (montanha ? 0.03f : 0.f)) {
                 a.tipo = (montanha || aleatorio01(rng) < 0.35f) ? 3 : 2;
             } else
@@ -1094,7 +1141,8 @@ void Cenario::construirPerto(Pedaco& p) {
     for (auto& a : p.arvores) {
         MeshBuilder m;
         modeloArvore(m, a, false);
-        m.aoVertical(a.pos.y, a.pos.y + 3.5f * a.escala);
+        float altura = a.tipo < 2 ? medidasArvore(a).altura : 1.f;
+        m.aoVertical(a.pos.y, a.pos.y + .65f * altura * a.escala);
         total.anexar(m);
     }
     // grama: tufos de 3 laminas (dos dois lados) no campo aberto, so nos pedacos perto do jogador
@@ -1117,7 +1165,8 @@ void Cenario::construirPerto(Pedaco& p) {
                 Vec3f base{x, y, z};
                 Vec3f r = col_->resolver(base, 0.35f);
                 if (std::hypot(r.x - x, r.z - z) > 0.01f) continue;  // nao nasce dentro de casa/cerca
-                float h = (0.15f + aleatorio01(rng) * 0.22f) * ambiente.altura, verde = 0.85f + aleatorio01(rng) * 0.3f;
+                float h = lerp(medidas::CAPIM_ALTURA_MIN, medidas::CAPIM_ALTURA_MAX, aleatorio01(rng)) * ambiente.altura;
+                float verde = .85f + aleatorio01(rng) * .3f;
                 Rgb cor = corCapimUmido({0.28f * verde, 0.40f * verde, 0.16f * verde}, ambiente.umidade);
                 Rgb ponta = corCapimUmido({0.43f * verde, 0.51f * verde, 0.23f * verde}, ambiente.umidade);
                 for (int k = 0; k < 3; k++) {

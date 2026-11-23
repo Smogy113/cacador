@@ -56,3 +56,17 @@ TEST_CASE("piso girado: so dentro do retangulo girado") {
     CHECK(m.alturaPiso(2.9f, 1.9f, 0.f) < -1e8f);  // canto da caixa alinhada, fora do girado
     CHECK(m.alturaPiso(0, 0, -1.f) < -1e8f);       // alto demais para subir num passo
 }
+TEST_CASE("piso inclinado conserva largura e altura locais após a rotação") {
+    MundoColisao m;
+    Vec3f centro{13.f, 0, -18.f};
+    constexpr float rot = .71f, meiaLargura = medidas::PONTE_LARGURA * .5f;
+    m.adicionarPisoGirado({centro, meiaLargura, 2.f, rot, 3.8f, 4.f}, .2f);
+    auto piso = [&](float x, float z, float y) {
+        Vec3f p = centro + rotY({x, 0, z}, rot);
+        return m.alturaPiso(p.x, p.z, y);
+    };
+    CHECK(piso(0.f, -1.5f, 4.f) == doctest::Approx(3.7f));
+    CHECK(piso(meiaLargura - .01f, 1.5f, 4.f) == doctest::Approx(4.3f));
+    CHECK(piso(meiaLargura + .01f, 1.5f, 4.f) < -1e8f);
+    CHECK(piso(0.f, 1.5f, 3.f) < -1e8f);
+}

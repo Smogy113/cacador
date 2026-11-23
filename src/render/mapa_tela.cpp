@@ -160,6 +160,12 @@ void MapaTela::desenharCheio(Vec3f jog, float yawJ, const std::vector<Vec3f>& ro
         e2{c.x + std::sin(yawJ - 2.5f) * 9.f, c.y + std::cos(yawJ - 2.5f) * 9.f};
     DrawTriangle(ponta, e1, e2, Color{250, 250, 245, 255});
     DrawTriangle(ponta, e2, e1, Color{250, 250, 245, 255});
+    // A régua usa a mesma transformação das coordenadas do mapa.
+    const float xRegua = x0 + 22.f, yRegua = y0 + lado - 23.f;
+    const float larguraRegua = 100.f * lado / (2.f * meta_);
+    DrawLineEx({xRegua, yRegua}, {xRegua + larguraRegua, yRegua}, 2.f, estilo::TINTA);
+    for (float x : {xRegua, xRegua + larguraRegua}) DrawLineEx({x, yRegua - 4.f}, {x, yRegua + 4.f}, 2.f, estilo::TINTA);
+    estilo::texto(estilo::Fonte::Forte, "100 m", xRegua + larguraRegua + 9.f, yRegua - 9.f, 17.f, estilo::TINTA);
     estilo::texto(estilo::Fonte::Titulo, "Mapa", x0, y0 - 52, 40, estilo::MARFIM);
     float tx = x0 + lado - 120;
     tx += estilo::tecla("M", tx, y0 - 40, 22) + 8;

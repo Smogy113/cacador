@@ -1,5 +1,5 @@
 # Mapa do mundo. Coordenadas em metros; centro do mundo = 0 0.
-# Norte = z negativo. Area jogavel: -700..700. Montanhas a partir de 650.
+# Norte = z negativo. Area jogavel: -700..700 m. Relevo de borda a partir de 630 m.
 # Nomes com espaco usam _ (aparecem com espaco no jogo).
 #
 # lugar <tipo> <nome> <x> <z> <rotacao_graus> <raio>

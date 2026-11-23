@@ -173,7 +173,7 @@ void Jogo::desenharDepuracao() {
     if (botao("+100 pratas", px + 103, py, 94)) dinheiro_ += 100;
     if (botao("Cavalo aqui", px + 206, py, 94) && !cavalos_.empty() && montadoEm_ < 0) {
         Cavalo& c = cavalos_[cavaloPerto_ >= 0 ? cavaloPerto_ : 0];
-        c.corpo.pos = col_.resolver(jogador_.pos + direitaJogador() * 2.f, RAIO_CAVALO);
+        c.corpo.pos = resolverCavalo(jogador_.pos + direitaJogador() * 2.f, c.corpo.yaw, col_);
         c.corpo.pos.y = terreno_->altura(c.corpo.pos.x, c.corpo.pos.z);
     }
     py += 36;
