@@ -22,7 +22,7 @@ const Rgb PEDRA{0.56f, 0.54f, 0.50f}, PEDRA_ESC{0.42f, 0.41f, 0.40f}, REBOCO{0.8
 const Rgb LONAS[] = {{0.72f, 0.2f, 0.15f}, {0.22f, 0.38f, 0.58f}, {0.85f, 0.68f, 0.3f}, {0.3f, 0.52f, 0.3f}, {0.8f, 0.75f, 0.65f}};
 const Rgb COR_LUZ_FOGO{1.0f, 0.55f, 0.22f};
 
-// Sistema de coordenadas local de um objeto (origem + rotacao).
+// Converte coordenadas locais em metros para o mundo. A frente aponta para +z local.
 struct Frame {
     Vec3f o;
     float rot;
@@ -76,16 +76,17 @@ struct Gerador {
                 col.adicionar({{p.x - hw, f.o.y - 2, p.z - hw}, {p.x + hw, f.o.y + alt, p.z + hw}});
             }
     }
-    bool livre(const Frame& f, float w, float d, float margem) const {
-        AABB a = pegada(f, w + margem, d + margem);
+    bool livre(const Frame& f, float largura, float profundidade, float margem) const {
+        // A margem separa construcoes. Estrada e rio sao testados na pegada informada.
+        AABB a = pegada(f, largura + margem, profundidade + margem);
         for (auto& o : ocupado)
             if (a.min.x < o.max.x && a.max.x > o.min.x && a.min.z < o.max.z && a.max.z > o.min.z) return false;
         // Amostra toda a pegada. Uma estrada estreita pode passar entre os cantos de um lote grande.
-        int nx = std::max(2, int(std::ceil(w / 2.f)));
-        int nz = std::max(2, int(std::ceil(d / 2.f)));
+        int nx = std::max(2, int(std::ceil(largura / 2.f)));
+        int nz = std::max(2, int(std::ceil(profundidade / 2.f)));
         for (int iz = 0; iz <= nz; iz++)
             for (int ix = 0; ix <= nx; ix++) {
-                Vec3f p = f.P((float(ix) / nx - 0.5f) * w, 0, (float(iz) / nz - 0.5f) * d);
+                Vec3f p = f.P((float(ix) / nx - 0.5f) * largura, 0, (float(iz) / nz - 0.5f) * profundidade);
                 if (t.mascaraEstrada(p.x, p.z) > 0.08f || t.mascaraRio(p.x, p.z) > 0.01f) return false;
             }
         return true;
@@ -166,7 +167,7 @@ struct Gerador {
         else m.caixa(P(pc.centro), pc.tam, rot, pc.cor);
     }
     Vec3f predio(const Frame& f, Lote l) {
-        // piso acima do chao mais alto da pegada (terreno inclinado: o alicerce desce ate o mais baixo)
+        // Usa a maior altura amostrada na pegada como referencia para elevar o piso.
         float hmax = -1e9f;
         for (float sx : {-0.5f, 0.f, 0.5f})
             for (float sz : {-0.5f, 0.f, 0.5f}) {
@@ -437,15 +438,20 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
         if (g.livre(f, 2.6f, 2.0f, 0.5f) || true) g.barraca(f, LONAS[k % 5]);
         rota.push_back(p + Vec3f{std::sin(a + PI) * 2.2f, 0, std::cos(a + PI) * 2.2f});
     }
-    // lotes em aneis: predios especiais primeiro, perto da praca
-    struct Especial { float w, d; int andares; Rgb parede, telhado; bool placa; Rgb corPlaca; int tipo; };
-    // tipo: 0 casa, 1 taverna, 2 xerife, 3 cadeia, 4 estabulo
-    std::vector<Especial> fila = {
-        {11, 8, 2, REBOCO, TELHA_V, true, {0.7f, 0.5f, 0.15f}, 1},
-        {8, 7, 1, PEDRA, ARDOSIA, true, {0.25f, 0.3f, 0.5f}, 2},
-        {7, 6, 1, PEDRA_ESC, ARDOSIA, false, {}, 3},
-        {12, 8, 1, MADEIRA, TELHA_M, false, {}, 4},
+    // Os lotes perto da praca recebem primeiro os edificios de servico.
+    struct LoteUrbano {
+        float largura, profundidade;
+        int andares;
+        Rgb parede, telhado;
+        std::optional<TipoPredio> tipo;  // o estabulo aberto usa uma malha propria
     };
+    std::vector<LoteUrbano> fila = {
+        {11, 8, 2, REBOCO, TELHA_V, TipoPredio::Taverna},
+        {8, 7, 1, PEDRA, ARDOSIA, TipoPredio::Xerife},
+        {7, 6, 1, PEDRA_ESC, ARDOSIA, TipoPredio::Cadeia},
+        {12, 8, 1, MADEIRA, TELHA_M, std::nullopt},
+    };
+    constexpr float CASA_MIN = 9.f, CASA_MAX = 12.f;  // largura e profundidade das paredes, em metros
     for (float raioAnel : {22.f, 36.f, 51.f, 66.f, 78.f}) {
         int nl = int(2 * PI * raioAnel / 15.f);
         float desloc = g.r(0, 1);
@@ -454,59 +460,73 @@ static void gerarCidade(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3
             Vec3f p{l.x + std::sin(a) * raioAnel, 0, l.z + std::cos(a) * raioAnel};
             p.y = g.h(p.x, p.z);
             Frame f{p, a + PI};  // frente para o centro
-            // Sobrados predominam perto da praca. A profundidade acomoda a planta inteira atras da fachada.
-            Especial e = {g.r(9.f, 12.f), g.r(9.f, 12.f), g.r01() < (raioAnel <= 36.f ? 0.85f : 0.6f) ? 2 : 1,
-                          g.r01() < 0.6f ? REBOCO : REBOCO2,
-                          g.r01() < 0.5f ? TELHA_V : (g.r01() < 0.5f ? TELHA_M : ARDOSIA), false, {}, 0};
-            if (!fila.empty()) e = fila.front();
+            const float chanceSobrado = raioAnel <= 36.f ? 0.85f : 0.6f;
+            // Consome os mesmos sorteios em cada candidato, inclusive para os lotes de servico.
+            LoteUrbano lote = {
+                g.r(CASA_MIN, CASA_MAX), g.r(CASA_MIN, CASA_MAX),
+                g.r01() < chanceSobrado ? 2 : 1,
+                g.r01() < 0.6f ? REBOCO : REBOCO2,
+                g.r01() < 0.5f ? TELHA_V : (g.r01() < 0.5f ? TELHA_M : ARDOSIA),
+                TipoPredio::Casa,
+            };
+            if (!fila.empty()) lote = fila.front();
+            const float largura = lote.largura, profundidade = lote.profundidade;
             // Deixa a passagem interna da muralha livre, incluindo beirais e chamines.
-            if (std::hypot(raioAnel + e.d * 0.5f + 1.f, e.w * 0.5f + 1.f) > R - 3.f) continue;
-            if (!g.livre(f, e.w, e.d, 2.5f)) continue;
+            const float raioExterno = std::hypot(raioAnel + profundidade * 0.5f + 1.f,
+                                                  largura * 0.5f + 1.f);
+            if (raioExterno > R - 3.f) continue;
+            if (!g.livre(f, largura, profundidade, 2.5f)) continue;
             if (!fila.empty()) fila.erase(fila.begin());
-            Vec3f entrada = f.P(e.w * 0.18f, 0, e.d / 2 + 1.8f);
-            if (e.tipo == 4) {
+            Vec3f entrada = f.P(largura * 0.18f, 0, profundidade / 2 + 1.8f);
+            if (!lote.tipo) {
                 // estabulo: telhado sobre postes, cocheiras e cerca
                 MeshBuilder& m = g.b(p);
                 for (float sx : {-0.5f, 0.f, 0.5f})
-                    for (float sz : {-0.5f, 0.5f}) g.caixa(m, f, {sx * e.w, 1.6f, sz * e.d}, {0.25f, 3.2f, 0.25f}, MADEIRA_ESC);
+                    for (float sz : {-0.5f, 0.5f}) g.caixa(m, f, {sx * largura, 1.6f, sz * profundidade}, {0.25f, 3.2f, 0.25f}, MADEIRA_ESC);
                 g.registrar(m, true);
                 m.tipo(TIPO_MADEIRA);
-                g.caixa(m, f, {0, 1.5f, -e.d / 2}, {e.w, 3.0f, 0.2f}, MADEIRA);
-                for (float sx : {-0.5f, 0.5f}) g.caixa(m, f, {sx * e.w, 1.5f, 0}, {0.2f, 3.0f, e.d}, MADEIRA);
+                g.caixa(m, f, {0, 1.5f, -profundidade / 2}, {largura, 3.0f, 0.2f}, MADEIRA);
+                for (float sx : {-0.5f, 0.5f}) g.caixa(m, f, {sx * largura, 1.5f, 0}, {0.2f, 3.0f, profundidade}, MADEIRA);
                 m.tipo(TIPO_NORMAL);
                 g.registrar(m, false);
-                for (int b2 = 1; b2 < 4; b2++) g.caixa(m, f, {-e.w / 2 + b2 * e.w / 4, 0.7f, -e.d / 4}, {0.12f, 1.4f, e.d / 2}, MADEIRA_ESC);
+                for (int divisoria = 1; divisoria < 4; divisoria++) {
+                    float x = -largura / 2 + divisoria * largura / 4;
+                    g.caixa(m, f, {x, 0.7f, -profundidade / 4}, {0.12f, 1.4f, profundidade / 2}, MADEIRA_ESC);
+                }
                 g.registrar(m, true);
                 m.tipo(TIPO_PALHA);
-                m.prisma(f.P(0, 3.8f, 0), {e.w + 0.8f, 1.6f, e.d + 1.0f}, f.rot, PALHA);
+                m.prisma(f.P(0, 3.8f, 0), {largura + 0.8f, 1.6f, profundidade + 1.0f}, f.rot, PALHA);
                 m.tipo(TIPO_NORMAL);
                 g.registrar(m, false);
-                g.caixa(m, f, {e.w * 0.3f, 0.4f, -e.d * 0.3f}, {1.4f, 0.8f, 1.0f}, PALHA * 0.9f);  // feno
-                g.colisaoRet(f, 0, -e.d / 2, e.w, 0.4f, 3);
-                g.colisaoRet(f, -e.w / 2, 0, 0.4f, e.d, 3);
-                g.colisaoRet(f, e.w / 2, 0, 0.4f, e.d, 3);
-                g.marcar(f, e.w, e.d);
-                g.ocupar(f, e.w, e.d);
-                c.cavalos.push_back(f.P(0, 0, e.d / 2 + 2.5f));
-                g.tochaParede(f, -e.w / 2 - 0.2f, 2.4f, e.d / 2 + 0.1f);
+                g.caixa(m, f, {largura * 0.3f, 0.4f, -profundidade * 0.3f}, {1.4f, 0.8f, 1.0f}, PALHA * 0.9f);  // feno
+                g.colisaoRet(f, 0, -profundidade / 2, largura, 0.4f, 3);
+                g.colisaoRet(f, -largura / 2, 0, 0.4f, profundidade, 3);
+                g.colisaoRet(f, largura / 2, 0, 0.4f, profundidade, 3);
+                g.marcar(f, largura, profundidade);
+                g.ocupar(f, largura, profundidade);
+                c.cavalos.push_back(f.P(0, 0, profundidade / 2 + 2.5f));
+                g.tochaParede(f, -largura / 2 - 0.2f, 2.4f, profundidade / 2 + 0.1f);
             } else {
                 Lote lt;
-                lt.largura = e.w, lt.profundidade = e.d, lt.andares = e.andares, lt.estilo = Estilo::Medieval;
-                lt.tipo = e.tipo == 1 ? TipoPredio::Taverna : (e.tipo == 2 ? TipoPredio::Xerife : (e.tipo == 3 ? TipoPredio::Cadeia : TipoPredio::Casa));
+                lt.largura = largura;
+                lt.profundidade = profundidade;
+                lt.andares = lote.andares;
+                lt.estilo = Estilo::Medieval;
+                lt.tipo = *lote.tipo;
                 lt.semente = g.rng ^ uint32_t(k * 7919 + int(raioAnel) * 131);
-                lt.corParede = e.parede, lt.corTelhado = e.telhado;
+                lt.corParede = lote.parede, lt.corTelhado = lote.telhado;
                 entrada = g.predio(f, lt);
-                if (e.tipo == 1) {  // taverna: barris e tochas na frente
-                    g.barril(f.P(-e.w / 2 + 0.8f, 0, e.d / 2 + 1.0f));
-                    g.barril(f.P(-e.w / 2 + 1.7f, 0, e.d / 2 + 1.2f));
-                    g.tochaParede(f, -e.w * 0.05f, 3.0f, e.d / 2 + 0.25f);
-                    g.tochaParede(f, e.w * 0.42f, 3.0f, e.d / 2 + 0.25f);
+                if (lote.tipo == TipoPredio::Taverna) {  // taverna: barris e tochas na frente
+                    g.barril(f.P(-largura / 2 + 0.8f, 0, profundidade / 2 + 1.0f));
+                    g.barril(f.P(-largura / 2 + 1.7f, 0, profundidade / 2 + 1.2f));
+                    g.tochaParede(f, -largura * 0.05f, 3.0f, profundidade / 2 + 0.25f);
+                    g.tochaParede(f, largura * 0.42f, 3.0f, profundidade / 2 + 0.25f);
                 }
-                if (e.tipo == 2) {  // xerife: quadro de recompensas na frente
-                    Frame fq{f.P(-e.w * 0.15f, 0, e.d / 2 + 3.2f), f.rot};
+                if (lote.tipo == TipoPredio::Xerife) {  // xerife: quadro de recompensas na frente
+                    Frame fq{f.P(-largura * 0.15f, 0, profundidade / 2 + 3.2f), f.rot};
                     fq.o.y = g.h(fq.o.x, fq.o.z);
                     g.quadroRecompensas(fq, c.quadros, l.nome);
-                    g.tochaParede(f, e.w * 0.45f, 2.8f, e.d / 2 + 0.25f);
+                    g.tochaParede(f, largura * 0.45f, 2.8f, profundidade / 2 + 0.25f);
                 }
             }
             rota.push_back(entrada);
@@ -539,28 +559,29 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
     }
     g.ocupado.push_back({{l.x - 7, 0, l.z - 7}, {l.x + 7, 0, l.z + 7}});
     rota.push_back(centro + Vec3f{-2, 0, -3});
-    int feitas = 0;
+    constexpr int MAX_CASAS = 9;
+    int casas = 0;
     for (float raioAnel : {18.f, 31.f, 44.f}) {
         int nl = int(2 * PI * raioAnel / 18.f);
         float desloc = g.r(0, 1);
-        for (int k = 0; k < nl && feitas < 9; k++) {
+        for (int k = 0; k < nl && casas < MAX_CASAS; k++) {
             float a = 2 * PI * (k + desloc) / nl;
             Vec3f p{l.x + std::sin(a) * raioAnel, 0, l.z + std::cos(a) * raioAnel};
             p.y = g.h(p.x, p.z);
             Frame f{p, a + PI + g.r(-0.25f, 0.25f)};
-            float w = g.r(9.f, 12.f), d = g.r(8.f, 10.5f);
-            if (!g.livre(f, w, d, 3.f)) continue;
+            float largura = g.r(9.f, 12.f), profundidade = g.r(8.f, 10.5f);
+            if (!g.livre(f, largura, profundidade, 3.f)) continue;
             Lote lt;
-            lt.largura = w, lt.profundidade = d, lt.andares = g.r01() < 0.25f ? 2 : 1, lt.estilo = Estilo::Medieval;
+            lt.largura = largura, lt.profundidade = profundidade, lt.andares = g.r01() < 0.25f ? 2 : 1, lt.estilo = Estilo::Medieval;
             lt.semente = g.rng ^ uint32_t(k * 104729 + int(raioAnel) * 7);
             lt.corParede = g.r01() < 0.5f ? REBOCO2 : MADEIRA * 1.3f;
             bool palha = g.r01() < 0.6f;
             lt.corTelhado = palha ? PALHA : TELHA_M;
             lt.cobertura = palha ? Cobertura::Palha : Cobertura::Auto;
             rota.push_back(g.predio(f, lt));
-            if (g.r01() < 0.5f) g.barril(f.P(-w / 2 - 0.6f, 0, d / 2 - 0.5f));
-            if (g.r01() < 0.4f) g.caixote(f.P(w / 2 + 0.7f, 0, 0.5f), g.r(0, 1));
-            feitas++;
+            if (g.r01() < 0.5f) g.barril(f.P(-largura / 2 - 0.6f, 0, profundidade / 2 - 0.5f));
+            if (g.r01() < 0.4f) g.caixote(f.P(largura / 2 + 0.7f, 0, 0.5f), g.r(0, 1));
+            casas++;
         }
     }
     for (int k = 0; k < 3; k++) {
@@ -575,30 +596,38 @@ static void gerarVilarejo(Gerador& g, const Lugar& l, Cenario& c, std::vector<Ve
 static void gerarFazenda(Gerador& g, const Lugar& l, Cenario& c, std::vector<Vec3f>& rota) {
     float rot = l.rot * PI / 180.f;
     Frame fl{{l.x, g.h(l.x, l.z), l.z}, rot};
-    // Procura para os fundos e para fora do terreiro, mantendo a plantacao na frente.
-    auto implantar = [&](const Lote& lote, float x, float z, float avanco) -> std::optional<Vec3f> {
+    // x e z sao a posicao preferida no terreno da fazenda. Tenta o mesmo recuo
+    // com deslocamentos alternados para fora e para dentro antes de ir mais para os fundos.
+    auto implantar = [&](const Lote& lote, float x, float z, float avancoFrontal) -> std::optional<Vec3f> {
         for (float recuo : {0.f, 4.f, 8.f, 12.f, 16.f, 20.f, 24.f}) {
             for (float lateral : {0.f, 4.f, -4.f, 8.f, -8.f, 12.f, -12.f, 16.f, -16.f}) {
                 Vec3f origem = fl.P(x + (x < 0.f ? -lateral : lateral), 0, z - recuo);
-                const Frame pegada{origem + rotY({0, 0, avanco * 0.5f}, rot), rot};
-                if (!g.livre(pegada, lote.largura + 1.2f, lote.profundidade + 1.2f + avanco, 1.f)) continue;
+                // O avanco da varanda ou do degrau entra inteiro no teste do terreno.
+                const Frame pegada{origem + rotY({0, 0, avancoFrontal * 0.5f}, rot), rot};
+                if (!g.livre(pegada, lote.largura + 1.2f, lote.profundidade + 1.2f + avancoFrontal, 1.f)) continue;
                 origem.y = g.h(origem.x, origem.z);
                 return g.predio({origem, rot}, lote);
             }
         }
         return std::nullopt;
     };
-    // celeiro e casa no estilo faroeste
-    Lote lc;
-    lc.largura = 12, lc.profundidade = 8, lc.estilo = Estilo::Faroeste, lc.tipo = TipoPredio::Celeiro;
-    lc.semente = uint32_t(l.x * 13 + l.z * 7) + 5u;
-    lc.corParede = Rgb{0.55f, 0.22f, 0.16f}, lc.corTelhado = TELHA_M;
-    Lote lf;
-    lf.largura = 12, lf.profundidade = 10.5f, lf.estilo = Estilo::Faroeste, lf.tipo = TipoPredio::Casa;
-    lf.semente = uint32_t(l.x * 31 + l.z * 17) + 9u;
-    lf.corParede = Rgb{0.62f, 0.52f, 0.4f}, lf.corTelhado = Rgb{0.36f, 0.3f, 0.26f};
-    auto entradaCeleiro = implantar(lc, -10.f, -8.f, 0.8f);
-    auto entradaCasa = implantar(lf, 8.f, -10.5f, 2.8f);  // varanda e degrau
+    Lote celeiro;
+    celeiro.largura = 12;
+    celeiro.profundidade = 8;
+    celeiro.estilo = Estilo::Faroeste;
+    celeiro.tipo = TipoPredio::Celeiro;
+    celeiro.semente = uint32_t(l.x * 13 + l.z * 7) + 5u;
+    celeiro.corParede = Rgb{0.55f, 0.22f, 0.16f}, celeiro.corTelhado = TELHA_M;
+    Lote casa;
+    casa.largura = 12;
+    casa.profundidade = 10.5f;
+    casa.estilo = Estilo::Faroeste;
+    casa.tipo = TipoPredio::Casa;
+    casa.semente = uint32_t(l.x * 31 + l.z * 17) + 9u;
+    casa.corParede = Rgb{0.62f, 0.52f, 0.4f}, casa.corTelhado = Rgb{0.36f, 0.3f, 0.26f};
+    // O celeiro reserva sua pegada primeiro. A rota dos moradores comeca pela casa.
+    auto entradaCeleiro = implantar(celeiro, -10.f, -8.f, 0.8f);
+    auto entradaCasa = implantar(casa, 8.f, -10.5f, 2.8f);  // varanda e degrau
     if (entradaCasa) rota.push_back(*entradaCasa);
     if (entradaCeleiro) rota.push_back(*entradaCeleiro);
     // plantacao com cerca

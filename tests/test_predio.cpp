@@ -5,11 +5,13 @@
 #include <string>
 #include "core/predio.h"
 
-static std::vector<Lote> lotes() {
+static std::vector<Lote> lotesDeTeste() {
     std::vector<Lote> v;
     const TipoPredio tiposM[] = {TipoPredio::Casa, TipoPredio::Taverna, TipoPredio::Xerife, TipoPredio::Cadeia, TipoPredio::Capela};
     const TipoPredio tiposF[] = {TipoPredio::Casa, TipoPredio::Celeiro, TipoPredio::Barracao, TipoPredio::Taverna};
     for (uint32_t s = 1; s <= 60; s++) {
+        // Alterna as plantas ampliadas do mapa com as compactas para manter a cobertura das duas.
+        const bool casaAmpliada = s % 2 == 0;
         for (auto t : tiposM) {
             Lote l;
             l.semente = s * 7919u + uint32_t(t);
@@ -17,7 +19,7 @@ static std::vector<Lote> lotes() {
             l.tipo = t;
             l.largura = 5.5f + float(s % 7) * 0.9f;
             l.profundidade = 4.8f + float(s % 5) * 0.8f;
-            if (t == TipoPredio::Casa && s % 2 == 0) {
+            if (t == TipoPredio::Casa && casaAmpliada) {
                 l.largura = 9.f + float(s % 4);
                 l.profundidade = 9.f + float((s / 2) % 4);
             }
@@ -30,7 +32,7 @@ static std::vector<Lote> lotes() {
             l.tipo = TipoPredio::Casa;
             l.largura = 5.f + float(s % 5);
             l.profundidade = 4.5f + float(s % 4) * 0.7f;
-            if (s % 2 == 0) {
+            if (casaAmpliada) {
                 l.largura = 9.f + float(s % 4);
                 l.profundidade = 8.f + float(s % 6) * 0.5f;
             }
@@ -44,7 +46,7 @@ static std::vector<Lote> lotes() {
             l.tipo = t;
             l.largura = t == TipoPredio::Barracao ? 4.2f : 6.f + float(s % 6);
             l.profundidade = t == TipoPredio::Barracao ? 3.6f : 5.f + float(s % 4);
-            if (t == TipoPredio::Casa && s % 2 == 0) {
+            if (t == TipoPredio::Casa && casaAmpliada) {
                 l.largura = 12.f;
                 l.profundidade = 10.5f;
             }
@@ -63,7 +65,7 @@ static bool colide(const Planta& p, Vec3f q, float raio) {
 }
 
 TEST_CASE("predio: porta no terreo e para fora") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         int portas = 0;
         for (auto& v : p.vaos)
@@ -79,7 +81,7 @@ TEST_CASE("predio: porta no terreo e para fora") {
     }
 }
 TEST_CASE("predio: vao da porta livre de colisao (>= 1,0 x 2,1)") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         CHECK(p.porta.largura >= 1.0f);
         CHECK(p.porta.altura >= 2.1f);
@@ -94,7 +96,7 @@ TEST_CASE("predio: vao da porta livre de colisao (>= 1,0 x 2,1)") {
     }
 }
 TEST_CASE("predio: janelas sem sobreposicao entre si e com a porta") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         for (size_t i = 0; i < p.vaos.size(); i++)
             for (size_t j = i + 1; j < p.vaos.size(); j++) {
@@ -106,7 +108,7 @@ TEST_CASE("predio: janelas sem sobreposicao entre si e com a porta") {
     }
 }
 TEST_CASE("predio: interior livre >= 2,6 de altura e 2,5 de lado") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         CHECK(p.peDireito >= 2.6f);
         CHECK(p.interiorMeia.x * 2.f >= 2.5f);
@@ -117,7 +119,7 @@ TEST_CASE("predio: interior livre >= 2,6 de altura e 2,5 de lado") {
     }
 }
 TEST_CASE("predio: caminho da entrada ao centro sem colisao") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         MundoColisao m;
         for (auto& c : p.paredes) m.adicionarGirada(c);
@@ -138,7 +140,7 @@ TEST_CASE("predio: caminho da entrada ao centro sem colisao") {
     }
 }
 TEST_CASE("predio: pecas dentro do lote (+ beiral e varanda)") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         float mx = l.largura * 0.5f + 1.6f, mz = l.profundidade * 0.5f + 3.2f;
         for (auto& pc : p.pecas) {
@@ -163,7 +165,7 @@ TEST_CASE("predio: variedade") {
     CHECK(assinaturas.size() >= 12);
 }
 TEST_CASE("predio: orcamento") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         CHECK(p.pecas.size() <= 600);
         CHECK(triangulosPlanta(p) <= 6000);
@@ -171,7 +173,7 @@ TEST_CASE("predio: orcamento") {
     }
 }
 TEST_CASE("predio: casca simples e leve") {
-    for (auto& l : lotes()) {
+    for (auto& l : lotesDeTeste()) {
         Planta p = gerarPredio(l);
         REQUIRE_FALSE(p.casca.empty());
         int tris = 0;

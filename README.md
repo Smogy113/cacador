@@ -99,6 +99,35 @@ erro, o jogo abre mesmo assim e mostra o problema na tela.
   `TIPO_*` em `src/core/meshbuilder.h`, um caso em `matTelhado` e, se precisar de padrão próprio, um
   canal na textura assada.
 
+### Manutenção das casas
+
+O tamanho e a posição das casas no mapa ficam em `src/render/props.cpp`. As medidas vão de
+parede a parede, em metros. [Abrir o gerador do cenário](src/render/props.cpp)
+
+| Lugar | Função | Largura × profundidade |
+| --- | --- | --- |
+| Valdoro | `gerarCidade` | 9–12 × 9–12 m |
+| Pedrabranca | `gerarVilarejo` | 9–12 × 8–10,5 m |
+| Fazendas | `gerarFazenda`, no lote `casa` | 12 × 10,5 m |
+
+`Gerador::livre` verifica a distância entre lotes pela margem e amostra estrada e rio na
+pegada informada. Nas fazendas, essa pegada inclui o avanço da varanda e do degrau. Se uma
+casa mudar de tamanho, confira também o espaço até a estrada, o vizinho e a muralha.
+
+`gerarPredio` recebe o lote em coordenadas locais, com a frente em `+z`. É ali que ficam a
+altura dos andares, os vãos e o telhado. A mesma planta fornece a malha detalhada, a casca de
+longe e as colisões. [Abrir o gerador da planta](src/core/predio.cpp)
+
+Em `props.cpp`, `Gerador::predio` coloca as peças, pisos e portas nas coordenadas do mapa
+e devolve a posição da entrada usada na rota dos moradores.
+
+Com o build Linux pronto, confira os vãos, a circulação e o custo das malhas usando o
+comando abaixo. [Testes de prédios](tests/test_predio.cpp) · [Capturas de referência](docs/DESEMPENHO.md#verificar-o-visual)
+
+```bash
+./build/testes --test-case='predio:*,porta:*,interior:*,telhado:*'
+```
+
 ## Como compilar
 
 Precisa de CMake e de um compilador C++17. A raylib e o doctest são baixados pelo próprio build.

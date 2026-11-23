@@ -75,15 +75,15 @@ Planta gerarPredio(const Lote& l) {
     const bool pedra = tipo == TipoPredio::Cadeia || tipo == TipoPredio::Xerife || tipo == TipoPredio::Capela;
     const float W = l.largura, D = l.profundidade;
     const float t = pedra ? 0.4f : (med ? 0.24f : 0.18f);
-    float H = 2.95f;
-    // Altura bruta do pavimento. Portas, janelas e moveis continuam em medidas humanas.
-    if (tipo == TipoPredio::Casa) H = med ? 3.10f : 3.20f;
-    if (tipo == TipoPredio::Capela) H = 4.3f;
-    if (tipo == TipoPredio::Celeiro) H = 4.0f;
+    // Altura de piso a piso, em metros. O pe-direito desconta a espessura do forro.
+    float alturaAndar = 2.95f;
+    if (tipo == TipoPredio::Casa) alturaAndar = med ? 3.10f : 3.20f;
+    if (tipo == TipoPredio::Capela) alturaAndar = 4.3f;
+    if (tipo == TipoPredio::Celeiro) alturaAndar = 4.0f;
     const int andares = (tipo == TipoPredio::Capela || tipo == TipoPredio::Celeiro || tipo == TipoPredio::Barracao) ? 1 : std::max(1, l.andares);
-    const float piso = l.piso, yT = piso + H * andares;
+    const float piso = l.piso, yT = piso + alturaAndar * andares;
     p.piso = piso;
-    p.peDireito = H - 0.15f;
+    p.peDireito = alturaAndar - 0.15f;
     MatPeca matParede = pedra ? MatPeca::Pedra : (med ? (l.corParede.r + l.corParede.g + l.corParede.b > 1.8f ? MatPeca::Reboco : MatPeca::Madeira) : MatPeca::Madeira);
     Rgb corParede = pedra ? (tipo == TipoPredio::Cadeia ? PEDRA_ESC : PEDRA) : l.corParede;
     Rgb corVeneziana = VENEZIANAS[int(g.f() * 5) % 5];
@@ -130,7 +130,7 @@ Planta gerarPredio(const Lote& l) {
             for (int a = 1; a < andares; a++) {
                 bool alinhada = temPorta || std::any_of(p.vaos.begin(), p.vaos.end(), [&](const Vao& v) { return v.lado == lado && v.andar == 0 && std::abs((v.u0 + v.u1) * 0.5f - u) < 0.01f; });
                 if (alinhada ? g.p(0.9f) : g.p(0.3f)) {
-                    float y0 = piso + a * H + 0.9f;
+                    float y0 = piso + a * alturaAndar + 0.9f;
                     p.vaos.push_back({lado, a, u - largJan * 0.5f, u + largJan * 0.5f, y0, y0 + altJan, false});
                 }
             }
@@ -140,18 +140,18 @@ Planta gerarPredio(const Lote& l) {
     // ---------------- alicerce, piso, forro ----------------
     k.caixa({0, (piso - 0.02f - 1.5f) * 0.5f, 0}, {W + 0.12f, piso - 0.02f + 1.5f, D + 0.12f}, MatPeca::Pedra, med ? PEDRA : PEDRA_ESC, true);
     k.caixa({0, piso - 0.04f, 0}, {W - 2 * t, 0.08f, D - 2 * t}, MatPeca::MadeiraEsc, PISO);
-    k.caixa({0, piso + H - 0.075f, 0}, {W - 2 * t, 0.15f, D - 2 * t}, MatPeca::MadeiraEsc, mul(PISO, 0.9f));
+    k.caixa({0, piso + alturaAndar - 0.075f, 0}, {W - 2 * t, 0.15f, D - 2 * t}, MatPeca::MadeiraEsc, mul(PISO, 0.9f));
     for (int a = 1; a < andares; a++)  // vigas do piso de cima aparecendo por fora
-        k.caixa({0, piso + a * H, 0}, {W + 0.04f, 0.2f, D + 0.04f}, MatPeca::MadeiraEsc, MADEIRA_ESC, false, !enxaimel);
+        k.caixa({0, piso + a * alturaAndar, 0}, {W + 0.04f, 0.2f, D + 0.04f}, MatPeca::MadeiraEsc, MADEIRA_ESC, false, !enxaimel);
     p.pisos.push_back({{0, 0, 0}, W * 0.5f, D * 0.5f, 0.f, -1.f, piso});
-    p.interiorCentro = {0, piso + (H - 0.15f) * 0.5f, 0};
-    p.interiorMeia = {W * 0.5f - t, (H - 0.15f) * 0.5f, D * 0.5f - t};
+    p.interiorCentro = {0, piso + (alturaAndar - 0.15f) * 0.5f, 0};
+    p.interiorMeia = {W * 0.5f - t, (alturaAndar - 0.15f) * 0.5f, D * 0.5f - t};
 
     // ---------------- paredes recortadas pelos vaos ----------------
     for (int lado = 0; lado < 4; lado++) {
         float Lw = lado < 2 ? W : D - 2 * t;  // frente/fundos inteiras; lados entre elas
         for (int a = 0; a < andares; a++) {
-            float y0 = a == 0 ? piso - 0.02f : piso + a * H, y1 = piso + (a + 1) * H;
+            float y0 = a == 0 ? piso - 0.02f : piso + a * alturaAndar, y1 = piso + (a + 1) * alturaAndar;
             std::vector<Vao> vs;
             for (auto& v : p.vaos)
                 if (v.lado == lado && v.andar == a) vs.push_back(v);
@@ -223,7 +223,7 @@ Planta gerarPredio(const Lote& l) {
         for (int lado = 0; lado < 4; lado++) {
             const Fachada& f = fs[lado];
             for (int a = 0; a <= andares; a++)  // soleira, frechal e vigas de andar
-                k.caixa(naFachada(lado, 0, piso + a * H - (a == andares ? 0.1f : 0.f), 0.02f, W, D), tamFachada(lado, f.L, 0.2f, 0.06f), MatPeca::MadeiraEsc, MADEIRA_ESC, false, a > 0 && a < andares);
+                k.caixa(naFachada(lado, 0, piso + a * alturaAndar - (a == andares ? 0.1f : 0.f), 0.02f, W, D), tamFachada(lado, f.L, 0.2f, 0.06f), MatPeca::MadeiraEsc, MADEIRA_ESC, false, a > 0 && a < andares);
             for (int i = 1; i < f.n; i++) {  // esteios nas divisoes dos vaos
                 float u = -f.L * 0.5f + i * f.bw;
                 bool cruza = std::any_of(p.vaos.begin(), p.vaos.end(), [&](const Vao& v) { return v.lado == lado && u > v.u0 - 0.15f && u < v.u1 + 0.15f; });
@@ -341,7 +341,7 @@ Planta gerarPredio(const Lote& l) {
         k.caixa({0, (piso - 0.04f - 1.2f) * 0.5f, frente + pv * 0.5f}, {larg, piso - 0.04f + 1.2f, pv}, MatPeca::MadeiraEsc, PISO, true);
         p.pisos.push_back({{0, 0, frente + pv * 0.5f}, larg * 0.5f, pv * 0.5f, 0.f, -1.f, piso - 0.04f});
         int np = std::max(2, int(larg / 2.5f) + 1);
-        float hv = piso + H - 0.3f;
+        float hv = piso + alturaAndar - 0.3f;
         for (int i = 0; i < np; i++) {
             float x = -larg * 0.5f + 0.1f + i * (larg - 0.2f) / (np - 1);
             if (std::abs(x - portaU) < largPorta * 0.5f + 0.3f) continue;  // poste nao na frente da porta

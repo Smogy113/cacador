@@ -44,14 +44,18 @@ A base contém o mesmo código de medição aplicado à versão 0.26.0.
 
 ## Verificar o visual
 
-Use os mesmos argumentos nas duas versões e compare cidade de dia, vilarejo à noite, vegetação
-e interior com uma porta aberta. `--screenshot` fixa a hora e usa o quadro simulado para
+Use os mesmos argumentos nas duas versões e compare a cidade e o vilarejo de dia e o interior
+à noite com uma porta aberta. `--screenshot` fixa a hora e usa o quadro simulado para
 animar vento e granulação.
 
 ```bash
 ./build/cacador --screenshot cidade.png --qualidade alto --pos 320 345 --yaw 90 --hora 12 --frames 16
+./build/cacador --screenshot vilarejo.png --qualidade alto --pos -51 56.3 --yaw 97.6 --hora 12 --frames 16
 ./build/cacador --screenshot interior.png --qualidade alto --pos -214.38 122.61 --yaw -15 --hora 22 --portas-abertas --frames 16
 ```
+
+O ponto do interior fica na casa da Fazenda dos Moura, no mapa padrão. Ao mudar a implantação
+da fazenda em `gerarFazenda`, confira se a câmera ainda começa dentro da casa e olha para a porta.
 
 ## Onde atuar nos gargalos
 
@@ -82,6 +86,7 @@ Comparação com `9ac6c568` em 1280×720, nível Alto, cabelo ondulado e Mesa ll
 (LLVM 19.1.7, duas threads). Os valores são as medianas de três rodadas de 24 quadros
 por cena. A cidade usa `--pos 320 345 --yaw 90 --hora 12`. O interior usa
 `--pos -219.94 143.38 --yaw 165 --hora 22 --portas-abertas`.
+Essas são as coordenadas do interior antes da ampliação das casas.
 
 | Cena | Média antes → depois | p95 antes → depois |
 | --- | ---: | ---: |
