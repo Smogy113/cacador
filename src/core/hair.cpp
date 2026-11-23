@@ -177,12 +177,17 @@ Vec3f direcao(float giro, float altura) {
 
 float linhaDoCabelo(float giro) {
     float absGiro = std::abs(giro);
-    return lerp(37.f, 18.f, smoothstep(4.f, 71.f, absGiro))
-         - 55.f * smoothstep(75.f, 166.f, absGiro) + .85f * std::cos(giro * .21f);
+    // A linha desce na testa e recua um pouco nas entradas antes das costeletas.
+    float frente = 22.f + 3.f * smoothstep(8.f, 45.f, absGiro);
+    return lerp(frente, 18.f, smoothstep(44.f, 71.f, absGiro))
+         - 55.f * smoothstep(75.f, 166.f, absGiro) + 1.1f * std::cos(giro * .21f + .55f);
 }
 
 float volumeCoroa(Vec3f d) {
-    return .0035f + .007f * smoothstep(.03f, .30f, std::abs(d.x)) * smoothstep(.1f, .8f, d.y);
+    float volume = .007f * smoothstep(.03f, .30f, std::abs(d.x)) * smoothstep(.1f, .8f, d.y);
+    float pertoDaRisca = 1.f - smoothstep(.03f, .25f, std::abs(d.x));
+    float folgaNaRisca = .002f * smoothstep(.25f, .7f, d.z) + .0015f * smoothstep(.70f, .98f, d.y);
+    return .0035f + volume + pertoDaRisca * folgaNaRisca;
 }
 
 class Cranio {
@@ -319,19 +324,21 @@ void cabeloOndulado(MalhaPele& m, float escala, Rgb cor) {
             }
         }
 
-        // Franja cortina: sobe perto da risca, acompanha as temporas e vira para fora nas pontas.
+        // As mechas da frente cruzam a linha do cabelo antes de abrir nas têmporas.
+        // As demais partem mais atrás, criando camadas sem engrossar a borda da testa.
         for (int k = 0; k < 8; ++k) {
             float u = k / 7.f;
             float fase = 2.2f * k + lado * .91f;
-            float raiz = lerp(40.f, 68.f, u);
+            float raiz = lerp(33.f, 68.f, u);
+            float assimetria = 3.f * lado * (1.f - u);
             auto alto = [&](Vec3f d, float folga) { return cranio.superficie(d, volumeCoroa(d) + folga); };
-            Vec3f inicio = alto(normalizar({lado * lerp(.03f, .13f, u),
+            Vec3f inicio = alto(normalizar({.018f + lado * lerp(.035f, .13f, u),
                                             std::sin(raiz * RAD), std::cos(raiz * RAD)}), .001f);
             Vec3f arco[] = {
                 inicio,
-                alto(direcao(lado * lerp(15.f, 33.f, u), lerp(43.f, 66.f, u)), .0045f),
-                alto(direcao(lado * lerp(37.f, 65.f, u), lerp(31.f, 45.f, u)), .005f),
-                alto(direcao(lado * lerp(43.f, 71.f, u), 15.f), .010f) + Vec3f{lado * .004f, 0, 0},
+                alto(direcao(lado * (lerp(13.f, 33.f, u) + assimetria), lerp(24.f, 66.f, u)), .0045f),
+                alto(direcao(lado * lerp(31.f, 65.f, u), lerp(13.f, 45.f, u) + assimetria + 2.f * std::sin(fase)), .005f),
+                alto(direcao(lado * lerp(42.f, 71.f, u), lerp(5.f, 15.f, u)), .010f) + Vec3f{lado * .004f, 0, 0},
                 {lado * lerp(.075f, .098f, u), lerp(1.684f, 1.666f, u), lerp(.129f, .080f, u)},
                 {lado * lerp(.087f, .121f, u), lerp(1.657f, 1.631f, u) + .008f * std::sin(fase), lerp(.108f, .061f, u)},
                 {lado * lerp(.110f, .130f, u), lerp(1.669f, 1.641f, u) + .010f * std::sin(fase), lerp(.077f, .039f, u)},
@@ -351,7 +358,7 @@ void cabeloOndulado(MalhaPele& m, float escala, Rgb cor) {
                 float flexDaPonta = .58f * smoothstep(.3f, 1.f, t);
                 pontos.push_back({p, std::max(flexSobreACabeca, flexDaPonta)});
             }
-            cabelo.fita(pontos, lerp(.0075f, .012f, u),
+            cabelo.fita(pontos, lerp(.009f, .012f, u),
                          cor * (.96f + .10f * std::sin(fase)), .97f);
         }
     }
