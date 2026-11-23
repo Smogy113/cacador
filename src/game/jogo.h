@@ -153,6 +153,9 @@ private:
     uint32_t rngTiro_ = 12345, rngEfeito_ = 18431;
     bool tiroOuvido_ = false;
     Sons sons_;
+    PisoSonoro pisoSonoro(Vec3f p) const;
+    float panSonoro(Vec3f fonte, float abertura) const;
+    void atualizarAmbienteSonoro(float dt, bool pausado = false);
     Grama grama_;
     // mapa na tela e rota ate o objetivo
     std::unique_ptr<Navegador> nav_;
@@ -178,7 +181,7 @@ private:
     FisicaCabelo cabelo_;
     void atualizarCabelo(float dt);
     void configurarGrama();
-    int passoAntes_ = 0, cascoAntes_ = 0;
+    int passoAntes_ = 0;
     EstadoBandido estadoChefeAntes_ = EstadoBandido::Vigiando;
     void iniciarCombate();
     void descarregarCombate();

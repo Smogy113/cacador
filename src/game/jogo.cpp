@@ -248,6 +248,29 @@ Jogo::~Jogo() {
     luz_.descarregar();
 }
 
+PisoSonoro Jogo::pisoSonoro(Vec3f p) const {
+    const Terreno& t = *terreno_;
+    float terrenoY = t.altura(p.x, p.z);
+    float pisoY = col_.alturaPiso(p.x, p.z, p.y);
+    if (pisoY > terrenoY + .08f && std::abs(p.y - pisoY) < .23f) return PisoSonoro::Madeira;
+    if (p.y < t.nivelAgua() - .06f && t.mascaraRio(p.x, p.z) > .16f) return PisoSonoro::Agua;
+    if (terrenoY > 50.f || t.normal(p.x, p.z).y < .79f) return PisoSonoro::Pedra;
+    if (t.mascaraEstrada(p.x, p.z) > .43f || terrenoY < t.nivelAgua() + .9f) return PisoSonoro::Terra;
+    return PisoSonoro::Capim;
+}
+
+float Jogo::panSonoro(Vec3f fonte, float abertura) const {
+    Vec3f d{fonte.x - jogador_.pos.x, 0, fonte.z - jogador_.pos.z};
+    Vec3f direitaCamera = rotY({-1, 0, 0}, rig_.yaw);
+    return .5f - abertura * dot(d, direitaCamera) / std::max(.2f, len(d));
+}
+
+void Jogo::atualizarAmbienteSonoro(float dt, bool pausado) {
+    if (!sons_.ok()) return;
+    bool interior = dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0;
+    sons_.ambiente(dt, relogio_.intensidadeTochas(), interior, pausado);
+}
+
 void Jogo::atualizar(float dt) {
     double tA = GetTime();
     struct Medir {  // tempo de processador da logica (painel F1)
@@ -264,6 +287,7 @@ void Jogo::atualizar(float dt) {
         if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) aceitarCartaz(quadroAberto_, cartazSel_);
         if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) quadroAberto_ = -1;
         if (!op_.congelarHora) relogio_.avancar(dt * dbg_.velTempo);
+        atualizarAmbienteSonoro(dt);
         return;
     }
     // painel de depuracao (F1): mouse livre; "pausar mundo" congela tudo menos o painel
@@ -272,13 +296,17 @@ void Jogo::atualizar(float dt) {
         dbg_.aberto = !dbg_.aberto;
         if (dbg_.aberto) EnableCursor(); else if (!pausado_) DisableCursor();
     }
-    if (dbg_.aberto && dbg_.pausado) return;
+    if (dbg_.aberto && dbg_.pausado) {
+        atualizarAmbienteSonoro(dt, true);
+        return;
+    }
     // mapa grande (M): o jogo continua, o jogador fica parado
     if (!op_.semEntrada && IsKeyPressed(KEY_M) && !pausado_) mapaAberto_ = !mapaAberto_;
     if (mapaAberto_) {
         if (IsKeyPressed(KEY_ESCAPE)) mapaAberto_ = false;
         if (!op_.congelarHora) relogio_.avancar(dt * dbg_.velTempo);
         atualizarRota(dt);
+        atualizarAmbienteSonoro(dt);
         return;
     }
     // pausa: Esc, ou a janela perdeu o foco
@@ -294,6 +322,7 @@ void Jogo::atualizar(float dt) {
             if (IsKeyPressed(KEY_ONE)) trocarNivel(Nivel::Baixo);
             if (IsKeyPressed(KEY_TWO)) trocarNivel(Nivel::Medio);
             if (IsKeyPressed(KEY_THREE)) trocarNivel(Nivel::Alto);
+            atualizarAmbienteSonoro(dt, pausado_);
             return;
         }
     }
@@ -317,14 +346,23 @@ void Jogo::atualizar(float dt) {
             rig_.distAlvo = 4.f;
             aoDesmontar();
         } else {
+            float faseAnterior = c.passada;
             moverCavalo(c, e, dt * dbg_.velJogador, *terreno_, col_);
-            if (int(c.passada / 1.5708f) != cascoAntes_) {  // quatro patas por ciclo
-                cascoAntes_ = int(c.passada / 1.5708f);
-                if (c.corpo.vel > 0.3f) sons_.casco(0.25f + 0.04f * c.corpo.vel);
-            }
             jogador_.pos = c.corpo.pos;
             jogador_.yaw = c.corpo.yaw;
             jogador_.vel = 0;
+            if (sons_.ok()) {
+                ContatosCavalo contatos = contatosCavalo(c.andadura, faseAnterior, c.passada);
+                if (contatos.total > 0) {
+                    PisoSonoro piso = pisoSonoro(c.corpo.pos);
+                    float volume = lerp(.44f, .67f, c.corpo.vel / VEL_GALOPE);
+                    for (int i = 0; i < contatos.total; ++i) {
+                        const BatidaCasco& batida = contatos.batidas[i];
+                        Vec3f fonte = c.corpo.pos + direitaJogador() * (batida.lado * .22f);
+                        sons_.casco(piso, volume * batida.intensidade, panSonoro(fonte, .09f));
+                    }
+                }
+            }
         }
     } else {
         cavaloPerto_ = -1;  // calculado antes da cacada: perto de cavalo, o E monta
@@ -340,7 +378,12 @@ void Jogo::atualizar(float dt) {
         loco_.atualizar(dt, jogador_.pos - antes, jogador_.yaw, mira_ <= 0.5f);
         if (loco_.passo() != passoAntes_) {  // um som a cada toque de calcanhar
             passoAntes_ = loco_.passo();
-            if (loco_.vel > 0.1f) sons_.passo(loco_.vel > 3.f ? 0.55f : 0.35f, dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0);
+            if (sons_.ok() && loco_.vel > .1f) {
+                float lado = (passoAntes_ % 2 != 0) ? .14f : -.14f;
+                Vec3f fonte = jogador_.pos + direitaJogador() * lado;
+                float esforco = smoothstep(.2f, 4.6f, loco_.vel);
+                sons_.passo(pisoSonoro(fonte), lerp(.27f, .55f, esforco), panSonoro(fonte, .09f));
+            }
         }
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
@@ -365,7 +408,7 @@ void Jogo::atualizar(float dt) {
     atualizarCombate(dt, e);
     atualizarCabelo(dt);
     atualizarRota(dt);
-    sons_.ambiente(dt, relogio_.intensidadeTochas(), dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0);
+    atualizarAmbienteSonoro(dt);
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
         if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);
@@ -679,9 +722,10 @@ void Jogo::atualizarPortas(float dt, bool interagir) {
         PortaMundo& p = ps[portaPerto_];
         if (!p.querAberta) {
             p.querAberta = true;
-            sons_.porta(true);
+            sons_.moverPorta(1.f / (1.f + melhor * .27f), panSonoro(p.dobradica, .30f));
         } else if (portaPodeFechar(p, jogador_.pos, RAIO_PESSOA)) {
             p.querAberta = false;
+            sons_.moverPorta(.75f / (1.f + melhor * .27f), panSonoro(p.dobradica, .30f));
         }
     }
     std::vector<CaixaGirada> folhas;
@@ -692,8 +736,11 @@ void Jogo::atualizarPortas(float dt, bool interagir) {
                 p.querAberta = true;
             } else {
                 p.abertura = alvo > p.abertura ? std::min(alvo, p.abertura + dt / 0.4f) : std::max(alvo, p.abertura - dt / 0.4f);
-                if (p.abertura == 0.f && std::hypot(p.dobradica.x - jogador_.pos.x, p.dobradica.z - jogador_.pos.z) < 8.f)
-                    sons_.porta(false);
+                if (p.abertura == 0.f && sons_.ok()) {
+                    Vec3f fecho = p.dobradica + rotY({p.largura, 0, 0}, p.rot);
+                    float dist = std::hypot(fecho.x - jogador_.pos.x, fecho.z - jogador_.pos.z);
+                    sons_.fecharPorta(smoothstep(12.f, 2.f, dist) / (1.f + dist * .28f), panSonoro(fecho, .34f));
+                }
             }
         }
         if (std::hypot(p.dobradica.x - jogador_.pos.x, p.dobradica.z - jogador_.pos.z) < 25.f) folhas.push_back(folhaPorta(p));

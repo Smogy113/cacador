@@ -133,3 +133,29 @@ TEST_CASE("anda em cima da ponte mesmo com barranco embaixo") {
     CHECK(c.corpo.pos.x > 690.f);  // antes da correcao travava em ~673
     CHECK(c.corpo.pos.y == doctest::Approx(topo + 1.f));
 }
+
+TEST_CASE("batidas do cavalo seguem a cadência de cada andadura") {
+    constexpr float ciclo = 6.283185307f;
+    CHECK(contatosCavalo(Andadura::Parado, 0, ciclo).total == 0);
+    CHECK(contatosCavalo(Andadura::Passo, 0, ciclo).total == 4);
+    CHECK(contatosCavalo(Andadura::Trote, 0, ciclo).total == 2);
+    CHECK(contatosCavalo(Andadura::Galope, 0, ciclo).total == 4);
+    CHECK(contatosCavalo(Andadura::Galope, 0, ciclo * .55f).total == 4);
+    CHECK(contatosCavalo(Andadura::Galope, ciclo * .55f, ciclo).total == 0);
+}
+
+TEST_CASE("batidas do cavalo cruzam quadros e ciclos sem se duplicar") {
+    constexpr float arco = 2.f * 6.283185307f;
+    for (Andadura andadura : {Andadura::Passo, Andadura::Trote, Andadura::Galope}) {
+        int total = 0;
+        float fase = 0;
+        while (fase < arco) {
+            float depois = std::min(arco, fase + .039f);
+            total += contatosCavalo(andadura, fase, depois).total;
+            fase = depois;
+        }
+        CHECK(total == (andadura == Andadura::Trote ? 4 : 8));
+        CHECK(contatosCavalo(andadura, arco, arco).total == 0);
+        CHECK(contatosCavalo(andadura, 0, 10.f * arco).total <= 4);
+    }
+}

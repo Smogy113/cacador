@@ -219,7 +219,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
         if (arma_.podeAtirar()) {
             arma_.atirar();
             if (dbg_.municaoInf) arma_.balas = Revolver::CAPACIDADE;
-            sons_.tiro(1.f, 0.5f, interior >= 0);
+            sons_.tiro(interior >= 0 ? AcusticaTiro::Interior : AcusticaTiro::Externa, 1.f, .47f);
             tiroOuvido_ = true;
             tiroT_ = 0.18f;
             jogador_.yaw = rig_.yaw;
@@ -271,12 +271,18 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     if (!recarregavaAntes && arma_.recarregando()) sons_.recarga();
     for (Vec3f c : ev.claroes) {
         Vec3f d = c - jogador_.pos;
-        float dist = std::hypot(d.x, d.z), lado = dist > 0.1f ? dot(d * (1.f / dist), direitaDe(rig_.yaw)) : 0.f;
-        int origem = dentroDeInterior(cenario_.interiores(), c);
-        Vec3f ouvido = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.4f : 1.55f, 0};
-        bool abafado = !col_.raioLivre(c, ouvido);
-        float ganho = 0.84f / (1.f + dist * 0.035f);
-        sons_.tiro(ganho * (abafado ? 0.38f : 1.f), 0.5f - 0.4f * lado, origem >= 0 && origem == interior, abafado);
+        if (sons_.ok()) {
+            Vec3f ouvido = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.4f : 1.55f, 0};
+            float dist = len(c - ouvido);
+            int origem = dentroDeInterior(cenario_.interiores(), c);
+            bool abafado = !col_.raioLivre(c, ouvido);
+            AcusticaTiro acustica = AcusticaTiro::Externa;
+            if (abafado) acustica = AcusticaTiro::Obstruida;
+            else if (origem >= 0 && origem == interior) acustica = AcusticaTiro::Interior;
+            else if (dist > 22.f) acustica = AcusticaTiro::Distante;
+            float ganho = .84f / (1.f + dist * .059f);
+            sons_.tiro(acustica, ganho * (abafado ? .50f : 1.f), panSonoro(c, .38f));
+        }
         efeitoTiro(c, normalizar(Vec3f{-d.x, 0, -d.z}));
     }
     if (const Bandido* c = cacada_.bando().chefe()) {

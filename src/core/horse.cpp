@@ -1,6 +1,7 @@
 #include "core/horse.h"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include "core/terrain.h"
 
 bool tentarMontar(Cavalo& c, const Corpo& j) {
@@ -71,4 +72,37 @@ void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const 
     // fase da passada: um ciclo a cada ~1,6 m (passo), 2,5 m (trote), 3,5 m (galope)
     float porMetro = c.andadura == Andadura::Galope ? 1.8f : (c.andadura == Andadura::Trote ? 2.5f : 3.9f);
     c.passada += dt * k.vel * porMetro;
+}
+
+ContatosCavalo contatosCavalo(Andadura andadura, float faseAnterior, float faseAtual) {
+    ContatosCavalo contatos;
+    if (andadura == Andadura::Parado || faseAtual <= faseAnterior) return contatos;
+
+    struct Apoio { float fase; BatidaCasco batida; };
+    // Passo tem quatro apoios espaçados. No trote as diagonais tocam juntas.
+    // No galope os quatro impactos se agrupam antes da fase de suspensão.
+    static constexpr Apoio passo[] = {
+        {1.13f, {.82f, 1.f}}, {2.70f, {1.f, -1.f}},
+        {4.27f, {.82f, -1.f}}, {5.84f, {1.f, 1.f}},
+    };
+    static constexpr Apoio trote[] = {{2.57f, {1.f, -.2f}}, {5.71f, {1.f, .2f}}};
+    static constexpr Apoio galope[] = {
+        {.80f, {.69f, 1.f}}, {1.61f, {.86f, -1.f}},
+        {2.76f, {1.f, 1.f}}, {3.22f, {.73f, -1.f}},
+    };
+    const Apoio* apoios = andadura == Andadura::Passo ? passo : (andadura == Andadura::Trote ? trote : galope);
+    const int n = andadura == Andadura::Trote ? 2 : 4;
+    constexpr double CICLO = 6.283185307179586;
+    // Procura o último cruzamento de cada apoio. Em um salto de quadro, evita
+    // tocar a mesma batida várias vezes ao mesmo tempo.
+    std::array<std::pair<double, BatidaCasco>, 4> cruzados{};
+    for (int i = 0; i < n; ++i) {
+        double fase = apoios[i].fase;
+        double ultima = fase + CICLO * std::floor((faseAtual - fase) / CICLO);
+        if (ultima > faseAnterior) cruzados[contatos.total++] = {ultima, apoios[i].batida};
+    }
+    std::sort(cruzados.begin(), cruzados.begin() + contatos.total,
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (int i = 0; i < contatos.total; ++i) contatos.batidas[i] = cruzados[i].second;
+    return contatos;
 }
