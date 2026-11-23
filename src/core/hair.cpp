@@ -35,9 +35,11 @@ Vec3f ConstrutorCabelo::escalar(Vec3f p) const {
     return {p.x * escala_ * massa_, p.y * escala_, p.z * escala_ * massa_};
 }
 
-void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, Rgb cor, float ao) {
+void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, Rgb cor, float ao, bool fina) {
     size_t inicio = m_.v.size(), n = pts.size();
-    if (n < 2 || inicio + n * 3 >= 64000) return;
+    // As mechas finas dispensam a coluna central que abaula as fitas mais largas.
+    const size_t colunas = fina ? 2 : 3;
+    if (n < 2 || inicio + n * colunas >= 64000) return;
     float flexPonta = pts.back().flex;
     std::vector<float> arco(n, 0.f);
     float raiz = 0.f;
@@ -60,28 +62,32 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
         Vec3f lado = normalizar(cross(tg, nr));
         float t = float(i) / (n - 1);
         float w = largura * lerp(.79f, 1.f, smoothstep(0.f, .25f, t)) * (1.f - .69f * smoothstep(.58f, 1.f, t));
-        for (int q = -1; q <= 1; ++q) {
+        float progresso = clamp01((arco[i] - raiz) / std::max(comprimentoLivre, .001f));
+        Vec3f tangente = normalizar(escalar(tg)) * (.05f + progresso);
+        for (size_t q = 0; q < colunas; ++q) {
+            float u = float(q) / (colunas - 1);
+            float transversal = 2.f * u - 1.f;
             // Faixa abaulada no centro, para que o brilho mostre o volume de cada mecha.
-            Vec3f x = p + lado * (float(q) * w) + nr * (q == 0 ? w * .25f : 0.f);
-            Vec3f normal = normalizar(nr + lado * (float(q) * .38f));
+            Vec3f x = p + lado * (transversal * w) + nr * (u == .5f ? w * .25f : 0.f);
+            Vec3f normal = normalizar(nr + lado * (transversal * .38f));
             VertPele v;
             v.pos = escalar(x);
             v.normal = normalizar({normal.x / massa_, normal.y, normal.z / massa_});
             v.cor = cor;
             v.material = MAT_CARTAO + .5f;
             v.ao = ao;
-            v.pelos = (q + 1) * .5f;
+            v.pelos = u;
             v.tv = t;
-            float progresso = clamp01((arco[i] - raiz) / std::max(comprimentoLivre, .001f));
-            v.tang = normalizar(escalar(tg)) * (.05f + progresso);
+            v.tang = tangente;
             v.osso[0] = v.osso[1] = CABECA;
             m_.v.push_back(v);
         }
     }
     for (size_t i = 0; i + 1 < n; ++i) {
         bool livre = pts[i + 1].flex > .14f;
-        for (size_t q = 0; q < 2; ++q) {
-            uint16_t a = uint16_t(inicio + i * 3 + q), b = a + 1, c = a + 4, d = a + 3;
+        for (size_t q = 0; q + 1 < colunas; ++q) {
+            uint16_t a = uint16_t(inicio + i * colunas + q), b = a + 1;
+            uint16_t c = uint16_t(b + colunas), d = uint16_t(a + colunas);
             m_.idx.insert(m_.idx.end(), {a, b, c, a, c, d});
             if (livre) m_.idx.insert(m_.idx.end(), {a, c, b, a, d, c});
         }
@@ -294,17 +300,19 @@ void cabeloOndulado(MalhaPele& m, float escala, Rgb cor) {
                 if (!porCima) {
                     // Estas mechas finas saem da mesma camada e se separam só no comprimento livre.
                     std::vector<PontoCabelo> finos;
-                    size_t primeira = amostrasArco - 2;
+                    constexpr int amostras = 4;
+                    size_t primeira = amostrasArco - 1, ultima = pontos.size() - 1;
                     float alcance = .006f + .011f * (.5f + .5f * std::sin(fase));
-                    for (size_t i = primeira; i < pontos.size(); ++i) {
-                        float t = float(i - primeira) / (pontos.size() - 1 - primeira);
+                    for (int j = 0; j < amostras; ++j) {
+                        size_t i = primeira + (ultima - primeira) * j / (amostras - 1);
+                        float t = float(i - primeira) / (ultima - primeira);
                         float solto = smoothstep(.25f, 1.f, t);
                         Vec3f p = pontos[i].p + fora * (.0015f + solto * .006f)
                                 + ladoDaMecha * (.002f + solto * alcance * std::cos(fase))
                                 + Vec3f{0, -solto * alcance, 0};
                         finos.push_back({p, lerp(pontos[i].flex, 1.f, solto * .85f)});
                     }
-                    cabelo.fita(finos, .00105f + .0006f * std::abs(std::sin(fase)), cor * (tom + .13f), .95f);
+                    cabelo.fita(finos, .00105f + .0006f * std::abs(std::sin(fase)), cor * (tom + .13f), .95f, true);
                 }
             }
         }

@@ -123,7 +123,7 @@ struct PontoCabelo { Vec3f p; float flex; };
 class ConstrutorCabelo {
 public:
     ConstrutorCabelo(MalhaPele& malha, Vec3f centro, float escala, float massa);
-    void fita(const std::vector<PontoCabelo>& pontos, float largura, Rgb cor, float ao);
+    void fita(const std::vector<PontoCabelo>& pontos, float largura, Rgb cor, float ao, bool fina = false);
     void finalizar();
 
 private:

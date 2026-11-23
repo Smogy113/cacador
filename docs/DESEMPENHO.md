@@ -152,6 +152,7 @@ A parte livre começa onde a flexibilidade ultrapassa o limiar de fixação. A p
 dobra e a parametrização no shader usam o comprimento de arco dessa parte. `finalizar()`
 seleciona até 96 guias no desktop e 32 no WebGL 1. Cada fita distinta recebe seu próprio
 guia quando há espaço na paleta. As demais usam os dois guias mais próximos.
+No ondulado, cada mecha fina do contorno usa três trechos de fita plana, com duas faces.
 
 Até oito guias principais simulam a dobra e a ponta com subpassos de até 1/120 s e colisores
 aproximados para cabeça, nuca e ombros. Cada guia secundário herda a dobra de dois principais
