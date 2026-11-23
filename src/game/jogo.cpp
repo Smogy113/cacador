@@ -458,19 +458,14 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         if (dot(d, d) < 15.f * 15.f) matCabeca = &luz_.materialCabeca();
     }
     luz_.definirHeroi(true);
-    auto desenhar = [&](Vec3f pos, float yaw, const Pose& pose) {
-        if (op_.cabeloOndulado)
-            luz_.definirCabelo(matPele, cabelo_.deformacao(), ej.ossos[CABECA].fim.y / 1.8f);
-        modeloJogador_.desenhar(matPele, pos, yaw, pose, hd, matCabeca);
-        if (op_.cabeloOndulado) luz_.definirCabelo(matPele, {}, 0.f);
-    };
     if (montadoEm_ >= 0) {
         const Cavalo& c = cavalos_[montadoEm_];
         Pose pc = poseDaMontaria(montadoEm_);
         Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc);
-        desenhar(q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c, pc));
+        modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw,
+                                 poseMontado(ej, c, pc), hd, matCabeca);
     } else {
-        desenhar(jogador_.pos, jogador_.yaw, poseDoJogador(ej));
+        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd, matCabeca);
     }
     luz_.definirHeroi(false);
 }
@@ -524,7 +519,7 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
 }
 
 void Jogo::teleportar(float x, float z, float yawGraus, float hora) {
-    cabelo_.reiniciar();
+    modeloJogador_.reiniciarCabelo();
     if (montadoEm_ >= 0) { cavalos_[montadoEm_].montado = false; montadoEm_ = -1; rig_.distAlvo = 4.f; }
     jogador_.pos = {x, terreno_->altura(x, z), z};
     jogador_.yaw = rig_.yaw = yawGraus * DEG2RAD;
@@ -658,7 +653,7 @@ void Jogo::configurarGrama() {
 }
 
 void Jogo::atualizarCabelo(float dt) {
-    if (!op_.cabeloOndulado || dt <= 0.f) return;
+    if (!modeloJogador_.temCabelo() || dt <= 0.f) return;
     const Esqueleto& e = modeloJogador_.esqueleto();
     Vec3f base = jogador_.pos;
     float yaw = jogador_.yaw;
@@ -673,11 +668,8 @@ void Jogo::atualizarCabelo(float dt) {
     } else {
         pose = poseDoJogador(e);
     }
-    static thread_local std::vector<Mat4> ossos;
-    calcularMatrizes(e, pose, ossos);
-    Mat4 mundo = Mat4::trans(base) * Mat4::rotY(yaw);
     Vec3f vento{1.0f + .7f * std::sin(tempo_ * 1.9f), 0, .8f * std::cos(tempo_ * 1.1f)};
-    cabelo_.atualizar(dt, mundo * ossos[CABECA], mundo * ossos[PESCOCO], e.ossos[CABECA].fim.y / 1.8f, vento);
+    modeloJogador_.atualizarCabelo(dt, base, yaw, pose, vento);
 }
 
 // Rota ate o objetivo da recompensa (esconderijo -> procurado -> xerife), recalculada quando o

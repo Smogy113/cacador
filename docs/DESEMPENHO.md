@@ -146,10 +146,15 @@ desenho permaneceu igual nas duas cenas.
 
 ## Física do cabelo
 
-O penteado ondulado usa três guias, um em cada lateral e outro na nuca. `hair_physics.cpp`
-simula a dobra e a ponta de cada guia, com a raiz presa à cabeça. Os subpassos de até 1/120 s
-limitam a variação com o FPS. O shader interpola os deslocamentos entre os guias e reaproveita
-a mesma deformação no passe principal e nas sombras, com a malha original na GPU.
+Cada corte descreve suas fitas do couro cabeludo até as pontas com `loft::ConstrutorCabelo`.
+Os pontos fornecem a posição em repouso e a flexibilidade crescente ao longo da fita.
+`finalizar()` seleciona até oito guias representativos e vincula cada fita aos dois mais
+próximos. As fitas rentes ao couro cabeludo podem ficar presas à cabeça sem criar guias.
+
+`hair_physics.cpp` atualiza somente a dobra e a ponta de cada guia, com subpassos de até
+1/120 s e colisores aproximados para cabeça, nuca e ombros. O comprimento e a flexibilidade
+de cada mecha determinam a rigidez e o desvio máximo. O shader interpola os deslocamentos
+nos passes de cor e de sombra, sem reenviar a malha a cada quadro ou acrescentar chamadas de desenho.
 
 Ao ajustar rigidez, amortecimento ou colisão, use `--cabelo ondulado --retrato .65 --girar-camera 75 --direto`
 para observar uma corrida, uma parada e uma virada de perto. Confira também o movimento a cavalo.

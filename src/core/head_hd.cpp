@@ -325,6 +325,7 @@ void cabecaHD(Construtor& k, float s, float ms, const Visual& vis) {
 
 void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
     const Vec3f centro{0, 1.7155f, -0.014f};
+    ConstrutorCabelo cabelo(m, centro, s, ms);
     constexpr float rad = 3.14159265f / 180.f;
     uint32_t rng = 9137u;
     auto rnd = [&]() { rng = rng * 1664525u + 1013904223u; return float((rng >> 8) & 0xFFFF) / 65535.f; };
@@ -409,7 +410,7 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
                 pts.push_back({p, lerp(0.14f, 1.f, t * t)});
             }
             float tom = (base ? 0.77f : 1.02f) * lerp(0.91f, 1.18f, rnd());
-            fitaDeCabelo(m, pts, centro, s, ms, (simples ? 0.020f : 0.016f) * lerp(0.78f, 1.28f, rnd()),
+            cabelo.fita(pts, (simples ? 0.020f : 0.016f) * lerp(0.78f, 1.28f, rnd()),
                          cor * tom, base ? 0.73f : 0.94f);
         }
     }
@@ -429,8 +430,9 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples) {
             pts.push_back({naCabeca(direcao(ang, altura), volume), 0.49f * smoothstep(0.2f, 1.f, t)});
         }
         float largura = lerp(0.006f, 0.010f, rnd());
-        fitaDeCabelo(m, pts, centro, s, ms, largura, cor * lerp(0.90f, 1.18f, rnd()), 0.94f);
+        cabelo.fita(pts, largura, cor * lerp(0.90f, 1.18f, rnd()), 0.94f);
     }
+    cabelo.finalizar();
 }
 
 void cartoesDePelo(MalhaPele& m, Rgb corPelo) {

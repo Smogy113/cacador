@@ -14,6 +14,46 @@ Matrix paraRaylib(const Mat4& m) {
 
 static unsigned char c8(float v) { return (unsigned char)(std::clamp(v, 0.f, 1.f) * 255.f + 0.5f); }
 
+namespace {
+
+struct UniformesCabelo {
+    unsigned int shader = 0;
+    int ativo, meio, ponta, centro, raios;
+};
+
+const UniformesCabelo& uniformesCabelo(Shader shader) {
+    // Um programa no passe de cor e outro na profundidade.
+    static std::array<UniformesCabelo, 2> cache{};
+    static size_t proximo = 0;
+    for (const auto& loc : cache) if (loc.shader == shader.id) return loc;
+    auto& loc = cache[proximo++ % cache.size()];
+    loc = {shader.id, GetShaderLocation(shader, "cabeloAtivo"), GetShaderLocation(shader, "cabeloMeio[0]"),
+           GetShaderLocation(shader, "cabeloPonta[0]"), GetShaderLocation(shader, "cabeloCentro"),
+           GetShaderLocation(shader, "cabeloRaios")};
+    return loc;
+}
+
+void enviarCabelo(Shader shader, const UniformesCabelo& loc, const FisicaCabelo& cabelo) {
+    float ativo = 1.f;
+    const auto& deformacao = cabelo.deformacao();
+    const auto& perfil = cabelo.perfil();
+    float meio[MAX_GUIAS_CABELO][3], ponta[MAX_GUIAS_CABELO][3];
+    for (size_t i = 0; i < perfil.quantidade; ++i) {
+        Vec3f m = deformacao.meio[i], p = deformacao.ponta[i];
+        meio[i][0] = m.x; meio[i][1] = m.y; meio[i][2] = m.z;
+        ponta[i][0] = p.x; ponta[i][1] = p.y; ponta[i][2] = p.z;
+    }
+    Vec3f centro = perfil.colisores.centroCabeca, raios = perfil.colisores.raiosCabeca;
+    float centroShader[] = {centro.x, centro.y, centro.z}, raiosShader[] = {raios.x, raios.y, raios.z};
+    SetShaderValue(shader, loc.ativo, &ativo, SHADER_UNIFORM_FLOAT);
+    SetShaderValueV(shader, loc.meio, meio, SHADER_UNIFORM_VEC3, int(perfil.quantidade));
+    SetShaderValueV(shader, loc.ponta, ponta, SHADER_UNIFORM_VEC3, int(perfil.quantidade));
+    SetShaderValue(shader, loc.centro, centroShader, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, loc.raios, raiosShader, SHADER_UNIFORM_VEC3);
+}
+
+}  // namespace
+
 void MalhaEsqueleto::carregar(const MalhaPele& p) {
     Mesh m{};
     size_t n = p.v.size();
@@ -33,18 +73,36 @@ void MalhaEsqueleto::carregar(const MalhaPele& p) {
         m.texcoords[i * 2] = v.ao; m.texcoords[i * 2 + 1] = v.material;
         m.tangents[i * 4] = v.tang.x; m.tangents[i * 4 + 1] = v.tang.y; m.tangents[i * 4 + 2] = v.tang.z; m.tangents[i * 4 + 3] = v.tv;
         m.texcoords2[i * 2] = float(v.osso[0]);
-        m.texcoords2[i * 2 + 1] = float(v.osso[1]) + std::clamp(v.peso, 0.f, 1.f) * 0.99f;
+        if (v.guiaCabelo[0] != SEM_GUIA_CABELO) {
+            // Sinal negativo marca uma fita presa ao osso A. Codifica o par
+            // de guias no inteiro e a mistura na fração, sem outro atributo.
+            static_assert(MAX_GUIAS_CABELO == 8, "Sincronizar com FISICA_MECHA");
+            int par = v.guiaCabelo[0] * MAX_GUIAS_CABELO + v.guiaCabelo[1];
+            m.texcoords2[i * 2 + 1] = -float(1 + par) - v.misturaGuias * (.99f / 255.f);
+        } else {
+            m.texcoords2[i * 2 + 1] = float(v.osso[1]) + std::clamp(v.peso, 0.f, 1.f) * .99f;
+        }
         m.colors[i * 4] = c8(v.cor.r); m.colors[i * 4 + 1] = c8(v.cor.g); m.colors[i * 4 + 2] = c8(v.cor.b); m.colors[i * 4 + 3] = c8(v.pelos);
     }
     std::copy(p.idx.begin(), p.idx.end(), m.indices);
     UploadMesh(&m, false);
     mesh_ = m;
+    cabelo_ = p.cabelo.quantidade ? std::make_unique<FisicaCabelo>(p.cabelo) : nullptr;
     ok_ = true;
 }
 
 void MalhaEsqueleto::descarregar() {
     if (ok_) UnloadMesh(mesh_);
+    cabelo_.reset();
     ok_ = false;
+}
+
+void MalhaEsqueleto::atualizarCabelo(float dt, const Mat4& cabeca, const Mat4& pescoco, const Mat4& peito, Vec3f vento) {
+    if (cabelo_) cabelo_->atualizar(dt, cabeca, pescoco, peito, vento);
+}
+
+void MalhaEsqueleto::reiniciarCabelo() {
+    if (cabelo_) cabelo_->reiniciar();
 }
 
 void MalhaEsqueleto::desenhar(Material& mat, const std::vector<Mat4>& ossos, Matrix modelo) const {
@@ -65,5 +123,13 @@ void MalhaEsqueleto::desenhar(Material& mat, const std::vector<Mat4>& ossos, Mat
     }
     rlEnableShader(mat.shader.id);
     rlSetUniformMatrices(ultimoLoc, buf, 17);
-    DrawMesh(mesh_, mat, modelo);
+    if (cabelo_ && cabelo_->iniciada()) {
+        const auto& loc = uniformesCabelo(mat.shader);
+        enviarCabelo(mat.shader, loc, *cabelo_);
+        DrawMesh(mesh_, mat, modelo);
+        const float desligado = 0.f;
+        SetShaderValue(mat.shader, loc.ativo, &desligado, SHADER_UNIFORM_FLOAT);
+    } else {
+        DrawMesh(mesh_, mat, modelo);
+    }
 }

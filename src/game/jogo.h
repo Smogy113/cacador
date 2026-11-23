@@ -7,7 +7,6 @@
 #include "core/camrig.h"
 #include "core/collision.h"
 #include "core/daytime.h"
-#include "core/hair_physics.h"
 #include "core/horse.h"
 #include "core/locomocao.h"
 #include "core/motion.h"
@@ -179,7 +178,6 @@ public:
     void imprimirPerfil() const;  // tempos por parte (capturas com --depuracao)
 private:
     Vec3f direitaJogador() const { return {-std::cos(jogador_.yaw), 0, std::sin(jogador_.yaw)}; }
-    FisicaCabelo cabelo_;
     void atualizarCabelo(float dt);
     void configurarGrama();
     int passoAntes_ = 0;

@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <vector>
 #include "core/skeleton.h"
+#include "core/hair_profile.h"
 
 enum OssoHumano {
     QUADRIL, COLUNA, PEITO, PESCOCO, CABECA,
@@ -43,6 +44,8 @@ struct VertPele {
     Rgb cor;
     float ao = 1.f;
     uint8_t osso[2] = {0, 0};
+    uint8_t guiaCabelo[2] = {SEM_GUIA_CABELO, SEM_GUIA_CABELO};
+    uint8_t misturaGuias = 0;  // fração do segundo guia em 0..255
     float peso = 1.f;
     float material = 0;  // MAT_*
     float pelos = 0;      // densidade de pelos (barba, sobrancelha, cabelo) 0..1; no cartao: u (0 ou 1, atravessa a fita)
@@ -55,6 +58,7 @@ struct VertPele {
 struct MalhaPele {
     std::vector<VertPele> v;
     std::vector<uint16_t> idx;  // triangulos
+    PerfilCabelo cabelo;
     size_t triangulos() const { return idx.size() / 3; }
 };
 

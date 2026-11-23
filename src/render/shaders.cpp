@@ -1853,7 +1853,8 @@ void main() {
 )";
 
 // ---------- personagens com esqueleto (deformados na placa de video) ----------
-// vertexTexCoord2: x = osso A, y = osso B + 0.99 * peso de A
+// vertexTexCoord2: x = osso A, y = osso B + 0.99 * peso de A.
+// Nas fitas de cabelo, y negativo guarda os guias e o osso A carrega a fita.
 #define CORPO_SKIN R"(
 ATTR vec3 vertexPosition;
 ATTR vec2 vertexTexCoord;
@@ -1867,6 +1868,7 @@ uniform mat4 ossos[17];
 mat4 matrizPele() {
     int a = int(vertexTexCoord2.x + 0.5);
     float fy = vertexTexCoord2.y;
+    if (fy < 0.0) return ossos[a];
     int b = int(floor(fy));
     float w = fract(fy) / 0.99;
     return ossos[a] * w + ossos[b] * (1.0 - w);
@@ -1874,25 +1876,30 @@ mat4 matrizPele() {
 )"
 
 #define FISICA_MECHA R"(
-uniform vec3 cabeloMeio[3], cabeloPonta[3];
-uniform float escalaCabelo;
-vec3 deslocarMecha(float w) {
-    if (escalaCabelo <= 0.0 || w <= 0.08) return vec3(0.0);
-    vec3 p = vertexPosition / escalaCabelo;
-    // Mistura os dois guias laterais com o da nuca no espaco de repouso.
-    float esquerda = smoothstep(-0.025, 0.025, p.x);
-    float nuca = 1.0 - smoothstep(-0.036, 0.071, p.z);
-    vec3 meio = mix(mix(cabeloMeio[1], cabeloMeio[0], esquerda), cabeloMeio[2], nuca);
-    vec3 ponta = mix(mix(cabeloPonta[1], cabeloPonta[0], esquerda), cabeloPonta[2], nuca);
-    float t = smoothstep(0.08, 0.63, w);
-    vec3 desloc = mix(meio * (2.0 * t), mix(meio, ponta, 2.0 * t - 1.0), smoothstep(0.42, 0.58, t));
+uniform vec3 cabeloMeio[8], cabeloPonta[8];
+uniform vec3 cabeloCentro, cabeloRaios;
+uniform float cabeloAtivo;
+vec3 deslocarMecha() {
+    float t = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
+    if (t <= 0.0) return vec3(0.0);
+    float codigo = -vertexTexCoord2.y - 1.0;
+    int par = int(floor(codigo));
+    int a = par / 8, b = par - 8 * a;
+    float peso = fract(codigo) / 0.99;
+    vec3 meio = mix(cabeloMeio[a], cabeloMeio[b], peso);
+    vec3 ponta = mix(cabeloPonta[a], cabeloPonta[b], peso);
+    // Curva quadrática que passa pela raiz, dobra e ponta.
+    vec3 desloc = t * (4.0 * (1.0 - t) * meio + (2.0 * t - 1.0) * ponta);
 
-    // Limita o movimento de cada vertice contra o cranio sem alterar o encaixe em repouso.
-    vec3 raio = vec3(0.077, 0.095, 0.103);
-    vec3 q0 = (p - vec3(0.0, 1.698, 0.055)) / raio;
-    vec3 q = q0 + desloc / (escalaCabelo * raio);
+    // Mantém cada vértice fora do elipsoide ou com a folga original do corte.
+    vec3 raios = max(cabeloRaios, vec3(0.0001));
+    vec3 q0 = (vertexPosition - cabeloCentro) / raios;
+    vec3 q = q0 + desloc / raios;
     float base = min(1.0, dot(q0, q0)), d = dot(q, q);
-    if (d < base) desloc = (q * sqrt(base / max(1e-5, d)) - q0) * raio * escalaCabelo;
+    if (d < base) {
+        vec3 direcao = d > 1e-8 ? q * inversesqrt(d) : normalize(q0);
+        desloc = (direcao * sqrt(base) - q0) * raios;
+    }
     return desloc;
 }
 )"
@@ -1914,9 +1921,9 @@ void main() {
     vec4 pl = S * vec4(vertexPosition, 1.0);
     vec3 tangente = mat3(S) * vertexTangent.xyz;
     vec3 normal = normalize(mat3(S) * vertexNormal);
-    if (vertexTexCoord.y > 24.25 && vertexTexCoord.y < 24.75) {
+    if (cabeloAtivo > 0.5 && vertexTexCoord2.y < 0.0) {
         float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
-        vec3 desloc = mat3(S) * deslocarMecha(w);
+        vec3 desloc = mat3(S) * deslocarMecha();
         pl.xyz += desloc;
         vec3 fio = normalize(tangente + desloc * 2.8);
         normal = normalize(normal - fio * dot(normal, fio) * w);
@@ -1957,10 +1964,7 @@ void main() {
     mechaUV = vec2(vertexColor.a, vertexTangent.w);
     mat4 S = matrizPele();
     vec4 pl = S * vec4(vertexPosition, 1.0);
-    if (tipo > 24.25 && tipo < 24.75) {
-        float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
-        pl.xyz += mat3(S) * deslocarMecha(w);
-    }
+    if (cabeloAtivo > 0.5 && vertexTexCoord2.y < 0.0) pl.xyz += mat3(S) * deslocarMecha();
     gl_Position = mvp * pl;
 }
 )";

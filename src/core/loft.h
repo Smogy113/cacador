@@ -118,8 +118,26 @@ void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples);
 void cabeloOndulado(MalhaPele& m, float escala, Rgb cor);
 
 struct PontoCabelo { Vec3f p; float flex; };
-void fitaDeCabelo(MalhaPele& m, const std::vector<PontoCabelo>& pontos, Vec3f centro,
-                  float escala, float massa, float largura, Rgb cor, float ao);
+// O corte fornece fitas com flexibilidade crescente da raiz à ponta.
+// Use um construtor por malha e finalize depois de adicionar todas as fitas.
+class ConstrutorCabelo {
+public:
+    ConstrutorCabelo(MalhaPele& malha, Vec3f centro, float escala, float massa);
+    void fita(const std::vector<PontoCabelo>& pontos, float largura, Rgb cor, float ao);
+    void finalizar();
+
+private:
+    struct Fita {
+        GuiaCabelo guia;
+        float comprimento;
+        size_t inicio, fim;
+    };
+    MalhaPele& m_;
+    Vec3f centro_;
+    float escala_, massa_;
+    std::vector<Fita> fitas_;
+    Vec3f escalar(Vec3f p) const;
+};
 // Cascas de pelo para todo vertice com pelos > 0 (chamar depois das normais)
 void cascasDePelo(MalhaPele& m, Rgb corPelo);
 // Cartoes de pelo (fitas com fios) para todo vertice com pelos e direcao de crescimento

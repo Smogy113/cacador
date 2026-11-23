@@ -40,6 +40,18 @@ void ModeloHumano::descarregar() {
     cabeca_.descarregar();
 }
 
+void ModeloHumano::atualizarCabelo(float dt, Vec3f pos, float yaw, const Pose& pose, Vec3f vento) {
+    calcularMatrizes(esq_, pose, ossos_);
+    Mat4 mundo = Mat4::trans(pos) * Mat4::rotY(yaw);
+    Mat4 cabeca = mundo * ossos_[CABECA], pescoco = mundo * ossos_[PESCOCO], peito = mundo * ossos_[PEITO];
+    for (auto* malha : {&malha_, &hd_, &hdSemPele_})
+        malha->atualizarCabelo(dt, cabeca, pescoco, peito, vento);
+}
+
+void ModeloHumano::reiniciarCabelo() {
+    for (auto* malha : {&malha_, &hd_, &hdSemPele_}) malha->reiniciarCabelo();
+}
+
 void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose, bool hd, Material* matCabeca) const {
     calcularMatrizes(esq_, pose, ossos_);
     Matrix modelo = MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z));
