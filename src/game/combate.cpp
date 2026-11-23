@@ -386,7 +386,7 @@ void Jogo::desenharCombatentes(Material& matPele, bool sombraBolha, float distMa
         bool naGarupa = b.chefe && cacada_.carga() == Carga::Garupa && montadoEm_ >= 0;
         if (naGarupa) {
             const Cavalo& c = cavalos_[montadoEm_];
-            Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_);
+            Pose pc = poseDaMontaria(montadoEm_);
             Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc) - frenteDe(c.corpo.yaw) * 0.45f;
             pos = q - Vec3f{0, e.ossos[QUADRIL].inicio.y - 0.22f, 0};
             yaw = c.corpo.yaw + 1.5708f;

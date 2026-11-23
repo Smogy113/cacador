@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include "core/anim.h"
+#include "core/horse.h"
 
 static const Esqueleto& esq() {
     static Esqueleto e = esqueletoHumano({});
@@ -62,8 +63,8 @@ static const Esqueleto& cav() {
 TEST_CASE("cavalo parado com cascos no chão") {
     for (float t = 0; t < 5; t += 0.7f) CHECK(alturaDosCascos(cav(), poseCavalo(cav(), 0, 0, t)) == doctest::Approx(0).epsilon(0.01));
 }
-TEST_CASE("cavalo andando nunca afunda nem flutua") {
-    for (int a = 1; a <= 3; a++)
+TEST_CASE("cavalo mantém apoio ao passo e ao trote") {
+    for (int a = 1; a <= 2; a++)
         for (float f = 0; f < 6.3f; f += 0.4f) CHECK(alturaDosCascos(cav(), poseCavalo(cav(), f, a, 0)) == doctest::Approx(0).epsilon(0.01));
 }
 TEST_CASE("a sola da malha do cavalo acompanha o apoio das andaduras") {
@@ -77,11 +78,44 @@ TEST_CASE("a sola da malha do cavalo acompanha o apoio das andaduras") {
                 for (const auto& v : malha.v) {
                     if (v.pos.y == 0.f) apoio = std::min(apoio, matrizes[v.osso[0]].ponto(v.pos).y);
                 }
-                CHECK(std::abs(apoio) < .005f);
+                CHECK(apoio >= -.005f);
+                CHECK(apoio < (andadura == int(Andadura::Galope) ? .19f : .005f));
             }
         }
     }
 }
+TEST_CASE("galope: os cascos plantam nas batidas e avançam juntos com o chão") {
+    const int cascos[] = {C_CASCO_TD, C_CASCO_TE, C_CASCO_DD, C_CASCO_DE};
+    std::vector<Mat4> matrizes;
+    constexpr float trecho = .65f;  // ainda no apoio, alguns quadros depois do toque
+    for (size_t i = 0; i < TOQUES_GALOPE.size(); ++i) {
+        int casco = cascos[i];
+        Vec3f sola = cav().ossos[casco].fim;
+        float fase = TOQUES_GALOPE[i] + .001f;
+        calcularMatrizes(cav(), poseCavalo(cav(), fase, int(Andadura::Galope), 0), matrizes);
+        Vec3f primeiro = matrizes[casco].ponto(sola);
+        CHECK(std::abs(primeiro.y) < .002f);
+        calcularMatrizes(cav(), poseCavalo(cav(), fase + trecho, int(Andadura::Galope), 0), matrizes);
+        Vec3f segundo = matrizes[casco].ponto(sola);
+        CHECK(std::abs(segundo.y) < .002f);
+        CHECK(segundo.z + trecho / FASE_GALOPE_POR_METRO == doctest::Approx(primeiro.z).epsilon(.002));
+    }
+}
+
+TEST_CASE("galope: há suspensão e transição suave a partir do trote") {
+    CHECK(alturaDosCascos(cav(), poseCavalo(cav(), 5.95f, int(Andadura::Galope), 0)) > .08f);
+    Cavalo c;
+    c.andadura = Andadura::Trote;
+    c.passada = 5.95f;
+    c.corpo.vel = 8.49f;
+    Pose antes = poseCavalo(cav(), c, 0);
+    c.andadura = Andadura::Galope;
+    c.corpo.vel = 8.51f;
+    Pose depois = poseCavalo(cav(), c, 0);
+    CHECK(len(depois.raiz - antes.raiz) < .008f);
+    for (size_t i = 0; i < antes.rot.size(); ++i) CHECK(len(depois.rot[i] - antes.rot[i]) < .04f);
+}
+
 TEST_CASE("trote: diagonais juntas") {
     Pose p = poseCavalo(cav(), 1.2f, 2, 0);
     CHECK(p.rot[C_BRACO_DE].x == doctest::Approx(p.rot[C_COXA_TD].x).epsilon(0.05));

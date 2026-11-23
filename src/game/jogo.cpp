@@ -445,6 +445,10 @@ bool Jogo::atrasDaCamera(Vec3f p) const {
     return dot(d, f) < dist * 0.35f;  // ~70 graus para cada lado (a tela tem ~53)
 }
 
+Pose Jogo::poseDaMontaria(size_t indice) const {
+    return poseCavalo(modelosCavalo_[indice].esqueleto(), cavalos_[indice], tempo_ + float(indice) * 3.7f);
+}
+
 void Jogo::desenharJogador(Material& matPele, bool hd) {
     const Esqueleto& ej = modeloJogador_.esqueleto();
     // cabeca por raymarching: so no passe principal (as sombras usam a malha), Alto/Medio, perto da camera
@@ -462,9 +466,9 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
     };
     if (montadoEm_ >= 0) {
         const Cavalo& c = cavalos_[montadoEm_];
-        Pose pc = poseCavalo(modelosCavalo_[montadoEm_].esqueleto(), c.passada, int(c.andadura), tempo_ + float(montadoEm_) * 3.7f);
+        Pose pc = poseDaMontaria(montadoEm_);
         Vec3f q = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, pc);
-        desenhar(q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c.passada, int(c.andadura)));
+        desenhar(q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw, poseMontado(ej, c, pc));
     } else {
         desenhar(jogador_.pos, jogador_.yaw, poseDoJogador(ej));
     }
@@ -496,7 +500,7 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         // O mapa de sombras usa a silhueta leve com os mesmos ossos.
         bool perto = passePrincipal_ && d2 < DIST_DETALHE_CAVALO * DIST_DETALHE_CAVALO;
         const ModeloCavaloAnat& modelo = modelosCavalo_[i];
-        Pose pc = poseCavalo(modelo.esqueleto(), c.passada, int(c.andadura), tempo_ + float(i) * 3.7f);
+        Pose pc = poseDaMontaria(i);
         modelo.desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc, perto);
         trisAtores_ += modelo.triangulos(perto);
         chamadasAtores_++;
@@ -662,10 +666,10 @@ void Jogo::atualizarCabelo(float dt) {
     if (montadoEm_ >= 0) {
         const Cavalo& cavalo = cavalos_[montadoEm_];
         const auto& modelo = modelosCavalo_[montadoEm_];
-        Pose cav = poseCavalo(modelo.esqueleto(), cavalo.passada, int(cavalo.andadura), tempo_ + float(montadoEm_) * 3.7f);
+        Pose cav = poseDaMontaria(montadoEm_);
         base = modelo.assento(cavalo.corpo.pos, cavalo.corpo.yaw, cav) - Vec3f{0, e.ossos[QUADRIL].inicio.y, 0};
         yaw = cavalo.corpo.yaw;
-        pose = poseMontado(e, cavalo.passada, int(cavalo.andadura));
+        pose = poseMontado(e, cavalo, cav);
     } else {
         pose = poseDoJogador(e);
     }

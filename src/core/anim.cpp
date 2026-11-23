@@ -486,52 +486,6 @@ Pose poseMontado(const Esqueleto& e, float f, int andadura) {
     return p;
 }
 
-// =====================================================================
-// cavalo
-// =====================================================================
-
-float alturaDosCascos(const Esqueleto& e, const Pose& p) {
-    static thread_local std::vector<Mat4> m;
-    calcularMatrizes(e, p, m);
-    float menor = 1e9f;
-    for (int c : {C_CASCO_DE, C_CASCO_DD, C_CASCO_TE, C_CASCO_TD}) {
-        const Osso& o = e.ossos[c];
-        for (float dz : {-MEIO_COMPRIMENTO_CASCO, MEIO_COMPRIMENTO_CASCO}) menor = std::min(menor, m[c].ponto({o.fim.x, 0.f, o.fim.z + dz}).y);
-    }
-    return menor;
-}
-
-Pose poseCavalo(const Esqueleto& e, float f, int and_, float t) {
-    Pose p = poseRepouso(e);
-    float amp = and_ == 0 ? 0.f : (and_ == 1 ? 0.32f : (and_ == 2 ? 0.5f : 0.8f));
-    float ph[4];  // DE, DD, TE, TD
-    if (and_ == 3) { ph[0] = 0.f; ph[1] = 0.45f; ph[2] = 3.14f; ph[3] = 3.6f; }
-    else if (and_ == 2) { ph[0] = 0.f; ph[1] = 3.14159f; ph[2] = 3.14159f; ph[3] = 0.f; }
-    else { ph[0] = 0.f; ph[1] = 3.14159f; ph[2] = 1.5708f; ph[3] = 4.7124f; }
-    const int sup[4] = {C_BRACO_DE, C_BRACO_DD, C_COXA_TE, C_COXA_TD};
-    for (int k = 0; k < 4; k++) {
-        float a = f + ph[k];
-        p.rot[sup[k]].x = -std::sin(a) * amp;
-        float dobra = std::max(0.f, std::cos(a - 0.5f)) * (0.3f + 1.4f * amp) * (amp > 0 ? 1.f : 0.f);
-        p.rot[sup[k] + 1].x = k < 2 ? dobra : dobra * 0.6f;
-        p.rot[sup[k] + 2].x = -dobra * 0.4f;
-    }
-    float galope = and_ == 3 ? 1.f : 0.f;
-    p.rot[C_CORPO].x = std::sin(f) * 0.05f * galope;
-    p.rot[C_PESCOCO].x = std::sin(f * (and_ == 3 ? 1.f : 2.f)) * 0.06f * amp + 0.22f * galope;
-    p.rot[C_CABECA].x = -0.1f * galope;
-    // parado: respira, mexe a cabeca e o rabo
-    if (and_ == 0) {
-        p.rot[C_PESCOCO].x = 0.05f + std::sin(t * 0.4f) * 0.06f;
-        p.rot[C_PESCOCO].y = std::sin(t * 0.23f) * 0.12f;
-        p.rot[C_CORPO].x = std::sin(t * 1.2f) * 0.008f;
-    }
-    p.rot[C_CAUDA].z = std::sin(t * 1.3f) * 0.18f;
-    p.rot[C_CAUDA].x = -0.45f * galope - 0.15f * amp;
-    p.raiz.y -= alturaDosCascos(e, p);
-    return p;
-}
-
 // ---------------- tiroteio e captura ----------------
 namespace {
 // apoia pelo ponto mais baixo de qualquer junta (corpo deitado/ajoelhado), com folga para a espessura do corpo

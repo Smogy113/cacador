@@ -23,6 +23,12 @@ struct Cavalo {
 };
 
 constexpr float VEL_PASSO = 2.f, VEL_TROTE = 6.f, VEL_GALOPE = 12.f, DIST_MONTAR = 2.5f, RAIO_CAVALO = 0.9f;
+// Na ordem de toque: posterior direita, posterior esquerda, dianteira direita,
+// dianteira esquerda. Som e animação usam as mesmas fases, em radianos.
+inline constexpr std::array<float, 4> TOQUES_GALOPE{.80f, 1.61f, 2.76f, 3.22f};
+constexpr float FASE_GALOPE_POR_METRO = 1.8f;
+inline float pesoGalopeCavalo(float velocidade) { return smoothstep(7.2f, 9.8f, velocidade); }
+
 constexpr float ACEL_CAVALO = 6.f;       // m/s^2 (parado -> galope em ~2 s)
 constexpr float INCLINACAO_MAX = 0.70f;  // tan(35 graus)
 

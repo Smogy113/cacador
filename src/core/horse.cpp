@@ -70,7 +70,7 @@ void moverCavalo(Cavalo& c, const Entrada& e, float dt, const Terreno& t, const 
     k.pos.y = std::max(t.altura(k.pos.x, k.pos.z), col.alturaPiso(k.pos.x, k.pos.z, k.pos.y));
     c.andadura = classificar(k.vel);
     // fase da passada: um ciclo a cada ~1,6 m (passo), 2,5 m (trote), 3,5 m (galope)
-    float porMetro = c.andadura == Andadura::Galope ? 1.8f : (c.andadura == Andadura::Trote ? 2.5f : 3.9f);
+    float porMetro = k.vel < 3.5f ? 3.9f : lerp(2.5f, FASE_GALOPE_POR_METRO, pesoGalopeCavalo(k.vel));
     c.passada += dt * k.vel * porMetro;
 }
 
@@ -87,8 +87,8 @@ ContatosCavalo contatosCavalo(Andadura andadura, float faseAnterior, float faseA
     };
     static constexpr Apoio trote[] = {{2.57f, {1.f, -.2f}}, {5.71f, {1.f, .2f}}};
     static constexpr Apoio galope[] = {
-        {.80f, {.69f, 1.f}}, {1.61f, {.86f, -1.f}},
-        {2.76f, {1.f, 1.f}}, {3.22f, {.73f, -1.f}},
+        {TOQUES_GALOPE[0], {.69f, 1.f}}, {TOQUES_GALOPE[1], {.86f, -1.f}},
+        {TOQUES_GALOPE[2], {1.f, 1.f}}, {TOQUES_GALOPE[3], {.73f, -1.f}},
     };
     const Apoio* apoios = andadura == Andadura::Passo ? passo : (andadura == Andadura::Trote ? trote : galope);
     const int n = andadura == Andadura::Trote ? 2 : 4;

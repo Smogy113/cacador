@@ -2,6 +2,8 @@
 #include "core/body.h"
 #include "core/skeleton.h"
 
+struct Cavalo;
+
 // Animacoes procedurais do corpo humano. fase em radianos (um ciclo = dois passos).
 // Andar/correr a partir de dados de marcha humana (ver anim.cpp): pe de apoio travado no chao, bacia
 // subindo e descendo como numa pessoa e mistura suave de andar (< 2,2 m/s) para correr (> 4,6 m/s).
@@ -9,6 +11,7 @@
 Pose poseAndar(const Esqueleto& e, float fase, float velocidade);
 Pose poseParado(const Esqueleto& e, float tempo);
 Pose poseMontado(const Esqueleto& e, float fase, int andadura);
+Pose poseMontado(const Esqueleto& e, const Cavalo& cavalo, const Pose& poseDaMontaria);
 // Desloca a raiz para o pe mais baixo encostar no chao (y = 0).
 void apoiarNoChao(const Esqueleto& e, Pose& p);
 float alturaDosPes(const Esqueleto& e, const Pose& p);  // y do ponto mais baixo dos pes
@@ -28,4 +31,5 @@ float fasePorMetro(float velocidade);
 
 // andadura: 0 parado, 1 passo, 2 trote, 3 galope
 Pose poseCavalo(const Esqueleto& e, float fase, int andadura, float tempo);
+Pose poseCavalo(const Esqueleto& e, const Cavalo& cavalo, float tempo);
 float alturaDosCascos(const Esqueleto& e, const Pose& p);
