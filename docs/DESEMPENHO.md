@@ -153,3 +153,20 @@ a mesma deformação no passe principal e nas sombras, com a malha original na G
 
 Ao ajustar rigidez, amortecimento ou colisão, use `--cabelo ondulado --retrato .65 --girar-camera 75 --direto`
 para observar uma corrida, uma parada e uma virada de perto. Confira também o movimento a cavalo.
+
+## Modelo do cavalo
+
+No passe de cor, o cavalo selado usa 8.910 triângulos até 22 m da câmera na horizontal.
+A partir daí e no mapa de sombras, são 2.760. Cada versão desenha a pelagem, a crina
+e o equipamento em uma chamada, com os mesmos ossos para a deformação na GPU.
+
+Para conferir o encaixe da sela e a sombra no chão no mapa padrão, use uma captura montada.
+
+```bash
+./build/cacador --screenshot cavalo.png --montado --pos -40 10 --yaw 160 --hora 10 \
+  --retrato 4.3 --girar-camera 70 --qualidade alto --frames 8
+```
+
+A escultura e as superfícies apoiadas nela são editadas em `tools/generate_horse_base.py`.
+Execute o gerador para atualizar `src/core/horse_base_data.inc`. Os pivôs, os pesos da
+pele e as peças montadas no mesmo espaço em metros ficam em `src/core/horse_model.cpp`.

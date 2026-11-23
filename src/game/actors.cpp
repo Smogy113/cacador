@@ -57,14 +57,18 @@ void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose,
 
 void ModeloCavaloAnat::carregar(const VisualCavalo& v) {
     esq_ = esqueletoCavalo();
-    malha_.carregar(corpoCavalo(v));
+    detalhada_.carregar(corpoCavalo(v, true));
+    leve_.carregar(corpoCavalo(v, false));
 }
 
-void ModeloCavaloAnat::descarregar() { malha_.descarregar(); }
+void ModeloCavaloAnat::descarregar() {
+    detalhada_.descarregar();
+    leve_.descarregar();
+}
 
-void ModeloCavaloAnat::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose) const {
+void ModeloCavaloAnat::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose, bool perto) const {
     calcularMatrizes(esq_, pose, ossos_);
-    malha_.desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
+    (perto ? detalhada_ : leve_).desenhar(mat, ossos_, MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z)));
 }
 
 Vec3f ModeloCavaloAnat::assento(Vec3f p, float yaw, const Pose& pose) const {

@@ -969,9 +969,24 @@ void main() {
             nr = relevo(nr, pr, vec3(1500.0, 120.0, 1500.0), 0.3);
             brilho = 0.18; aspereza = 0.58;
             ao *= 0.6 + 0.4 * h;
-        } else if (m > 17.5 && m < 18.5) {  // labios: marcas verticais, umidos
+        } else if (m > 18.5) {   // olho de cavalo: a malha fornece a iris e a pupila
+            brilho = 0.98; aspereza = 0.19;
+        } else if (m > 17.5) {   // labios: marcas verticais, umidos
             nr = relevo(nr, pr, vec3(120.0, 900.0, 120.0), 0.07);
             brilho = 0.3; aspereza = 0.4; sss = 1.0;
+        } else if (m > 16.5) {   // pelagem curta, com o grao preso ao modelo
+#if !defined(GL_ES)
+            if (dist < 10.0) {
+                vec3 fibra = cross(nr, tanRep.xyz);
+                float detalhe = 1.0 - smoothstep(3.0, 10.0, dist);
+                float grao = vnoise(pr * 76.0) - 0.5;
+                float fase = dot(pr, fibra) * 920.0 + grao * 4.0;
+                float fio = sin(fase) * (1.0 - smoothstep(0.8, 3.0, fwidth(fase)));
+                albedo *= 1.0 + detalhe * (0.09 * grao + 0.025 * fio);
+                nr = normalize(nr + fibra * (fio * detalhe * 0.036));
+            }
+#endif
+            brilho = 0.32; aspereza = 0.54; veludo = 0.26;
         } else if (m < 10.5) {   // pele: poros, sardas, manchas, barba por fazer, luz que atravessa
             nr = relevo(nr, pr, vec3(420.0), 0.045);
             nr = relevo(nr, pr, vec3(1100.0), 0.025);
@@ -1034,10 +1049,23 @@ void main() {
             nr = relevo(nr, pr, vec3(160.0), 0.1);
             float gasto = smoothstep(0.55, 0.85, vnoise(pr * 22.0));
             albedo = mix(albedo, albedo * 1.6 + 0.02, gasto * 0.5);
-            brilho = 0.55; aspereza = 0.35 + 0.3 * gasto;
+            brilho = m > 12.1 ? 0.21 : 0.55;
+            aspereza = (m > 12.1 ? 0.56 : 0.35) + 0.3 * gasto;
         } else if (m < 13.5) {   // metal
             nr = relevo(nr, pr, vec3(90.0), 0.03);
             brilho = 1.4; aspereza = 0.18; metalico = 1.0;
+        } else if (m > 14.1 && m < 14.5) {   // crina opaca: estrias com brilho na direcao dos fios
+            float u = cor.a, t = tanRep.w;
+            float fase = u * 520.0 + 2.6 * sin(11.0 * t + u * 21.0);
+#if !defined(GL_ES)
+            float filtro = 1.0 - smoothstep(0.85, 3.0, fwidth(fase));
+#else
+            float filtro = 1.0 - smoothstep(2.0, 5.0, dist);
+#endif
+            albedo *= 0.94 + 0.14 * cos(fase) * filtro + 0.10 * sin(u * 107.0 + t * 5.0);
+            brilho = 0.16; aspereza = 0.64;
+            kk = 0.29;
+            Tcab = normalize(tanMundo);
         } else if (m < 14.5) {   // cabelo e barba: fios
             nr = relevo(nr, pr, vec3(900.0, 120.0, 900.0), 0.18);
             albedo *= 0.8 + 0.4 * vnoise(pr * vec3(900.0, 90.0, 900.0));
@@ -1154,7 +1182,7 @@ void main() {
         float contraluz = max(dot(-v, dirSol), 0.0);
         difSol += 0.18 * contraluz * contraluz * (1.0 - 0.5 * max(ndl, 0.0));
     }
-    if (kk > 0.5) {  // cabelo: a luz depende da direcao do fio, nao da normal
+    if (kk > 0.0) {  // cabelo: a luz depende da direcao do fio, nao da normal
         float TL = dot(Tcab, dirSol);
         difSol = mix(sqrt(max(1.0 - TL * TL, 0.0)) * 0.55, max(ndl, 0.0), 0.45) * smoothstep(-0.35, 0.2, ndl);
     }
@@ -1220,7 +1248,7 @@ void main() {
             c += luzCor[i] * at * at * pow(max(dot(n, hl), 0.0), expo) * brilho * 0.15;
         }
     }
-    if (kk > 0.5) {
+    if (kk > 0.0) {
         vec3 Hk = normalize(dirSol + v);
         float TH = dot(Tcab, Hk);
         float s1 = pow(sqrt(max(1.0 - TH * TH, 0.0)), 110.0);

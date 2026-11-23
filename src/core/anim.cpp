@@ -496,7 +496,7 @@ float alturaDosCascos(const Esqueleto& e, const Pose& p) {
     float menor = 1e9f;
     for (int c : {C_CASCO_DE, C_CASCO_DD, C_CASCO_TE, C_CASCO_TD}) {
         const Osso& o = e.ossos[c];
-        for (float dz : {-0.05f, 0.05f}) menor = std::min(menor, m[c].ponto({o.fim.x, 0.f, o.fim.z + dz}).y);
+        for (float dz : {-MEIO_COMPRIMENTO_CASCO, MEIO_COMPRIMENTO_CASCO}) menor = std::min(menor, m[c].ponto({o.fim.x, 0.f, o.fim.z + dz}).y);
     }
     return menor;
 }

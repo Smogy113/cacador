@@ -38,15 +38,15 @@ class ModeloCavaloAnat {
 public:
     void carregar(const VisualCavalo& v);
     void descarregar();
-    void desenhar(Material& mat, Vec3f pos, float yaw, const Pose& pose) const;
+    void desenhar(Material& mat, Vec3f pos, float yaw, const Pose& pose, bool perto) const;
     // onde fica o quadril do cavaleiro, no mundo (acompanha o balanco do corpo)
     Vec3f assento(Vec3f pos, float yaw, const Pose& pose) const;
     const Esqueleto& esqueleto() const { return esq_; }
-    int triangulos() const { return malha_.triangulos(); }
+    int triangulos(bool perto) const { return (perto ? detalhada_ : leve_).triangulos(); }
 
 private:
     Esqueleto esq_;
-    MalhaEsqueleto malha_;
+    MalhaEsqueleto detalhada_, leve_;
     mutable std::vector<Mat4> ossos_;
 };
 

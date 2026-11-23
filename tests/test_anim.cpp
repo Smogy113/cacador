@@ -66,6 +66,22 @@ TEST_CASE("cavalo andando nunca afunda nem flutua") {
     for (int a = 1; a <= 3; a++)
         for (float f = 0; f < 6.3f; f += 0.4f) CHECK(alturaDosCascos(cav(), poseCavalo(cav(), f, a, 0)) == doctest::Approx(0).epsilon(0.01));
 }
+TEST_CASE("a sola da malha do cavalo acompanha o apoio das andaduras") {
+    for (bool perto : {false, true}) {
+        auto malha = corpoCavalo({}, perto);
+        std::vector<Mat4> matrizes;
+        for (int andadura = 0; andadura < 4; ++andadura) {
+            for (float fase = 0; fase < 6.3f; fase += .4f) {
+                calcularMatrizes(cav(), poseCavalo(cav(), fase, andadura, fase), matrizes);
+                float apoio = 1.f;
+                for (const auto& v : malha.v) {
+                    if (v.pos.y == 0.f) apoio = std::min(apoio, matrizes[v.osso[0]].ponto(v.pos).y);
+                }
+                CHECK(std::abs(apoio) < .005f);
+            }
+        }
+    }
+}
 TEST_CASE("trote: diagonais juntas") {
     Pose p = poseCavalo(cav(), 1.2f, 2, 0);
     CHECK(p.rot[C_BRACO_DE].x == doctest::Approx(p.rot[C_COXA_TD].x).epsilon(0.05));

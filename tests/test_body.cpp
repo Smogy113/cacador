@@ -92,16 +92,27 @@ TEST_CASE("lado esquerdo do personagem fica em +x (ele olha para +z)") {
     CHECK(e.ossos[MAO_D].inicio.x < 0);
 }
 
-TEST_CASE("cavalo: até 2000 triângulos, ossos válidos") {
+TEST_CASE("cavalo: malhas de perto e de longe respeitam o orçamento e usam o mesmo esqueleto") {
     for (bool sel : {false, true}) {
         VisualCavalo v;
         v.selado = sel;
-        auto m = corpoCavalo(v);
-        CHECK(m.triangulos() <= 9000);
-        CHECK(m.triangulos() >= 600);
-        for (auto& x : m.v) {
-            CHECK(x.osso[0] < N_OSSOS_CAVALO);
-            CHECK(x.osso[1] < N_OSSOS_CAVALO);
+        v.meias = !sel;
+        for (bool perto : {false, true}) {
+            auto m = corpoCavalo(v, perto);
+            CHECK(m.triangulos() <= (perto ? 9000 : 2850));
+            CHECK(m.triangulos() >= 600);
+            for (auto& x : m.v) {
+                CHECK(x.osso[0] < N_OSSOS_CAVALO);
+                CHECK(x.osso[1] < N_OSSOS_CAVALO);
+                CHECK(x.peso >= 0.f);
+                CHECK(x.peso <= 1.f);
+            }
+            for (auto i : m.idx) REQUIRE(i < m.v.size());
+            for (size_t i = 0; i < m.idx.size(); i += 3) {
+                Vec3f a = m.v[m.idx[i]].pos, b = m.v[m.idx[i + 1]].pos, c = m.v[m.idx[i + 2]].pos;
+                Vec3f normal = cross(b - a, c - a);
+                CHECK(dot(normal, normal) > 0.f);
+            }
         }
     }
     auto e = esqueletoCavalo();

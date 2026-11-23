@@ -105,8 +105,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
         quadroAberto_ = 0;
     }
     // cavalos nos estabulos
-    const Rgb pelos[] = {{0.40f, 0.25f, 0.16f}, {0.16f, 0.13f, 0.12f}, {0.78f, 0.74f, 0.68f}, {0.6f, 0.42f, 0.24f}};
-    const Rgb crinas[] = {{0.15f, 0.1f, 0.07f}, {0.08f, 0.07f, 0.07f}, {0.55f, 0.5f, 0.45f}, {0.85f, 0.8f, 0.65f}};
+    const Rgb pelos[] = {{0.43f, 0.28f, 0.20f}, {0.16f, 0.13f, 0.12f}, {0.78f, 0.74f, 0.68f}, {0.6f, 0.42f, 0.24f}};
+    const Rgb crinas[] = {{0.18f, 0.13f, 0.10f}, {0.08f, 0.07f, 0.07f}, {0.55f, 0.5f, 0.45f}, {0.85f, 0.8f, 0.65f}};
     std::vector<Vec3f> posCav = cenario_.cavalos;
     if (op.comecarMontado) posCav.insert(posCav.begin(), jogador_.pos);
     for (size_t i = 0; i < posCav.size(); i++) {
@@ -443,14 +443,19 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         chamadasAtores_++;
         if (sombraBolha && d2 < 35.f * 35.f) sombra_.desenhar(n.corpo.pos, terreno_->normal(n.corpo.pos.x, n.corpo.pos.z), 0.42f);
     }
+    constexpr float DIST_DETALHE_CAVALO = 22.f;
     for (size_t i = 0; i < cavalos_.size(); i++) {
         const Cavalo& c = cavalos_[i];
-        Vector3 d{c.corpo.pos.x - cam_.position.x, 0, c.corpo.pos.z - cam_.position.z};
-        if (d.x * d.x + d.z * d.z > distMax * distMax) continue;
+        float dx = c.corpo.pos.x - cam_.position.x, dz = c.corpo.pos.z - cam_.position.z;
+        float d2 = dx * dx + dz * dz;
+        if (d2 > distMax * distMax) continue;
         if (passePrincipal_ && int(i) != montadoEm_ && atrasDaCamera(c.corpo.pos)) continue;
-        Pose pc = poseCavalo(modelosCavalo_[i].esqueleto(), c.passada, int(c.andadura), tempo_ + float(i) * 3.7f);
-        modelosCavalo_[i].desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc);
-        trisAtores_ += modelosCavalo_[i].triangulos();
+        // O mapa de sombras usa a silhueta leve com os mesmos ossos.
+        bool perto = passePrincipal_ && d2 < DIST_DETALHE_CAVALO * DIST_DETALHE_CAVALO;
+        const ModeloCavaloAnat& modelo = modelosCavalo_[i];
+        Pose pc = poseCavalo(modelo.esqueleto(), c.passada, int(c.andadura), tempo_ + float(i) * 3.7f);
+        modelo.desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc, perto);
+        trisAtores_ += modelo.triangulos(perto);
         chamadasAtores_++;
         if (int(i) == montadoEm_) desenharJogador(matPele, passePrincipal_);
     }

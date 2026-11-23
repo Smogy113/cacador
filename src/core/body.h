@@ -32,7 +32,8 @@ struct Visual {
 
 // Materiais dos personagens (vao para o shader; 0 = sem material especial)
 constexpr float MAT_PELE = 10, MAT_TECIDO = 11, MAT_COURO = 12, MAT_METAL = 13, MAT_CABELO = 14, MAT_OLHO = 15, MAT_FELTRO = 16;
-constexpr float MAT_LABIO = 18;
+constexpr float MAT_COURO_CAVALO = 12.25f, MAT_CRINA_CAVALO = 14.25f;
+constexpr float MAT_PELAGEM_CAVALO = 17, MAT_LABIO = 18, MAT_OLHO_CAVALO = 19;
 constexpr float MAT_PELO = 20;  // (antigo) cascas de pelo
 constexpr float MAT_CARTAO = 24;  // cartao de pelo: fita com fios (barba, sobrancelha, cabelo, crina)
 
@@ -77,10 +78,11 @@ enum OssoCavalo {
 };
 
 struct VisualCavalo {
-    Rgb pelo{0.4f, 0.25f, 0.16f}, crina{0.12f, 0.08f, 0.06f};
+    Rgb pelo{.43f, .28f, .20f}, crina{.18f, .13f, .10f};
     bool selado = true, meias = false;
 };
 
 Esqueleto esqueletoCavalo();
-MalhaPele corpoCavalo(const VisualCavalo& v);
+constexpr float MEIO_COMPRIMENTO_CASCO = .082f;  // da sola, no eixo Z
+MalhaPele corpoCavalo(const VisualCavalo& v, bool perto = true);
 Vec3f assentoCavalo();  // onde fica o quadril do cavaleiro (espaco do modelo, parado)
