@@ -1046,6 +1046,18 @@ void main() {
             float trama = sin(pr.x * 700.0 + pr.z * 700.0) * sin(pr.y * 700.0);
             albedo *= 0.9 + 0.08 * trama + 0.12 * vnoise(pr * 18.0);
             brilho = 0.05; aspereza = 0.9; veludo = 0.45;
+        } else if (m > 12.32 && m < 12.5) {   // madeira da empunhadura, com veios longitudinais
+            vec3 madeira = tanRep.xyz;
+            float curva = madeira.x - 0.40 * madeira.y + 0.13 * madeira.z;
+            float fase = 1180.0 * curva + 2.9 * sin(madeira.y * 67.0 + madeira.z * 210.0);
+#if !defined(GL_ES)
+            float detalhe = 1.0 - smoothstep(0.7, 3.1, fwidth(fase));
+#else
+            float detalhe = 1.0 - smoothstep(1.0, 4.0, dist);
+#endif
+            float veios = sin(fase + sin(fase * 0.47));
+            albedo *= 0.87 + 0.20 * vnoise(madeira * vec3(140.0, 29.0, 124.0)) + 0.12 * veios * detalhe;
+            brilho = 0.35; aspereza = 0.46;
         } else if (m < 12.5) {   // couro: granulado, gasto nas bordas
             nr = relevo(nr, pr, vec3(160.0), 0.1);
             float gasto = smoothstep(0.55, 0.85, vnoise(pr * 22.0));

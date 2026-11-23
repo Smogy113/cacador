@@ -6,11 +6,51 @@
 #include "render/meshconv.h"
 #include "rlgl.h"
 
+namespace {
+void adicionarBracoDireito(MalhaPele& vista, const MalhaPele& corpo) {
+    auto bracoDireito = [&](uint16_t i) {
+        int osso = corpo.v[i].osso[0];
+        return osso == BRACO_D || osso == ANTEBRACO_D || osso == MAO_D;
+    };
+    std::vector<int> remapeado(corpo.v.size(), -1);
+    // Reutiliza a pele e o rig do braço, com a mesma iluminação da terceira pessoa.
+    for (size_t i = 0; i < corpo.idx.size(); i += 3) {
+        uint16_t a = corpo.idx[i], b = corpo.idx[i + 1], c = corpo.idx[i + 2];
+        if (!bracoDireito(a) || !bracoDireito(b) || !bracoDireito(c)) continue;
+        for (uint16_t j : {a, b, c}) {
+            if (remapeado[j] < 0) {
+                remapeado[j] = int(vista.v.size());
+                vista.v.push_back(corpo.v[j]);
+            }
+            vista.idx.push_back(uint16_t(remapeado[j]));
+        }
+    }
+}
+}  // namespace
+
 void ModeloHumano::carregar(const Proporcoes& p, const Visual& v) {
     baseHumana_ = v.corpoBase;
     esq_ = v.corpoBase ? esqueletoHumanoBase(p) : esqueletoHumano(p);
-    malha_.carregar(corpoHumano(p, v));
+    const bool armaSeparada = baseHumana_ && v.revolver;
+    auto corpo = corpoHumano(p, v);
+    malha_.carregar(corpo, armaSeparada);
     if (!baseHumana_) hd_.carregar(corpoHumanoHD(p, v));
+    if (armaSeparada) {
+        float escala = p.altura / 1.8f;
+        const auto [inicio, fim] = fecharMaoDoRevolver(corpo, esq_, escala);
+        maoInicio_ = inicio;
+        maoPosicoes_.reserve((fim - inicio) * 3);
+        maoNormais_.reserve((fim - inicio) * 3);
+        for (size_t i = inicio; i < fim; ++i) {
+            const auto& v = corpo.v[i];
+            maoPosicoes_.insert(maoPosicoes_.end(), {v.pos.x, v.pos.y, v.pos.z});
+            maoNormais_.insert(maoNormais_.end(), {v.normal.x, v.normal.y, v.normal.z});
+        }
+        auto arma = malhaRevolver(esq_, escala);
+        revolver_.carregar(arma);
+        adicionarBracoDireito(arma, corpo);
+        bracoArmado_.carregar(arma);
+    }
 }
 
 void ModeloHumano::carregarHeroi(const Proporcoes& p, const Visual& v) {
@@ -35,6 +75,11 @@ void ModeloHumano::descarregar() {
     malha_.descarregar();
     hd_.descarregar();
     hdSemPele_.descarregar();
+    revolver_.descarregar();
+    bracoArmado_.descarregar();
+    maoPosicoes_.clear();
+    maoNormais_.clear();
+    armaEmpunhada_ = false;
     if (volumePendente_) volume_.wait();
     volumePendente_ = false;
     cabeca_.descarregar();
@@ -55,9 +100,26 @@ void ModeloHumano::reiniciarCabelo() {
     for (auto* malha : {&malha_, &hd_, &hdSemPele_}) malha->reiniciarCabelo();
 }
 
-void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose, bool hd, Material* matCabeca) const {
+void ModeloHumano::empunharArma(bool empunhada) {
+    if (armaEmpunhada_ == empunhada || maoPosicoes_.empty()) return;
+    malha_.alternarForma(maoInicio_, maoPosicoes_, maoNormais_);
+    armaEmpunhada_ = empunhada;
+}
+
+int ModeloHumano::triangulos(bool hd, VistaArma vista) const {
+    if (vista == VistaArma::PrimeiraPessoa) return bracoArmado_.triangulos();
+    int corpo = hd && !baseHumana_ ? hd_.triangulos() : malha_.triangulos();
+    return corpo + (vista == VistaArma::NaMao ? revolver_.triangulos() : 0);
+}
+
+void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose, bool hd, Material* matCabeca,
+                           VistaArma vista) const {
     calcularMatrizes(esq_, pose, ossos_);
     Matrix modelo = MatrixMultiply(MatrixRotateY(yaw), MatrixTranslate(p.x, p.y, p.z));
+    if (vista == VistaArma::PrimeiraPessoa) {
+        bracoArmado_.desenhar(mat, ossos_, modelo);
+        return;
+    }
     if (volumePendente_ && volume_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         cabeca_.carregar(volume_.get(), escXZ_, escY_);  // envia os atlas a placa (na thread do desenho)
         volumePendente_ = false;
@@ -68,6 +130,7 @@ void ModeloHumano::desenhar(Material& mat, Vec3f p, float yaw, const Pose& pose,
         return;
     }
     (hd && !baseHumana_ ? hd_ : malha_).desenhar(mat, ossos_, modelo);
+    if (vista == VistaArma::NaMao) revolver_.desenhar(mat, ossos_, modelo);
 }
 
 void ModeloCavaloAnat::carregar(const VisualCavalo& v) {

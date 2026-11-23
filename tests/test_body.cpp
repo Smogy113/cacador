@@ -404,6 +404,50 @@ TEST_CASE("revolver: na mao direita, leve e HD") {
     CHECK(h1.triangulos() - h0.triangulos() < 600);
 }
 
+TEST_CASE("revolver: a borda do cano acompanha a boca que posiciona o clarão") {
+    for (float altura : {1.65f, 1.8f, 1.95f}) {
+        const Esqueleto esq = esqueletoHumanoBase({altura, 1.07f, 1.f, 1.1f});
+        const float escala = altura / 1.8f;
+        const auto malha = malhaRevolver(esq, escala);
+        const auto& mao = esq.ossos[MAO_D];
+        const Vec3f eixo = normalizar(mao.fim - mao.inicio);
+        const Vec3f boca = bocaDoRevolver(esq, escala);
+        int borda = 0;
+        REQUIRE(malha.triangulos() > 0);
+        CHECK(malha.triangulos() < 600);
+        for (const auto& v : malha.v) {
+            CHECK(v.osso[0] == MAO_D);
+            CHECK(v.osso[1] == MAO_D);
+            float distancia = dot(v.pos - boca, eixo);
+            CHECK(distancia < 1e-5f);
+            if (std::abs(distancia) < 1e-5f) ++borda;
+        }
+        CHECK(borda >= 16);
+    }
+}
+
+TEST_CASE("revolver: a empunhadura dobra os dedos sem deslocar o resto do corpo") {
+    const Proporcoes proporcoes{1.8f, 1.07f, 1.f, 1.10f};
+    auto corpo = corpoHumanoBase(proporcoes, {});
+    const auto repouso = corpo.v;
+    const auto esq = esqueletoHumanoBase(proporcoes);
+    const auto [inicio, fim] = fecharMaoDoRevolver(corpo, esq, 1.f);
+    REQUIRE(inicio < fim);
+    REQUIRE(fim <= corpo.v.size());
+    const auto& mao = esq.ossos[MAO_D];
+    const Vec3f eixo = normalizar(mao.fim - mao.inicio);
+    float dedosEstendidos = 0.f, dedosFechados = 0.f;
+    for (size_t i = 0; i < repouso.size(); ++i) {
+        if (repouso[i].osso[0] != MAO_D || i < inicio || i >= fim) {
+            CHECK(corpo.v[i].pos == repouso[i].pos);
+            continue;
+        }
+        dedosEstendidos = std::max(dedosEstendidos, dot(repouso[i].pos - mao.inicio, eixo));
+        dedosFechados = std::max(dedosFechados, dot(corpo.v[i].pos - mao.inicio, eixo));
+    }
+    CHECK(dedosFechados < dedosEstendidos - .02f);
+}
+
 // ---------------- heroi com a cabeca desenhada por raymarching ----------------
 static Visual heroiRaio() {
     Visual v = semChapeu();

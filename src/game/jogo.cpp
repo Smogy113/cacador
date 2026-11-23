@@ -55,7 +55,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.semCabelo = !op.cabeloOndulado;
     r.cabeloOndulado = op.cabeloOndulado;
     r.cacadorDeFronteira = false;
-    r.revolver = false;
+    r.revolver = true;
     r.cabeloLongo = false;
     r.chapeuAba = false;
     r.sobretudo = false;
@@ -441,6 +441,7 @@ void Jogo::atualizar(float dt) {
     atualizarCamera(dt);  // o tiro usa a direção da câmera deste quadro
     int montariaAntes = montadoEm_;
     atualizarCombate(dt, e);
+    modeloJogador_.empunharArma(revolverEmMaos());
     if (montariaAntes != montadoEm_) atualizarCamera(0.f);
     atualizarRota(dt);
     atualizarAmbienteSonoro(dt);
@@ -484,11 +485,20 @@ Pose Jogo::poseDaMontaria(size_t indice) const {
     return poseCavalo(modelosCavalo_[indice].esqueleto(), cavalos_[indice], tempo_ + float(indice) * 3.7f);
 }
 
-void Jogo::desenharJogador(Material& matPele, bool hd) {
+bool Jogo::revolverEmMaos() const {
+    return montadoEm_ < 0 && morteT_ < 0 && !op_.estudio &&
+           (mira_ > .5f || tiroT_ > 0.f || arma_.recarregando());
+}
+
+void Jogo::desenharJogador(Material& matPele, bool hd, bool primeiraPessoa) {
+    const bool armado = revolverEmMaos();
+    if (primeiraPessoa && !armado) return;
+    VistaArma vista = VistaArma::Guardada;
+    if (armado) vista = primeiraPessoa ? VistaArma::PrimeiraPessoa : VistaArma::NaMao;
     const Esqueleto& ej = modeloJogador_.esqueleto();
     // cabeca por raymarching: so no passe principal (as sombras usam a malha), Alto/Medio, perto da camera
     Material* matCabeca = nullptr;
-    if (hd && &matPele == &luz_.materialPele() && luz_.usaCabecaRaio()) {
+    if (hd && !primeiraPessoa && &matPele == &luz_.materialPele() && luz_.usaCabecaRaio()) {
         Vec3f d = jogador_.pos + Vec3f{0, 1.7f, 0} - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z};
         if (dot(d, d) < 15.f * 15.f) matCabeca = &luz_.materialCabeca();
     }
@@ -500,9 +510,11 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
         modeloJogador_.desenhar(matPele, q - Vec3f{0, ej.ossos[QUADRIL].inicio.y, 0}, c.corpo.yaw,
                                  poseMontado(ej, c, pc), hd, matCabeca);
     } else {
-        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd, matCabeca);
+        modeloJogador_.desenhar(matPele, jogador_.pos, jogador_.yaw, poseDoJogador(ej), hd, matCabeca, vista);
     }
     luz_.definirHeroi(false);
+    trisAtores_ += modeloJogador_.triangulos(hd, vista);
+    chamadasAtores_ += vista == VistaArma::NaMao ? 2 : 1;
 }
 
 void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax) {
@@ -535,12 +547,8 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         trisAtores_ += modelo.triangulos(perto);
         chamadasAtores_++;
     }
-    // O corpo continua no mapa de sombras, mas ficaria na frente da câmera nos olhos.
-    if (!passePrincipal_ || !emPrimeiraPessoa()) {
-        desenharJogador(matPele, passePrincipal_);
-        trisAtores_ += modeloJogador_.triangulos(passePrincipal_);
-        chamadasAtores_++;
-    }
+    // O mapa de sombras recebe o corpo inteiro. A câmera nos olhos vê só o braço armado.
+    desenharJogador(matPele, passePrincipal_, passePrincipal_ && emPrimeiraPessoa());
     if (montadoEm_ < 0 && sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     desenharCombatentes(matPele, sombraBolha, distMax);
     for (auto& c : cavalos_) {

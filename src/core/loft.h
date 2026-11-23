@@ -143,8 +143,8 @@ void cascasDePelo(MalhaPele& m, Rgb corPelo);
 // Cartoes de pelo (fitas com fios) para todo vertice com pelos e direcao de crescimento
 void cartoesDePelo(MalhaPele& m, Rgb corPelo);
 void normaisSuaves(MalhaPele& m);
-// Revolver preso a MAO_D (body.cpp), usado pelo modelo leve e pelo HD.
-void revolverNaMao(Construtor& k, const Esqueleto& esq, float s);
+// Revólver preso à MAO_D. O detalhe é reservado para a vista de perto.
+void revolverNaMao(Construtor& k, const Esqueleto& esq, float s, bool detalhado = false);
 // Um material por triangulo: duplica vertices de borda (o shader nao pode interpolar o codigo do material).
 void separarMateriais(MalhaPele& m);
 }  // namespace loft

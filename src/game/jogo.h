@@ -111,7 +111,8 @@ private:
     void trocarNivel(Nivel n);
     bool atrasDaCamera(Vec3f p) const;
     Pose poseDaMontaria(size_t indice) const;
-    void desenharJogador(Material& matPele, bool hd);
+    void desenharJogador(Material& matPele, bool hd, bool primeiraPessoa = false);
+    bool revolverEmMaos() const;
     float tempo_ = 0;
     std::vector<LuzPontual> luzes_;
     size_t tris_ = 0;

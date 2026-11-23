@@ -63,7 +63,7 @@ void enviarCabelo(Shader shader, const UniformesCabelo& loc, const FisicaCabelo&
 
 }  // namespace
 
-void MalhaEsqueleto::carregar(const MalhaPele& p) {
+void MalhaEsqueleto::carregar(const MalhaPele& p, bool dinamica) {
     Mesh m{};
     size_t n = p.v.size();
     m.vertexCount = int(n);
@@ -98,10 +98,20 @@ void MalhaEsqueleto::carregar(const MalhaPele& p) {
         m.colors[i * 4] = c8(v.cor.r); m.colors[i * 4 + 1] = c8(v.cor.g); m.colors[i * 4 + 2] = c8(v.cor.b); m.colors[i * 4 + 3] = c8(v.pelos);
     }
     std::copy(p.idx.begin(), p.idx.end(), m.indices);
-    UploadMesh(&m, false);
+    UploadMesh(&m, dinamica);
     mesh_ = m;
     cabelo_ = p.cabelo.quantidade ? std::make_unique<FisicaCabelo>(p.cabelo) : nullptr;
     ok_ = true;
+}
+
+void MalhaEsqueleto::alternarForma(size_t inicio, std::vector<float>& posicoes, std::vector<float>& normais) {
+    size_t deslocamento = inicio * 3;
+    std::swap_ranges(posicoes.begin(), posicoes.end(), mesh_.vertices + deslocamento);
+    std::swap_ranges(normais.begin(), normais.end(), mesh_.normals + deslocamento);
+    int bytes = int(posicoes.size() * sizeof(float)), offset = int(deslocamento * sizeof(float));
+    // Posições e normais ocupam os buffers 0 e 2 da malha da raylib.
+    UpdateMeshBuffer(mesh_, 0, mesh_.vertices + deslocamento, bytes, offset);
+    UpdateMeshBuffer(mesh_, 2, mesh_.normals + deslocamento, bytes, offset);
 }
 
 void MalhaEsqueleto::descarregar() {

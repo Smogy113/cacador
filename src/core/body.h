@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <utility>
 #include <vector>
 #include "core/skeleton.h"
 #include "core/hair_profile.h"
@@ -34,6 +35,7 @@ struct Visual {
 // Materiais dos personagens (vao para o shader; 0 = sem material especial)
 constexpr float MAT_PELE = 10, MAT_TECIDO = 11, MAT_COURO = 12, MAT_METAL = 13, MAT_CABELO = 14, MAT_OLHO = 15, MAT_FELTRO = 16;
 constexpr float MAT_COURO_CAVALO = 12.25f, MAT_CRINA_CAVALO = 14.25f;
+constexpr float MAT_MADEIRA_ARMA = 12.375f;
 constexpr float MAT_PELAGEM_CAVALO = 17, MAT_LABIO = 18, MAT_OLHO_CAVALO = 19;
 constexpr float MAT_PELO = 20;  // (antigo) cascas de pelo
 constexpr float MAT_CARTAO = 24;  // cartao de pelo: fita com fios (barba, sobrancelha, cabelo, crina)
@@ -65,6 +67,9 @@ struct MalhaPele {
 Esqueleto esqueletoHumano(const Proporcoes& p);
 Esqueleto esqueletoHumanoBase(const Proporcoes& p);
 Vec3f bocaDoRevolver(const Esqueleto& esq, float escala);
+MalhaPele malhaRevolver(const Esqueleto& esq, float escala);
+// Dobra os dedos da base humana e devolve o intervalo de vértices alterados, com fim exclusivo.
+std::pair<size_t, size_t> fecharMaoDoRevolver(MalhaPele& malha, const Esqueleto& esq, float escala);
 MalhaPele corpoHumano(const Proporcoes& p, const Visual& vis);
 // Base humana CC0 quantizada no executavel: anatomia real, A-pose e sem roupa/cabelo.
 MalhaPele corpoHumanoBase(const Proporcoes& p, const Visual& vis);

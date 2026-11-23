@@ -506,9 +506,12 @@ float suave(float t) {
 
 Pose poseMirar(const Esqueleto& e, float ang, float recuo) {
     Pose p = poseParado(e, 0.f);
-    p.rot[BRACO_D] = {-1.5708f - ang, 0.3f, e.poseA ? .70f : 0.f};
-    p.rot[ANTEBRACO_D] = {-0.05f - 0.55f * recuo, 0, 0};
-    p.rot[MAO_D] = {-0.1f * recuo, 0, 0};
+    // Na base humana o braço sobe e o cotovelo compensa parte da rotação,
+    // mantendo a arma perto da linha dos olhos.
+    float elevar = e.poseA ? .20f : 0.f;
+    p.rot[BRACO_D] = {-1.5708f - ang - elevar, e.poseA ? -.08f : .30f, e.poseA ? .70f : 0.f};
+    p.rot[ANTEBRACO_D] = {-0.05f - 0.55f * recuo + .8f * elevar, 0, 0};
+    p.rot[MAO_D] = {-.10f * recuo - (e.poseA ? .10f : 0.f), 0, 0};
     p.rot[COLUNA].y = 0.12f;
     p.rot[PEITO].y = 0.1f;
     p.rot[CABECA].x = -ang * 0.6f;
@@ -522,10 +525,10 @@ Pose poseMirar(const Esqueleto& e, float ang, float recuo) {
 Pose poseRecarregar(const Esqueleto& e, float t) {
     Pose p = poseParado(e, t);
     float w = std::sin(t * 6.2831f * 2.f) * 0.08f;
-    p.rot[BRACO_D] = {-0.6f, 0.2f, e.poseA ? .70f : 0.f};
-    p.rot[ANTEBRACO_D] = {-1.35f + w, 0, 0};
-    p.rot[BRACO_E] = {-0.55f, -0.25f, e.poseA ? -.70f : 0.f};
-    p.rot[ANTEBRACO_E] = {-1.45f - w, 0, 0};
+    p.rot[BRACO_D] = {e.poseA ? -1.18f : -.60f, .20f, e.poseA ? .70f : 0.f};
+    p.rot[ANTEBRACO_D] = {(e.poseA ? -1.11f : -1.35f) + w, 0, 0};
+    p.rot[BRACO_E] = {e.poseA ? -.96f : -.55f, -.25f, e.poseA ? -.70f : 0.f};
+    p.rot[ANTEBRACO_E] = {(e.poseA ? -1.07f : -1.45f) - w, 0, 0};
     p.rot[CABECA].x = 0.3f;
     apoiarNoChao(e, p);
     return p;

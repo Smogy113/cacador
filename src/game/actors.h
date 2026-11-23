@@ -6,6 +6,7 @@
 #include "render/cabeca_raio.h"
 #include "render/skinned.h"
 
+enum class VistaArma { Guardada, NaMao, PrimeiraPessoa };
 
 // Pessoa anatomica com esqueleto (malha unica deformada na placa de video).
 class ModeloHumano {
@@ -16,18 +17,24 @@ public:
     void esperarCabeca() const { if (volumePendente_) volume_.wait(); }  // capturas de tela: deterministico
     void descarregar();
     // hd = modelo de alta definicao (perto da camera); matCabeca != null: cabeca por raymarching
-    void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose, bool hd = false, Material* matCabeca = nullptr) const;
+    void desenhar(Material& mat, Vec3f pes, float yaw, const Pose& pose, bool hd = false, Material* matCabeca = nullptr,
+                  VistaArma vista = VistaArma::Guardada) const;
 
     bool temCabelo() const { return malha_.temCabelo() || hd_.temCabelo() || hdSemPele_.temCabelo(); }
     void atualizarCabelo(float dt, Vec3f pos, float yaw, const Pose& pose, Vec3f vento, Vec3f camera);
     void reiniciarCabelo();
+    void empunharArma(bool empunhada);
 
     const Esqueleto& esqueleto() const { return esq_; }
-    int triangulos(bool hd = false) const { return hd && !baseHumana_ ? hd_.triangulos() : malha_.triangulos(); }
+    int triangulos(bool hd = false, VistaArma vista = VistaArma::Guardada) const;
 
 private:
     Esqueleto esq_;
     MalhaEsqueleto malha_, hd_, hdSemPele_;
+    MalhaEsqueleto revolver_, bracoArmado_;
+    std::vector<float> maoPosicoes_, maoNormais_;
+    size_t maoInicio_ = 0;
+    bool armaEmpunhada_ = false;
     mutable CabecaRaio cabeca_;
     mutable std::future<VolumeCabeca> volume_;  // gerado em segundo plano (nao atrasa o carregamento)
     mutable bool volumePendente_ = false;
