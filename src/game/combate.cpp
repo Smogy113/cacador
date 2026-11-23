@@ -143,11 +143,13 @@ bool Jogo::entregarNoXerife() {
 }
 
 void Jogo::aoMontar() {
+    cabelo_.reiniciar();
     if (montadoEm_ >= 0 && cacada_.levarAoMontar(cavalos_[montadoEm_].corpo.pos))
         avisar("Na garupa. Leve ao xerife (siga a bussola).");
 }
 
 void Jogo::aoDesmontar() {
+    cabelo_.reiniciar();
     if (cacada_.carga() != Carga::Garupa) return;
     cacada_.soltarCarga();
     if (Bandido* c = cacada_.bando().chefe()) {

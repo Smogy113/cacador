@@ -1830,23 +1830,31 @@ mat4 matrizPele() {
 }
 )"
 
-#define VENTO_MECHA R"(
-uniform vec3 cabeloRaiz, cabeloPonta;  // deslocamentos das duas molas no espaco do modelo
-uniform float tempoVento;
-vec3 deslocarMecha(float w, vec3 normal) {
-    float ponta = smoothstep(0.25, 1.0, w);
-    float lado = clamp(vertexPosition.x * 9.0, -1.0, 1.0);
-    vec3 vento = vec3(sin(tempoVento * 3.1 + lado * 2.3), 0.4 * sin(tempoVento * 4.5 + lado * 2.0),
-                      cos(tempoVento * 2.4 + lado * 3.0)) * 0.009;
-    vec3 desloc = cabeloRaiz * smoothstep(0.0, 0.5, w) * (1.0 - ponta)
-                 + (cabeloPonta * (1.0 + lado * 0.20) + vento) * ponta;
-    // A normal limita o movimento para dentro da cabeca.
-    float paraDentro = min(0.0, dot(desloc, normal) + mix(0.002, 0.016, ponta));
-    return desloc - normal * paraDentro;
+#define FISICA_MECHA R"(
+uniform vec3 cabeloMeio[3], cabeloPonta[3];
+uniform float escalaCabelo;
+vec3 deslocarMecha(float w) {
+    if (escalaCabelo <= 0.0 || w <= 0.08) return vec3(0.0);
+    vec3 p = vertexPosition / escalaCabelo;
+    // Mistura os dois guias laterais com o da nuca no espaco de repouso.
+    float esquerda = smoothstep(-0.025, 0.025, p.x);
+    float nuca = 1.0 - smoothstep(-0.036, 0.071, p.z);
+    vec3 meio = mix(mix(cabeloMeio[1], cabeloMeio[0], esquerda), cabeloMeio[2], nuca);
+    vec3 ponta = mix(mix(cabeloPonta[1], cabeloPonta[0], esquerda), cabeloPonta[2], nuca);
+    float t = smoothstep(0.08, 0.63, w);
+    vec3 desloc = mix(meio * (2.0 * t), mix(meio, ponta, 2.0 * t - 1.0), smoothstep(0.42, 0.58, t));
+
+    // Limita o movimento de cada vertice contra o cranio sem alterar o encaixe em repouso.
+    vec3 raio = vec3(0.077, 0.095, 0.103);
+    vec3 q0 = (p - vec3(0.0, 1.698, 0.055)) / raio;
+    vec3 q = q0 + desloc / (escalaCabelo * raio);
+    float base = min(1.0, dot(q0, q0)), d = dot(q, q);
+    if (d < base) desloc = (q * sqrt(base / max(1e-5, d)) - q0) * raio * escalaCabelo;
+    return desloc;
 }
 )"
 
-const char* VS_PELE = CORPO_SKIN VENTO_MECHA R"(
+const char* VS_PELE = CORPO_SKIN FISICA_MECHA R"(
 VARY vec4 tanRep;
 VARY vec3 tanMundo;
 VARY vec3 posRep;
@@ -1865,9 +1873,9 @@ void main() {
     vec3 normal = normalize(mat3(S) * vertexNormal);
     if (vertexTexCoord.y > 24.25 && vertexTexCoord.y < 24.75) {
         float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
-        vec3 desloc = deslocarMecha(w, normal);
+        vec3 desloc = mat3(S) * deslocarMecha(w);
         pl.xyz += desloc;
-        vec3 fio = normalize(tangente + desloc * 0.8);
+        vec3 fio = normalize(tangente + desloc * 2.8);
         normal = normalize(normal - fio * dot(normal, fio) * w);
         tangente = fio;
     }
@@ -1898,7 +1906,7 @@ void main() {
 }
 )";
 
-const char* VS_PROF_PELE = CORPO_SKIN VENTO_MECHA R"(
+const char* VS_PROF_PELE = CORPO_SKIN FISICA_MECHA R"(
 VARY float tipo;
 VARY vec2 mechaUV;
 void main() {
@@ -1908,7 +1916,7 @@ void main() {
     vec4 pl = S * vec4(vertexPosition, 1.0);
     if (tipo > 24.25 && tipo < 24.75) {
         float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
-        pl.xyz += deslocarMecha(w, normalize(mat3(S) * vertexNormal));
+        pl.xyz += mat3(S) * deslocarMecha(w);
     }
     gl_Position = mvp * pl;
 }

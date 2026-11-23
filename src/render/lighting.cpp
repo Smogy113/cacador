@@ -1,4 +1,5 @@
 #include "render/lighting.h"
+#include "core/hair_physics.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -232,6 +233,10 @@ void Iluminacao::carregar(Nivel nivel) {
     }
 #endif
     profPele_ = carregarShader(VS_PROF_PELE, FS_PROF);
+    int indiceCabelo = 0;
+    for (Shader sh : {pele_, profPele_})
+        locCabelo_[indiceCabelo++] = {GetShaderLocation(sh, "cabeloMeio[0]"), GetShaderLocation(sh, "cabeloPonta[0]"),
+                                     GetShaderLocation(sh, "escalaCabelo")};
     matProfPele_ = LoadMaterialDefault();
     matProfPele_.shader = profPele_;
     junta_.locs[SHADER_LOC_MAP_SPECULAR] = GetShaderLocation(junta_, "texBrilho");
@@ -1133,8 +1138,16 @@ void Iluminacao::definirJanelas(const std::vector<JanelaLuz>& js, Vec3f foco) {
 #endif
 }
 void Iluminacao::definirRaioGrama(float r) { setF(lit_, "raioGrama", r); }
-void Iluminacao::definirCabelo(Material& mat, Vec3f raiz, Vec3f ponta, float tempo) {
-    setV3(mat.shader, "cabeloRaiz", raiz);
-    setV3(mat.shader, "cabeloPonta", ponta);
-    setF(mat.shader, "tempoVento", tempo);
+void Iluminacao::definirCabelo(const Material& mat, const DeformacaoCabelo& deformacao, float escala) {
+    const auto& loc = locCabelo_[mat.shader.id == profPele_.id ? 1 : 0];
+    SetShaderValue(mat.shader, loc.escala, &escala, SHADER_UNIFORM_FLOAT);
+    if (escala == 0.f) return;
+    float meio[3][3], ponta[3][3];
+    for (size_t i = 0; i < deformacao.meio.size(); ++i) {
+        Vec3f m = deformacao.meio[i], p = deformacao.ponta[i];
+        meio[i][0] = m.x; meio[i][1] = m.y; meio[i][2] = m.z;
+        ponta[i][0] = p.x; ponta[i][1] = p.y; ponta[i][2] = p.z;
+    }
+    SetShaderValueV(mat.shader, loc.meio, meio, SHADER_UNIFORM_VEC3, 3);
+    SetShaderValueV(mat.shader, loc.ponta, ponta, SHADER_UNIFORM_VEC3, 3);
 }

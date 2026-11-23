@@ -6,6 +6,8 @@
 #include "core/predio.h"
 #include "core/quality.h"
 
+struct DeformacaoCabelo;
+
 struct LuzPontual {
     Vec3f pos;
     Rgb cor;
@@ -33,7 +35,7 @@ public:
     Nivel nivel() const { return nivel_; }
     void definirRaioGrama(float r);
     float posSolTela_[2] = {-1.f, -1.f};
-    void definirCabelo(Material& mat, Vec3f raiz, Vec3f ponta, float tempo);
+    void definirCabelo(const Material& mat, const DeformacaoCabelo& deformacao, float escala);
     void definirHeroi(bool sim);
     void definirFoco(float distHeroi);
     void definirJanelas(const std::vector<JanelaLuz>& janelas, Vec3f foco);
@@ -106,6 +108,8 @@ private:
     Shader lit_{}, ceu_{}, prof_{}, brilho_{}, blur_{}, raios_{}, junta_{}, ssao_{}, blurAO_{}, blur4_{}, longe_{};
     Shader raiosVolume_{};
     Shader pele_{}, profPele_{}, cabeca_{}, litParede_{};
+    struct UniformesCabelo { int meio, ponta, escala; };
+    UniformesCabelo locCabelo_[2]{};
     bool paredeOk_ = false;
     bool cabecaOk_ = false;
     Material mat_{}, matProf_{}, matPele_{}, matProfPele_{}, matCabeca_{}, matConstr_{};

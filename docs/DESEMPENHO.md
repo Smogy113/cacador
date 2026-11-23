@@ -110,3 +110,13 @@ Em 32 quadros por cena no Alto, a 1280×720 no llvmpipe, o tempo médio passou d
 Com 32 quadros por cena no Alto, a 1280×720 no llvmpipe, o tempo médio passou de 209,65
 para 229,02 ms na estrada e de 194,60 para 214,37 ms na encosta. A contagem de chamadas de
 desenho permaneceu igual nas duas cenas.
+
+## Física do cabelo
+
+O penteado ondulado usa três guias, um em cada lateral e outro na nuca. `hair_physics.cpp`
+simula a dobra e a ponta de cada guia, com a raiz presa à cabeça. Os subpassos de até 1/120 s
+limitam a variação com o FPS. O shader interpola os deslocamentos entre os guias e reaproveita
+a mesma deformação no passe principal e nas sombras, com a malha original na GPU.
+
+Ao ajustar rigidez, amortecimento ou colisão, use `--cabelo ondulado --retrato .65 --girar-camera 75 --direto`
+para observar uma corrida, uma parada e uma virada de perto. Confira também o movimento a cavalo.

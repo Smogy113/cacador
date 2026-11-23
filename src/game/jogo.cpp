@@ -412,9 +412,9 @@ void Jogo::desenharJogador(Material& matPele, bool hd) {
     luz_.definirHeroi(true);
     auto desenhar = [&](Vec3f pos, float yaw, const Pose& pose) {
         if (op_.cabeloOndulado)
-            luz_.definirCabelo(matPele, rotY(cabeloRaiz_.pos, -yaw), rotY(cabeloPonta_.pos, -yaw), tempo_);
+            luz_.definirCabelo(matPele, cabelo_.deformacao(), ej.ossos[CABECA].fim.y / 1.8f);
         modeloJogador_.desenhar(matPele, pos, yaw, pose, hd, matCabeca);
-        if (op_.cabeloOndulado) luz_.definirCabelo(matPele, {}, {}, tempo_);
+        if (op_.cabeloOndulado) luz_.definirCabelo(matPele, {}, 0.f);
     };
     if (montadoEm_ >= 0) {
         const Cavalo& c = cavalos_[montadoEm_];
@@ -471,6 +471,7 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
 }
 
 void Jogo::teleportar(float x, float z, float yawGraus, float hora) {
+    cabelo_.reiniciar();
     if (montadoEm_ >= 0) { cavalos_[montadoEm_].montado = false; montadoEm_ = -1; rig_.distAlvo = 4.f; }
     jogador_.pos = {x, terreno_->altura(x, z), z};
     jogador_.yaw = rig_.yaw = yawGraus * DEG2RAD;
@@ -601,7 +602,6 @@ void Jogo::configurarGrama() {
     else grama_.configurar(34.f, 20.f);
 }
 
-// Molas acopladas: a parte curta acompanha a cabeca; o comprimento e as pontas atrasam.
 void Jogo::atualizarCabelo(float dt) {
     if (!op_.cabeloOndulado || dt <= 0.f) return;
     const Esqueleto& e = modeloJogador_.esqueleto();
@@ -618,52 +618,11 @@ void Jogo::atualizarCabelo(float dt) {
     } else {
         pose = poseDoJogador(e);
     }
-    std::vector<Mat4> ossos;
+    static thread_local std::vector<Mat4> ossos;
     calcularMatrizes(e, pose, ossos);
-    Vec3f cranio = e.ossos[CABECA].inicio + Vec3f{0, 0.12f, 0};
-    Vec3f cab = base + rotY(ossos[CABECA].ponto(cranio), yaw);
-    Vec3f delta = cab - cabecaAntes_;
-    if (!cabeloIniciado_ || len(delta) > std::max(0.75f, 26.f * dt)) {
-        cabecaAntes_ = cab;
-        velCabecaAntes_ = acelCabelo_ = {};
-        cabeloRaiz_ = cabeloPonta_ = {};
-        yawCabeloAntes_ = yaw;
-        giroCabelo_ = 0.f;
-        cabeloIniciado_ = true;
-        return;
-    }
-    Vec3f vel = delta * (1.f / dt);
-    float filtro = 1.f - std::exp(-dt * 17.f);
-    Vec3f acel = (vel - velCabecaAntes_) * (1.f / dt);
-    acel = acel * std::min(1.f, 48.f / std::max(len(acel), 0.01f));
-    acelCabelo_ = acelCabelo_ + (acel - acelCabelo_) * filtro;
-    float difYaw = yaw - yawCabeloAntes_;
-    float giro = std::clamp(std::atan2(std::sin(difYaw), std::cos(difYaw)) / dt, -6.f, 6.f);
-    giroCabelo_ = lerp(giroCabelo_, giro, filtro);
-    cabecaAntes_ = cab;
-    velCabecaAntes_ = vel;
-    yawCabeloAntes_ = yaw;
-
-    Vec3f vento{std::sin(tempo_ * 1.5f) * 0.010f, 0, std::cos(tempo_ * 0.91f) * 0.008f};
-    Vec3f alvo = acelCabelo_ * -0.0013f + vel * -0.0033f + direitaJogador() * (giroCabelo_ * 0.009f) + vento;
-    alvo.y = std::clamp(alvo.y, -0.030f, 0.043f);
-    alvo = alvo * 0.60f;  // mechas na altura da nuca: movimento curto, sobretudo junto ao rosto
-    auto integrar = [](MolaCabelo& m, Vec3f alvo, float rigidez, float amortecimento, float limite, float h) {
-        m.vel = (m.vel + (alvo - m.pos) * (rigidez * h)) * std::exp(-amortecimento * h);
-        m.pos = m.pos + m.vel * h;
-        float d = len(m.pos);
-        if (d > limite) {
-            Vec3f fora = m.pos * (1.f / d);
-            m.pos = fora * limite;
-            m.vel = m.vel - fora * std::max(0.f, dot(m.vel, fora));
-        }
-    };
-    int passos = std::max(1, int(std::ceil(dt * 120.f)));
-    float h = dt / passos;
-    for (int i = 0; i < passos; ++i) {
-        integrar(cabeloRaiz_, alvo * 0.50f, 210.f, 18.f, 0.040f, h);
-        integrar(cabeloPonta_, alvo * 0.56f + cabeloRaiz_.pos * 0.95f, 88.f, 9.f, 0.075f, h);
-    }
+    Mat4 mundo = Mat4::trans(base) * Mat4::rotY(yaw);
+    Vec3f vento{1.0f + .7f * std::sin(tempo_ * 1.9f), 0, .8f * std::cos(tempo_ * 1.1f)};
+    cabelo_.atualizar(dt, mundo * ossos[CABECA], mundo * ossos[PESCOCO], e.ossos[CABECA].fim.y / 1.8f, vento);
 }
 
 // Rota ate o objetivo da recompensa (esconderijo -> procurado -> xerife), recalculada quando o

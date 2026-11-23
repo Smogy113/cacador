@@ -7,6 +7,7 @@
 #include "core/camrig.h"
 #include "core/collision.h"
 #include "core/daytime.h"
+#include "core/hair_physics.h"
 #include "core/horse.h"
 #include "core/motion.h"
 #include "core/npc.h"
@@ -173,11 +174,7 @@ public:
     void imprimirPerfil() const;  // tempos por parte (capturas com --depuracao)
 private:
     Vec3f direitaJogador() const { return {-std::cos(jogador_.yaw), 0, std::sin(jogador_.yaw)}; }
-    struct MolaCabelo { Vec3f pos, vel; };
-    MolaCabelo cabeloRaiz_{}, cabeloPonta_{};
-    Vec3f cabecaAntes_{}, velCabecaAntes_{}, acelCabelo_{};
-    float yawCabeloAntes_ = 0, giroCabelo_ = 0;
-    bool cabeloIniciado_ = false;
+    FisicaCabelo cabelo_;
     void atualizarCabelo(float dt);
     void configurarGrama();
     int passoAntes_ = 0, cascoAntes_ = 0;
