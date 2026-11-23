@@ -27,10 +27,11 @@ Em **Personagem**, escolha **Ondulado** ou **Sem cabelo**. A seleção é guarda
 | W A S D | andar (no cavalo: W anda, A/D viram, S freia) |
 | Shift | correr / galopar |
 | Mouse | girar a câmera |
+| Rodinha do mouse | para cima aproxima até a primeira pessoa e para baixo afasta |
 | E | montar, desmontar, abrir e fechar portas, ver o quadro de recompensas, puxar o preso pela corda, entregar ao xerife |
 | Segurar E | amarrar o procurado rendido |
 | Enter (no quadro) | aceitar a recompensa do cartaz |
-| Botão direito | mirar (câmera sobre o ombro) |
+| Botão direito | mirar |
 | Botão esquerdo | atirar |
 | R | recarregar o revólver (6 balas) |
 | Esc | pausa (lá dentro: 1/2/3 trocam a qualidade gráfica, Q sai) |

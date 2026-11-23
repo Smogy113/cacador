@@ -29,7 +29,9 @@ static float alturaDoChao(const Vec3f& p, const Terreno& t, const MundoColisao& 
     return std::max(t.altura(p.x, p.z), col.alturaPiso(p.x, p.z, p.y));
 }
 
-void moverAPe(Corpo& c, const Entrada& e, float yawCamera, float dt, const Terreno& t, const MundoColisao& col) {
+void moverAPe(Corpo& c, const Entrada& e, float yawCamera, float dt, const Terreno& t, const MundoColisao& col,
+              bool orientarPelaCamera) {
+    if (orientarPelaCamera) c.yaw = yawCamera;
     Vec3f f = frenteDe(yawCamera);
     Vec3f dir{-std::cos(yawCamera), 0, std::sin(yawCamera)};  // direita da camera
     Vec3f m = f * e.frente + dir * e.lado;
@@ -42,9 +44,11 @@ void moverAPe(Corpo& c, const Entrada& e, float yawCamera, float dt, const Terre
                               col.alturaPiso(c.pos.x, c.pos.z, std::max(c.pos.y, t.altura(c.pos.x, c.pos.z))));
         if (chao < t.nivelAgua() - 0.6f) alvo *= 0.45f;  // dentro do rio
         // o corpo vira para onde vai andar; fora da mira, enquanto nao estiver de frente ele segura o passo
-        float rumo = std::atan2(c.dir.x, c.dir.z);
-        c.yaw += angDif(c.yaw, rumo) * std::min(1.f, dt * 12.f);
-        if (!e.mirar) alvo *= 0.5f + 0.5f * std::cos(angDif(c.yaw, rumo));
+        if (!orientarPelaCamera) {
+            float rumo = std::atan2(c.dir.x, c.dir.z);
+            c.yaw += angDif(c.yaw, rumo) * std::min(1.f, dt * 12.f);
+            if (!e.mirar) alvo *= 0.5f + 0.5f * std::cos(angDif(c.yaw, rumo));
+        }
     }
     float taxa = alvo > c.vel ? (alvo > VEL_ANDAR + 0.1f ? ACEL_CORRER : ACEL_ANDAR) : FREIO_A_PE;
     float total = rampa(c.vel, alvo, taxa, dt);

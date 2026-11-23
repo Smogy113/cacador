@@ -36,6 +36,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     jogador_.yaw = yaw;
     rig_.yaw = yaw + op.girarCamera * DEG2RAD;
     rig_.pitch = op.pitch > -900 ? op.pitch * DEG2RAD : 0.22f;
+    rig_.girar(0.f, 0.f, false);
     cam_.up = {0, 1, 0};
     cam_.fovy = 60.f;
     cam_.projection = CAMERA_PERSPECTIVE;
@@ -125,15 +126,12 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     if (op.comecarMontado && !cavalos_.empty()) {
         cavalos_[0].montado = true;
         montadoEm_ = 0;
-        rig_.distAlvo = 6.f;
     }
     iniciarCombate();
     sons_.carregar();
     if (op.recompensa >= 0) aceitarCartaz(0, op.recompensa);
     sombra_.carregar();
-    if (op.distCamera > 0) rig_.distAlvo = op.distCamera;
-    for (int i = 0; i < 40; i++) rig_.atualizar(montadoEm_ >= 0 ? jogador_.pos + Vec3f{0, 0.9f, 0} : jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
-    atualizarCamera(0, Entrada{});
+    atualizarCamera(0.f);
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, 0, 100000);
     cenario_.atualizar(jogador_.pos, 0, 100000);
     grama_.atualizar(jogador_.pos, 100000);
@@ -161,25 +159,52 @@ Entrada Jogo::lerEntrada() {
     e.recarregar = IsKeyPressed(KEY_R);
     if (dbg_.aberto) {  // o mouse e do painel
         e.mirar = e.atirar = false;
-        e.mouseDx = e.mouseDy = 0;
+        return e;
     }
     Vector2 md = GetMouseDelta();
     e.mouseDx = md.x;
     e.mouseDy = md.y;
+    e.rodinha = GetMouseWheelMove();
     return e;
 }
 
-void Jogo::atualizarCamera(float dt, const Entrada& e) {
-    Vec3f alvo = montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.pos + Vec3f{0, 0.9f, 0} : jogador_.pos;
-    // dentro de casa: camera perto do ombro (o combate redefine a distancia todo quadro; so aqui e limitada)
-    float distAntes = rig_.distAlvo, ombroAntes = rig_.ombroAlvo;
-    if (montadoEm_ < 0 && dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0) {
-        rig_.distAlvo = std::min(rig_.distAlvo, 1.8f);
-        rig_.ombroAlvo = std::min(rig_.ombroAlvo, 0.35f);
+float Jogo::distanciaPadraoCamera() const {
+    return op_.distCamera > 0.f ? op_.distCamera : (montadoEm_ >= 0 ? 6.f : 4.f);
+}
+
+bool Jogo::emPrimeiraPessoa() const {
+    return op_.retrato <= 0.f && !op_.estudio && rig_.primeiraPessoa();
+}
+
+void Jogo::atualizarCamera(float dt) {
+    const bool montado = montadoEm_ >= 0;
+    const bool primeira = emPrimeiraPessoa();
+    float distancia = primeira ? 0.f : rig_.distanciaZoom(distanciaPadraoCamera());
+    float ombro = .45f;
+    Vec3f pivo = jogador_.pos + Vec3f{0, 1.6f, 0};
+    if (primeira) {
+        const auto& esq = modeloJogador_.esqueleto();
+        float escala = esq.ossos[CABECA].fim.y / 1.8f;
+        Vec3f olhos{0, 1.687f * escala, .136f * escala};  // encaixe dos olhos da base humana
+        if (montado) {
+            const Cavalo& c = cavalos_[montadoEm_];
+            pivo = modelosCavalo_[montadoEm_].assento(c.corpo.pos, c.corpo.yaw, poseDaMontaria(montadoEm_));
+            pivo = pivo + rotY(olhos - esq.ossos[QUADRIL].inicio, c.corpo.yaw);
+        } else {
+            pivo = jogador_.pos + rotY(olhos, rig_.yaw);
+        }
+    } else if (montado) {
+        pivo = cavalos_[montadoEm_].corpo.pos + Vec3f{0, 2.5f, 0};
+    } else {
+        float alcanceMira = std::clamp(distancia - RigCamera::DIST_MIN_TERCEIRA, 0.f, 1.7f);
+        distancia -= alcanceMira * mira_;  // aproxima sem sobrescrever o zoom escolhido
+        ombro += .45f * mira_;
+        if (dentroDeInterior(cenario_.interiores(), jogador_.pos) >= 0) {
+            distancia = std::min(distancia, 1.8f);
+            ombro = std::min(ombro, .35f);
+        }
     }
-    rig_.atualizar(alvo, e.mouseDx, e.mouseDy, *terreno_, col_, dt);
-    rig_.distAlvo = distAntes;
-    rig_.ombroAlvo = ombroAntes;
+    rig_.posicionar(pivo, distancia, ombro, *terreno_, col_, dt);
     Vec3f p = rig_.posicao(), o = rig_.olhar();
     if (op_.retrato > 0) {
         float alt = op_.estudio && op_.retrato > 1.f ? 0.91f : modeloJogador_.esqueleto().ossos[CABECA].inicio.y + 0.06f;
@@ -335,6 +360,9 @@ void Jogo::atualizar(float dt) {
         nada.mouseDy = e.mouseDy;
         e = nada;
     }
+    if (op_.retrato <= 0.f && !op_.estudio) rig_.ajustarZoom(e.rodinha, distanciaPadraoCamera());
+    const bool primeira = emPrimeiraPessoa();
+    rig_.girar(e.mouseDx, e.mouseDy, primeira);
     cavaloPerto_ = -1;
     if (montadoEm_ >= 0) {
         Cavalo& c = cavalos_[montadoEm_];
@@ -343,11 +371,12 @@ void Jogo::atualizar(float dt) {
         } else if (e.interagir) {
             desmontar(c, jogador_, col_);
             montadoEm_ = -1;
-            rig_.distAlvo = 4.f;
             aoDesmontar();
         } else {
             float faseAnterior = c.passada;
+            float yawAntes = c.corpo.yaw;
             moverCavalo(c, e, dt * dbg_.velJogador, *terreno_, col_);
+            if (primeira) rig_.yaw += c.corpo.yaw - yawAntes;
             jogador_.pos = c.corpo.pos;
             jogador_.yaw = c.corpo.yaw;
             jogador_.vel = 0;
@@ -371,11 +400,11 @@ void Jogo::atualizar(float dt) {
         interagirCacada(e);
         if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
         Vec3f antes = jogador_.pos;
-        moverAPe(jogador_, e, rig_.yaw, dt * dbg_.velJogador, *terreno_, col_);
+        moverAPe(jogador_, e, rig_.yaw, dt * dbg_.velJogador, *terreno_, col_, primeira);
         if (mira_ > 0.5f) jogador_.yaw = rig_.yaw;
         // a animacao segue o que o corpo andou de fato (parede segura o passo); mirando, o yaw segue a
         // camera e o corpo nao tomba nas puxadas do mouse
-        loco_.atualizar(dt, jogador_.pos - antes, jogador_.yaw, mira_ <= 0.5f);
+        loco_.atualizar(dt, jogador_.pos - antes, jogador_.yaw, !primeira && mira_ <= 0.5f);
         if (loco_.passo() != passoAntes_) {  // um som a cada toque de calcanhar
             passoAntes_ = loco_.passo();
             if (sons_.ok() && loco_.vel > .1f) {
@@ -397,21 +426,24 @@ void Jogo::atualizar(float dt) {
         }
         if (e.interagir && cavaloPerto_ >= 0 && tentarMontar(cavalos_[cavaloPerto_], jogador_)) {
             montadoEm_ = cavaloPerto_;
-            rig_.distAlvo = 6.f;
-            rig_.ombroAlvo = 0.45f;
             cavaloPerto_ = -1;
             aoMontar();
             e.interagir = false;
         }
     }
     atualizarPortas(dt, montadoEm_ < 0 && e.interagir);
+    mirando_ = e.mirar && montadoEm_ < 0 && morteT_ < 0;
+    mira_ += ((mirando_ ? 1.f : 0.f) - mira_) * std::min(1.f, dt * 10.f);
+    cam_.fovy = dbg_.fov - 12.f * mira_;
+    atualizarCamera(dt);  // o tiro usa a direção da câmera deste quadro
+    int montariaAntes = montadoEm_;
     atualizarCombate(dt, e);
+    if (montariaAntes != montadoEm_) atualizarCamera(0.f);
     atualizarRota(dt);
     atualizarAmbienteSonoro(dt);
     populacao_.atualizar(dt, relogio_, *terreno_, col_, jogador_.pos);
     for (size_t i = 0; i < cavalos_.size(); i++)
         if (int(i) != montadoEm_) moverCavalo(cavalos_[i], Entrada{}, dt, *terreno_, col_);
-    atualizarCamera(dt, e);
     atualizarCabelo(dt);
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_);
     cenario_.atualizar(jogador_.pos, tempo_);
@@ -499,14 +531,14 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
         modelo.desenhar(matPele, c.corpo.pos, c.corpo.yaw, pc, perto);
         trisAtores_ += modelo.triangulos(perto);
         chamadasAtores_++;
-        if (int(i) == montadoEm_) desenharJogador(matPele, passePrincipal_);
     }
-    if (montadoEm_ < 0) {
+    // O corpo continua no mapa de sombras, mas ficaria na frente da câmera nos olhos.
+    if (!passePrincipal_ || !emPrimeiraPessoa()) {
         desenharJogador(matPele, passePrincipal_);
         trisAtores_ += modeloJogador_.triangulos(passePrincipal_);
         chamadasAtores_++;
-        if (sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     }
+    if (montadoEm_ < 0 && sombraBolha) sombra_.desenhar(jogador_.pos, terreno_->normal(jogador_.pos.x, jogador_.pos.z), 0.45f);
     desenharCombatentes(matPele, sombraBolha, distMax);
     for (auto& c : cavalos_) {
         if (!sombraBolha) break;
@@ -520,12 +552,11 @@ void Jogo::desenharAtores(Material& mat, Material& matPele, bool sombraBolha, fl
 
 void Jogo::teleportar(float x, float z, float yawGraus, float hora) {
     modeloJogador_.reiniciarCabelo();
-    if (montadoEm_ >= 0) { cavalos_[montadoEm_].montado = false; montadoEm_ = -1; rig_.distAlvo = 4.f; }
+    if (montadoEm_ >= 0) { cavalos_[montadoEm_].montado = false; montadoEm_ = -1; }
     jogador_.pos = {x, terreno_->altura(x, z), z};
     jogador_.yaw = rig_.yaw = yawGraus * DEG2RAD;
     relogio_ = DayClock(hora);
-    for (int i = 0; i < 30; i++) rig_.atualizar(jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
-    atualizarCamera(0, Entrada{});
+    atualizarCamera(0.f);
     terrenoR_->atualizar(jogador_.pos, luz_.efeitos().distanciaVisao, tempo_, 100000);
     cenario_.atualizar(jogador_.pos, tempo_, 100000);
     grama_.atualizar(jogador_.pos, 100000);
@@ -633,7 +664,7 @@ void Jogo::desenhar() {
     EndMode3D();
     {
         Vec3f heroi = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.3f : 1.5f, 0};
-        luz_.definirFoco(len(heroi - Vec3f{cam_.position.x, cam_.position.y, cam_.position.z}));
+        luz_.definirFoco(emPrimeiraPessoa() ? 0.f : len(heroi - posCamera));
     }
     if (luz_.usaPos()) {
         float tempoGrao = op_.semEntrada ? tempo_ : float(GetTime());

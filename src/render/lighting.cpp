@@ -732,7 +732,7 @@ void Iluminacao::terminarPos(const Camera3D& cam, float tempoGrao, PerfilGPU* pe
     comecar(P_POS_FOCO);
     // 3c) camera de cinema (Alto): copia desfocada da cena para a profundidade de campo
     bool cinema = nivel_ == Nivel::Alto && cenaComProfundidade_;
-    bool foco = cinema && !dbg.semFoco;
+    bool foco = cinema && !dbg.semFoco && distFoco_ > 0.f;
     if (foco) {
         BeginTextureMode(focoA_);
         BeginShaderMode(longe_);

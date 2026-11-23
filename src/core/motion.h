@@ -8,7 +8,7 @@ struct Entrada {
     float frente = 0, lado = 0;  // -1..1 (lado > 0 = direita)
     bool correr = false, interagir = false;
     bool mirar = false, atirar = false, recarregar = false, segurarInteragir = false, aceitar = false;
-    float mouseDx = 0, mouseDy = 0;
+    float mouseDx = 0, mouseDy = 0, rodinha = 0;
 };
 
 struct Corpo {
@@ -29,4 +29,5 @@ Vec3f frenteDe(float yaw);
 // Move o corpo pelo comando (relativo a camera): acelera e freia em vez de saltar de velocidade, vira o
 // corpo para onde anda e, fora da mira, desacelera ao mudar muito de direcao (ninguem da meia-volta em
 // velocidade cheia). Mirando, anda de lado e para tras sem girar o corpo.
-void moverAPe(Corpo& c, const Entrada& e, float yawCamera, float dt, const Terreno& t, const MundoColisao& col);
+void moverAPe(Corpo& c, const Entrada& e, float yawCamera, float dt, const Terreno& t, const MundoColisao& col,
+              bool orientarPelaCamera = false);

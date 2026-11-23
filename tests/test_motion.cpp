@@ -130,7 +130,7 @@ TEST_CASE("câmera nunca fica dentro do morro") {
         for (float pitch : {-0.35f, 0.f, 0.5f}) {
             r.pitch = pitch;
             Vec3f pes{x, t.altura(x, x * 0.5f), x * 0.5f};
-            for (int k = 0; k < 30; k++) r.atualizar(pes, 0, 0, t, col, 0.05f);
+            r.posicionar(pes + Vec3f{0, 1.6f, 0}, 4.f, .45f, t, col, 0.f);
             Vec3f c = r.posicao();
             CHECK(c.y >= t.altura(c.x, c.z) + 0.5f - 1e-3f);
         }
@@ -142,16 +142,54 @@ TEST_CASE("câmera recua quando tem parede atrás") {
     col.adicionar({{-5, h - 1, -4}, {5, h + 10, -3}});  // parede atras (camera olha +z, fica em -z)
     RigCamera r;
     r.pitch = 0.1f;
-    for (int k = 0; k < 60; k++) r.atualizar({0, t.altura(0, 0), 0}, 0, 0, t, col, 0.05f);
+    r.posicionar({0, h + 1.6f, 0}, 4.f, .45f, t, col, 0.f);
     CHECK(r.posicao().z > -3.f);
+    CHECK_FALSE(r.primeiraPessoa());
 }
 TEST_CASE("pitch limitado") {
     RigCamera r;
-    MundoColisao col;
-    r.atualizar({0, plano().altura(0, 0), 0}, 0, 100000.f, plano(), col, 0.016f);
+    r.girar(0, 100000.f, false);
     CHECK(r.pitch <= RigCamera::PITCH_MAX + 1e-5f);
-    r.atualizar({0, plano().altura(0, 0), 0}, 0, -100000.f, plano(), col, 0.016f);
+    r.girar(0, -100000.f, false);
     CHECK(r.pitch >= RigCamera::PITCH_MIN - 1e-5f);
+}
+
+TEST_CASE("câmera aproxima pela rodinha e sai da primeira pessoa ao afastar") {
+    RigCamera r;
+    CHECK(r.distanciaZoom(4.f) == 4.f);
+    CHECK(r.distanciaZoom(6.f) == 6.f);
+    r.ajustarZoom(1.f, 4.f);
+    CHECK(r.distanciaZoom(4.f) < 4.f);
+    CHECK(r.distanciaZoom(6.f) == r.distanciaZoom(4.f));
+    CHECK_FALSE(r.primeiraPessoa());
+
+    r.ajustarZoom(100.f, 4.f);
+    REQUIRE(r.primeiraPessoa());
+    CHECK(r.distanciaZoom(6.f) == 0.f);
+    Vec3f olhos{3.f, plano().altura(3, 4) + 1.7f, 4.f};
+    r.girar(0, -100000.f, true);
+    r.posicionar(olhos, r.distanciaZoom(4.f), .45f, plano(), MundoColisao{}, 1.f / 60.f);
+    CHECK(r.posicao() == olhos);
+    CHECK(r.olhar().y > olhos.y);
+    CHECK(len(r.olhar() - olhos) == doctest::Approx(1.f));
+
+    r.ajustarZoom(-1.f, 6.f);
+    CHECK_FALSE(r.primeiraPessoa());
+    CHECK(r.distanciaZoom(6.f) > 1.f);
+    r.ajustarZoom(-100.f, 6.f);
+    CHECK(r.distanciaZoom(6.f) == doctest::Approx(9.f));
+}
+
+TEST_CASE("em primeira pessoa anda para trás e de lado mantendo a direção do olhar") {
+    Corpo c{{0, plano().altura(0, 0), 0}, 1.f, 0.f};
+    Entrada e;
+    e.frente = -1.f;
+    e.lado = 1.f;
+    moverAPe(c, e, 0.f, 1.f, plano(), MundoColisao{}, true);
+    CHECK(c.pos.x < -.5f);
+    CHECK(c.pos.z < -.5f);
+    CHECK(c.yaw == 0.f);
+    CHECK(c.vel == doctest::Approx(VEL_ANDAR));
 }
 
 TEST_CASE("anda sobre a ponte (piso) em vez de afundar no rio") {
@@ -180,7 +218,7 @@ TEST_CASE("câmera não entra na parede colada no lado direito do jogador") {
         RigCamera r;
         r.yaw = yawOff;
         r.pitch = 0.15f;
-        for (int k = 0; k < 40; k++) r.atualizar({0, h, 0}, 0, 0, t, col, 0.05f);
+        r.posicionar({0, h + 1.6f, 0}, 4.f, .45f, t, col, 0.f);
         Vec3f c = r.posicao();
         CHECK_MESSAGE(c.x > -0.4f, "camera dentro da parede: x=" << c.x);
     }

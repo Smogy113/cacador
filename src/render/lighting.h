@@ -34,7 +34,7 @@ public:
     void definirRaioGrama(float r);
     float posSolTela_[2] = {-1.f, -1.f};
     void definirHeroi(bool sim);
-    void definirFoco(float distHeroi);
+    void definirFoco(float distHeroi);  // metros até o herói, zero desliga a profundidade de campo
     void definirJanelas(const std::vector<JanelaLuz>& janelas, Vec3f foco);
     // luz das paredes guardada por face: prepara o atlas uma vez (depois de gerar o cenario) e, a cada
     // quadro, recalcula algumas faces perto da camera (rodizio; faces novas primeiro)

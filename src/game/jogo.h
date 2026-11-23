@@ -104,7 +104,9 @@ private:
     Locomocao loco_;  // passada, mistura parado/andando e inclinacoes do caçador a pé
     bool pausado_ = false, sair_ = false;
     Entrada lerEntrada();
-    void atualizarCamera(float dt, const Entrada& e);
+    float distanciaPadraoCamera() const;
+    bool emPrimeiraPessoa() const;
+    void atualizarCamera(float dt);
     void desenharAtores(Material& mat, Material& matPele, bool sombraBolha, float distMax);
     void trocarNivel(Nivel n);
     bool atrasDaCamera(Vec3f p) const;

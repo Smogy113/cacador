@@ -117,8 +117,7 @@ void Jogo::prepararTiroteio(bool bandoGrande) {
     float yaw = std::atan2(e.x - p.x, e.z - p.z);
     teleportar(p.x, p.z, yaw * RAD2DEG, relogio_.hora());
     rig_.yaw += op_.girarCamera * DEG2RAD;
-    for (int i = 0; i < 30; i++) rig_.atualizar(jogador_.pos, 0, 0, *terreno_, col_, 0.05f);
-    atualizarCamera(0, Entrada{});
+    atualizarCamera(0.f);
     cacada_.atualizar(0.05f, jogador_.pos, 0, false, true, *terreno_, col_);  // cria o bando ja alerta
 }
 
@@ -182,13 +181,6 @@ bool Jogo::interagirCacada(Entrada& e) {
 void Jogo::atualizarCombate(float dt, Entrada& e) {
     bool vivoJ = morteT_ < 0;
     bool aPe = montadoEm_ < 0;
-    mirando_ = e.mirar && aPe && vivoJ;
-    mira_ += ((mirando_ ? 1.f : 0.f) - mira_) * std::min(1.f, dt * 10.f);
-    if (aPe) {
-        rig_.distAlvo = 4.f - 1.7f * mira_;
-        rig_.ombroAlvo = 0.45f + 0.45f * mira_;
-    }
-    cam_.fovy = dbg_.fov - 12.f * mira_;
     arma_.atualizar(dt);
     tiroT_ = std::max(0.f, tiroT_ - dt);
     marcaAcerto_ = std::max(0.f, marcaAcerto_ - dt);
