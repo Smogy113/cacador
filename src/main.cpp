@@ -24,6 +24,7 @@ struct Opcoes {
     bool direto = false;
     std::string screenshot;
     int frames = 0;
+    int congelarNoQuadro = 0;  // > 0: a lógica para nesse quadro e a tela continua (capturas no navegador)
     OpcoesJogo jogo;
 };
 
@@ -61,7 +62,11 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--portas-abertas") o.jogo.portasAbertas = true;
         else if (a == "--yaw") o.jogo.yaw = (float)std::atof(prox());
         else if (a == "--abrir-fogueira") o.jogo.abrirFogueira = true;
-        else if (a == "--roteiro-circuito") o.jogo.roteiroCircuito = std::atoi(prox());  // 1..5, ver OpcoesJogo
+        else if (a == "--roteiro-circuito") o.jogo.roteiroCircuito = std::atoi(prox());  // 1..10, ver OpcoesJogo
+        else if (a == "--receitas-todas") o.jogo.receitasTodas = true;
+        // entrada simulada sem tirar print: roteiros e capturas na versão web (o mouse e o teclado ficam de fora)
+        else if (a == "--sem-entrada") { o.jogo.semEntrada = true; o.jogo.congelarHora = true; }
+        else if (a == "--congelar-no-quadro") o.congelarNoQuadro = std::max(1, std::atoi(prox()));
         else if (a == "--cabelo") {
             std::string c = prox();
             if (c == "sem" || c == "ondulado") {
@@ -87,7 +92,8 @@ static void quadro() {
     // Capturas e benchmark simulam o mesmo tempo de jogo em qualquer maquina.
     float dt = g_op.jogo.semEntrada ? 1.f / 60.f : GetFrameTime();
     if (dt > 0.1f) dt = 0.1f;
-    g_jogo->atualizar(dt);
+    // --congelar-no-quadro N: depois do quadro N só desenha (o roteiro fica parado na tela para a captura)
+    if (g_op.congelarNoQuadro <= 0 || g_frame < g_op.congelarNoQuadro) g_jogo->atualizar(dt);
     BeginDrawing();
     g_jogo->desenhar();
     g_jogo->desenharInterface();

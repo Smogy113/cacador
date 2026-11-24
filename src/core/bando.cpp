@@ -19,6 +19,7 @@ Vec3f posLivre(Vec3f p, const Terreno& t, const MundoColisao& col) {
 }
 void encarar(Bandido& b, Vec3f alvo) { b.corpo.yaw = std::atan2(alvo.x - b.corpo.pos.x, alvo.z - b.corpo.pos.z); }
 void mover(Bandido& b, Vec3f dir, float vel, float dt, const Terreno& t, const MundoColisao& col) {
+    vel *= b.fisica.multVelocidade();  // zona congelante dos Circuitos: anda devagar
     float n = std::hypot(dir.x, dir.z);
     if (n < 1e-4f) { b.corpo.vel = 0; return; }
     Vec3f d{dir.x / n, 0, dir.z / n};

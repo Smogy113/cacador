@@ -208,21 +208,23 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     tiroOuvido_ = false;
     if (e.atirar && aPe && vivoJ && quadroAberto_ < 0) {
         if (arma_.balas == 0) arma_.recarregar();
-        // bala gravada com pavio molhado: o cao bate e nada sai (nao gasta a bala nem o doador)
-        if (arma_.podeAtirar() && !balaGravadaFalhou(canoDoJogador())) {
+        // Bala gravada: o gatilho decide antes (core/rebote). Falha = o cao bate e nada sai, nada e
+        // gasto; Rebote = estourou na camara (ja resolvido em sofrerRebote). O resto atira.
+        const Gatilho gatilho = arma_.podeAtirar() ? puxarGatilho(canoDoJogador()).gatilho : Gatilho::Falha;
+        if (gatilho != Gatilho::Falha && gatilho != Gatilho::Rebote) {
             arma_.atirar();
             if (dbg_.municaoInf) arma_.balas = Revolver::CAPACIDADE;
             sons_.tiro(interior >= 0 ? AcusticaTiro::Interior : AcusticaTiro::Externa, 1.f, .47f);
             tiroOuvido_ = true;
             tiroT_ = 0.18f;
             jogador_.yaw = rig_.yaw;
-            // bandidos primeiro (mesmo indice do bando), depois os bonecos de treino da arena
+            // bandidos primeiro (mesmo indice do bando), depois os bonecos e os inimigos de teste da arena
             std::vector<Alvo> alvos = alvosCircuito();
             const int nBandidos = cacada_.bando().vazio() ? 0 : int(cacada_.bando().bandidos().size());
             Acerto pc = lancarTiro(camPos, camDir, 200.f, alvos, *terreno_, col_);  // para onde a mira aponta
             Vec3f cano = canoDoJogador();
             Vec3f dir = normalizar(pc.ponto - cano);
-            float esp = espalhamento(mirando_, jogador_.vel);
+            float esp = espalhamento(mirando_, jogador_.vel) + 0.06f * tremor_.forca();  // mira tremida do rebote
             Vec3f a = normalizar(cross(dir, Vec3f{0, 1, 0})), b = cross(a, dir);
             float ang = aleatorio01(rngTiro_) * 6.2831f, r = std::sqrt(aleatorio01(rngTiro_)) * esp;
             dir = normalizar(dir + a * (std::cos(ang) * r) + b * (std::sin(ang) * r));
@@ -237,15 +239,15 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
             Vec3f boca = jogador_.pos + rotY(ossos[MAO_D].ponto(bocaDoRevolver(e, escala)), jogador_.yaw);
             Vec3f frenteBoca = normalizar(rotY(ossos[MAO_D].vetor(eixo), jogador_.yaw));
             // Bala gravada vira projetil (o dano vem no impacto); a comum e o raio instantaneo de sempre.
-            if (!dispararCircuito(boca, dir)) {
+            if (!dispararCircuito(boca, dir, gatilho)) {
                 Acerto t = lancarTiro(cano, dir, 200.f, alvos, *terreno_, col_);
                 if (t.indice >= 0 && t.indice < nBandidos) {
                     marcaMatou_ = cacada_.bando().levarTiro(t.indice, t.parte);
                     marcaAcerto_ = 0.2f;
-                } else if (t.indice >= nBandidos) {
+                } else if (t.indice >= nBandidos) {  // boneco ou inimigo de teste
                     GolpeAlvo g;
                     g.dano = t.parte == Parte::Cabeca ? 100.f : circuitos_.p.danoBala;
-                    marcaMatou_ = golpear(bonecos_[size_t(t.indice - nBandidos)], g);
+                    marcaMatou_ = golpearAlvoDaArena(t.indice - nBandidos, g);
                     marcaAcerto_ = 0.2f;
                 } else if (t.dist < 199.f) {
                     for (int k = 0; k < 5; k++)  // poeira onde a bala bateu

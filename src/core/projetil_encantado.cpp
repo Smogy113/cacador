@@ -56,6 +56,7 @@ GolpeAlvo golpeDoImpacto(const Impacto& im, Vec3f centroAlvo, bool direto, const
         g.dano = p.danoPeso * k;
         g.empurrao = fora * (p.empurraoPeso * k);
         g.derrubar = p.tempoDerrubado * std::min(1.f, k);
+        g.atordoar = p.tempoAtordoado * std::min(1.f, k);
         break;
     case Propriedade::Levante:  // o peso invertido: arremessa para cima, com um leve afastamento
         g.levante = p.levante * (0.5f + 0.5f * queda) * e.intensidade;
@@ -79,8 +80,9 @@ GolpeAlvo golpeDoImpacto(const Impacto& im, Vec3f centroAlvo, bool direto, const
 GolpeAlvo golpeDaZona(const ZonaElemental& z, Vec3f pes, float dt, const ParametrosCircuito& p) {
     GolpeAlvo g;
     if (z.restante <= 0.f || !z.contem(pes)) return g;
-    if (z.frio) {
-        g.congelar = 0.4f;  // renovado a cada quadro dentro; solta 0,4 s depois de sair
+    if (z.frio) {  // renovado a cada quadro dentro; solta tempoLentidaoGelo depois de sair
+        g.lentidao = p.tempoLentidaoGelo;
+        g.fatorLento = p.fatorLentidaoGelo;
     } else {
         g.dano = p.danoCalorPorSegundo * z.intensidade * dt;
         g.queimar = 0.5f;
@@ -92,8 +94,13 @@ GolpeAlvo golpeDaZona(const ZonaElemental& z, Vec3f pes, float dt, const Paramet
 
 Vec3f normalSuperficie(Vec3f ponto, Vec3f dir, const Terreno& t, const MundoColisao& col) {
     if (ponto.y <= t.altura(ponto.x, ponto.z) + 0.08f) return t.normal(ponto.x, ponto.z);
-    // Sonda em 10 direções a partir de um ponto um pouco antes do contato: as que batem em sólido
-    // apontam para dentro da parede; a normal é o oposto da soma delas.
+    // Caixas (inclusive as giradas): a normal exata da face, de um segmento curto em volta do contato.
+    // É o que mantém precisos os ricochetes calculados (a baia de cobertura da arena depende disso).
+    float tc;
+    Vec3f nc;
+    if (col.primeiroContato(ponto - dir * 0.25f, ponto + dir * 0.25f, tc, nc)) return nc;
+    // Reserva: sonda em 10 direções a partir de um ponto um pouco antes do contato; as que batem em
+    // sólido apontam para dentro da parede e a normal é o oposto da soma delas.
     const Vec3f q = ponto - dir * 0.05f;
     static const Vec3f sondas[10] = {{1, 0, 0},           {-1, 0, 0},          {0, 0, 1},           {0, 0, -1},
                                      {0.7071f, 0, 0.7071f}, {-0.7071f, 0, 0.7071f}, {0.7071f, 0, -0.7071f}, {-0.7071f, 0, -0.7071f},
@@ -228,6 +235,10 @@ int CircuitosNoMundo::capsulaPerto(Vec3f q, float raio) const {
         }
     }
     return melhor;
+}
+
+void CircuitosNoMundo::marcarDescoberta(int i) {
+    if (i >= 0 && i < int(capsulas_.size())) capsulas_[size_t(i)].descoberta = true;
 }
 
 int CircuitosNoMundo::recolher(Vec3f q, float raio) {

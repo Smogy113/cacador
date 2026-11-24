@@ -246,6 +246,7 @@ void Jogo::desenharInterface() {
     }
     if (!pausado_) {
         desenharBordaDano(vida_.fracao());
+        if (depuracaoCombate_) desenharRotulosCombate();  // estado sobre cada inimigo de teste
         if (cacada_.ativa()) {
             Vec3f obj = cacada_.objetivo(jogador_.pos, xerifes_);
             desenharBussola(rig_.yaw, true, posicaoNaBussola(rig_.yaw, jogador_.pos, obj, 1.6f),
@@ -255,6 +256,7 @@ void Jogo::desenharInterface() {
         }
         desenharHud(vida_.fracao(), arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_, MapaTela::centroMini(), MapaTela::RAIO_MINI);
         desenharHudCircuitos();
+        if (depuracaoCombate_) desenharDepuracaoCombate();
         desenharMensagem(mensagem_, mensagemT_);
         if (!mapaAberto_)
             mapaTela_.desenharMini(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rig_.yaw, rota_,
@@ -268,6 +270,7 @@ void Jogo::desenharInterface() {
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E", "puxar pela corda");
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos)) desenharDica("", "Traga um cavalo: monte perto do corpo para levar");
         else if (pertoFogueira_) desenharDica("E", "gravar munição na fogueira");
+        else if (pistaPerto_ >= 0) desenharDica("E", "inspecionar: " + pistas_[size_t(pistaPerto_)].objeto);
         else if (capsulaPerto_ >= 0) desenharDica("E", "recolher a cápsula (apaga o rastro)");
         else if (quadroPerto_ >= 0) desenharDica("E", "ver recompensas");
         else if (cavaloPerto_ >= 0) desenharDica("E", "montar");
@@ -326,7 +329,7 @@ void Jogo::atualizar(float dt) {
     dt = limitarDt(dt);
     tempoTotal_ += dt;
     if (painel_.aberto) {  // fogueira dos Circuitos de Queima: o mundo segue, o cacador espera
-        atualizarPainelFogueira();
+        atualizarPainelFogueira(dt);
         if (!op_.congelarHora) relogio_.avancar(dt * dbg_.velTempo);
         atualizarAmbienteSonoro(dt);
         return;
@@ -347,6 +350,8 @@ void Jogo::atualizar(float dt) {
         dbg_.aberto = !dbg_.aberto;
         if (dbg_.aberto) EnableCursor(); else if (!pausado_) DisableCursor();
     }
+    // F3: rótulos e quadro de depuração do combate reativo (inimigos de teste, receitas, rebote)
+    if (!op_.semEntrada && IsKeyPressed(KEY_F3)) depuracaoCombate_ = !depuracaoCombate_;
     if (dbg_.aberto && dbg_.pausado) {
         atualizarAmbienteSonoro(dt, true);
         return;
@@ -424,7 +429,7 @@ void Jogo::atualizar(float dt) {
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
         interagirCacada(e);
-        interagirCircuitos(e);  // E na fogueira (gravar balas) ou numa capsula de vestigio
+        interagirCircuitos(e);  // E na fogueira (gravar balas), numa pista (aprender receita) ou numa capsula
         if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
         Vec3f antes = jogador_.pos;
         moverAPe(jogador_, e, rig_.yaw, dt * dbg_.velJogador, *terreno_, col_, primeira);

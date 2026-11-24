@@ -7,8 +7,13 @@ void FisicaAlvo::aplicar(const GolpeAlvo& g) {
     empurrao = empurrao + g.empurrao;
     if (g.levante > 0.f) vy = std::max(vy, g.levante);
     derrubado = std::max(derrubado, g.derrubar);
+    atordoado = std::max(atordoado, g.atordoar);
     congelado = std::max(congelado, g.congelar);
     queimando = std::max(queimando, g.queimar);
+    if (g.lentidao > 0.f) {  // duas lentidões juntas: vale a mais forte
+        fatorLento = lento > 0.f ? std::min(fatorLento, g.fatorLento) : g.fatorLento;
+        lento = std::max(lento, g.lentidao);
+    }
 }
 
 float FisicaAlvo::atualizar(float dt, Vec3f& pos, const Terreno& t, const MundoColisao& col, float raio) {
@@ -36,7 +41,10 @@ float FisicaAlvo::atualizar(float dt, Vec3f& pos, const Terreno& t, const MundoC
         derrubado = std::max(0.f, derrubado - dt);  // só levanta depois de chegar ao chão
     }
     congelado = std::max(0.f, congelado - dt);
+    atordoado = std::max(0.f, atordoado - dt);
     queimando = std::max(0.f, queimando - dt);
+    lento = std::max(0.f, lento - dt);
+    if (lento <= 0.f) fatorLento = 1.f;
     pos.y = t.altura(pos.x, pos.z);
     return danoQueda;
 }

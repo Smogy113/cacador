@@ -122,13 +122,16 @@ TEST_CASE("arsenal: troca rapida e consumo no disparo") {
     CHECK(a.estoque(Doador::CarvaoEmBrasa) == ParametrosCircuito{}.estoqueInicialDoador - 1);  // queimou
 }
 
-TEST_CASE("pavio: molha na agua, seca depois de sair e o Ferro Frio bloqueia") {
+TEST_CASE("pavio: molha na agua, fica umido depois de sair, seca e o Ferro Frio bloqueia") {
     Pavio pv;
     CHECK(pv.estado() == EstadoPavio::Seco);
     pv.atualizar(DT, true, false, 5.f);
-    CHECK(pv.estado() == EstadoPavio::Molhado);
-    pv.atualizar(4.9f, false, false, 5.f);
-    CHECK(pv.estado() == EstadoPavio::Molhado);
+    CHECK(pv.estado() == EstadoPavio::Molhado);  // dentro da agua
+    pv.atualizar(DT, false, false, 5.f);
+    CHECK(pv.estado() == EstadoPavio::Umido);  // acabou de sair: da para forcar (core/rebote)
+    CHECK(pv.fracaoUmidade(5.f) > 0.99f);
+    pv.atualizar(4.8f, false, false, 5.f);
+    CHECK(pv.estado() == EstadoPavio::Umido);
     pv.atualizar(0.2f, false, false, 5.f);
     CHECK(pv.estado() == EstadoPavio::Seco);
     pv.atualizar(DT, false, true, 5.f);
@@ -201,8 +204,11 @@ TEST_CASE("projetil: Onda + Po de Prata + Carvao cria zona congelante onde ating
     CHECK(z.frio);
     CHECK(z.raio == doctest::Approx(m.p.raioPadrao));
     CHECK(z.centro.y == doctest::Approx(plano().altura(z.centro.x, z.centro.z)));
-    // dentro congela, fora nada
-    CHECK(golpeDaZona(z, z.centro + Vec3f{1, 0, 0}, DT, m.p).congelar > 0.f);
+    // dentro deixa lento (sem parar por completo), fora nada
+    const GolpeAlvo dentro = golpeDaZona(z, z.centro + Vec3f{1, 0, 0}, DT, m.p);
+    CHECK(dentro.lentidao > 0.f);
+    CHECK(dentro.fatorLento == doctest::Approx(m.p.fatorLentidaoGelo));
+    CHECK(dentro.congelar == 0.f);
     CHECK(golpeDaZona(z, z.centro + Vec3f{z.raio + 1, 0, 0}, DT, m.p).vazio());
     // e some depois da duração
     for (float t = 0; t < m.p.duracaoZona + 0.1f; t += DT) m.atualizar(DT, plano(), col, {});
@@ -230,6 +236,7 @@ TEST_CASE("golpe: a onda de pressao da Grade empurra para fora e derruba quem es
     GolpeAlvo perto = golpeDoImpacto(im, {2, 0.9f, 0}, false, p);
     CHECK(perto.empurrao.x > 0.f);
     CHECK(perto.derrubar > 0.f);
+    CHECK(perto.atordoar > perto.derrubar);  // levanta zonzo
     CHECK(perto.dano > 0.f);
     CHECK(golpeDoImpacto(im, {p.raioEnxofre + 1, 0.9f, 0}, false, p).vazio());
     // Pó de Prata na Grade: levanta em vez de esmagar

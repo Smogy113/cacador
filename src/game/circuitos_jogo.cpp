@@ -2,9 +2,11 @@
 // sacrifício do doador, impactos nos alvos, cápsulas de vestígio, desenho provisório e HUD.
 //
 // A regra fica em core/circuito (receitas, arsenal, pavio), core/projetil_encantado (voo, ricochete,
-// Ferro Frio, zonas, cápsulas) e core/fisica_alvo (empurrão, arremesso, derrubada, gelo). Os
-// números de ajuste ficam em ParametrosCircuito (circuitos_.p). Este arquivo só liga isso ao jogo e
-// desenha com primitivas da raylib: para trocar o visual, mexa só em desenharCircuitos().
+// Ferro Frio, zonas, cápsulas), core/fisica_alvo (empurrão, arremesso, derrubada, gelo, atordoamento,
+// lentidão), core/receitas (o que a fogueira deixa gravar) e core/rebote (falha crítica no gatilho).
+// Os números de ajuste ficam em ParametrosCircuito (circuitos_.p). Este arquivo só liga isso ao jogo
+// e desenha com primitivas da raylib: para trocar o visual, mexa só em desenharCircuitos().
+// Os inimigos de teste, as pistas e a baia de cobertura ficam em game/combate_reativo.cpp.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -15,17 +17,15 @@
 #include "rlgl.h"
 
 namespace {
-// Arena relativa ao ponto de partida do jogo (entrada de Pedrabranca, olhando para a ponte).
-constexpr float INICIO_X = -40.f, INICIO_Z = 10.f, INICIO_YAW_GRAUS = 160.f;
+// Planta da arena em game/arena_teste.h (metros a partir da largada: frente e direita).
+using arena::INICIO_X;
+using arena::INICIO_YAW_GRAUS;
+using arena::INICIO_Z;
 constexpr float DIST_FOGUEIRA = 2.2f;       // alcance do E para abrir a fogueira
 constexpr float DIST_DESENHO_ARENA = 90.f;  // além disso a arena não é montada (custo zero)
 constexpr int MAX_FAISCAS = 220;
 constexpr float ALTURA_PAREDE = 3.2f;
-// Posições da arena em metros a partir da largada: para a frente do olhar inicial e para a direita.
-struct PontoArena {
-    float frente, direita;
-};
-constexpr PontoArena ARENA_FOGUEIRA{2.f, 3.f}, ARENA_CHUVA{3.f, -15.f}, ARENA_GRUPO{14.f, 7.f}, ARENA_FERRO{22.f, 2.f};
+constexpr arena::Ponto ARENA_FOGUEIRA{2.f, 3.f}, ARENA_CHUVA{3.f, -15.f}, ARENA_GRUPO{14.f, 7.f}, ARENA_FERRO{22.f, 2.f};
 constexpr float CORREDOR_DIREITA = -6.f, CORREDOR_VAO = 5.f, CORREDOR_INICIO = 4.f, CORREDOR_FIM = 34.f;
 
 Vec3f direitaDe(float yaw) { return {-std::cos(yaw), 0, std::sin(yaw)}; }
@@ -49,15 +49,14 @@ Rgb corDe(Propriedade p) {
     return {1, 1, 1};
 }
 const Rgb CINZA_CHUMBO{0.62f, 0.62f, 0.6f};
-
-struct Sprite {
-    Vec3f pos;
-    float tam;
-    Color cor;
-};
 }  // namespace
 
 Vec3f Jogo::pontoChao(Vec3f p) const { return {p.x, terreno_->altura(p.x, p.z), p.z}; }
+
+Vec3f Jogo::pontoDaArena(arena::Ponto q) const {
+    const float yaw = INICIO_YAW_GRAUS * DEG2RAD;
+    return pontoChao(Vec3f{INICIO_X, 0, INICIO_Z} + frenteDe(yaw) * q.frente + direitaDe(yaw) * q.direita);
+}
 
 bool Jogo::naAgua(Vec3f p) const {
     // mesmo critério do som de passo na água (pisoSonoro), mais a zona de chuva da arena
@@ -72,7 +71,7 @@ bool Jogo::naAgua(Vec3f p) const {
 void Jogo::iniciarCircuitos() {
     const float yaw = INICIO_YAW_GRAUS * DEG2RAD;
     const Vec3f s{INICIO_X, 0, INICIO_Z}, f = frenteDe(yaw), d = direitaDe(yaw);
-    auto em = [&](PontoArena q) { return s + f * q.frente + d * q.direita; };
+    auto em = [&](arena::Ponto q) { return s + f * q.frente + d * q.direita; };
     arena_.fogueira = pontoChao(em(ARENA_FOGUEIRA));
     arena_.chuva = pontoChao(em(ARENA_CHUVA));
     // Corredor de ricochete à esquerda: duas paredes paralelas ao olhar inicial. Fica fora da linha
@@ -105,9 +104,12 @@ void Jogo::iniciarCircuitos() {
     arena_.pronta = true;
     std::printf("circuitos: fogueira=(%.1f, %.1f) chuva=(%.1f, %.1f) ferro=(%.1f, %.1f) bonecos=(%.1f, %.1f)\n", arena_.fogueira.x,
                 arena_.fogueira.z, arena_.chuva.x, arena_.chuva.z, centroFerro.x, centroFerro.z, grupo.x, grupo.z);
+    iniciarCombateReativo();  // pátio de patrulha: inimigos de teste, baia de cobertura e pistas
 
-    if (op_.abrirFogueira) {  // capturas do painel: uma receita inválida na tela, para mostrar o aviso
-        arsenal_.preparar(0, {Entalhe::Espiral, Pasta::ResinaECera, Doador::Pena});
+    // O caçador começa sabendo só Espiral + Pólvora Fina (core/receitas); testes e capturas liberam tudo.
+    if (op_.receitasTodas || op_.roteiroCircuito > 0) receitas_.aprenderTudo();
+    if (op_.abrirFogueira) {  // capturas do painel: uma receita desconhecida e inválida, para mostrar os avisos
+        gravar(arsenal_, receitas_, 0, {Entalhe::Espiral, Pasta::PolvoraFina, Doador::Pena});
         painel_.aberto = true;
         painel_.linha = 3;
         painel_.slot = 1;
@@ -118,14 +120,16 @@ void Jogo::iniciarCircuitos() {
         arsenal_.preparar(0, {Entalhe::Espiral, Pasta::ResinaECera, Doador::Pena});
         arsenal_.preparar(1, {Entalhe::Grade, Pasta::EnxofreESal, Doador::PedraPesada});
         arsenal_.preparar(2, {Entalhe::Onda, Pasta::PoDePrata, Doador::CarvaoEmBrasa});
-        const int slot[] = {0, 0, 1, 2, 1, 2};
-        arsenal_.selecionar(slot[std::clamp(op_.roteiroCircuito, 0, 5)]);
+        //          roteiro: 0  1  2  3  4  5  6  7  8  9 10
+        const int slot[] = {0, 0, 1, 2, 1, 2, 1, 2, 0, 0, 0};
+        arsenal_.selecionar(slot[std::clamp(op_.roteiroCircuito, 0, 10)]);
         if (op_.roteiroCircuito == 4) {  // dentro da chuva
             jogador_.pos = pontoChao(arena_.chuva + d * 1.5f);
             jogador_.yaw = rig_.yaw = std::atan2(grupo.x - jogador_.pos.x, grupo.z - jogador_.pos.z);
         }
         if (op_.roteiroCircuito == 1)  // na boca do corredor de ricochete
             jogador_.pos = pontoChao(s + f * (CORREDOR_INICIO - 3.f) + d * CORREDOR_DIREITA);
+        prepararRoteiroReativo(op_.roteiroCircuito);  // 6..10: posições do combate reativo
     }
 }
 
@@ -147,6 +151,8 @@ void Jogo::roteiroCircuitos(Entrada& e) {
         alvo = grupo - f * 1.f;  // o chão na frente do grupo
     } else if (modo == 5) {
         alvo = bonecos_[4].base + Vec3f{0, 1.f, 0};  // o boneco atrás do Ferro Frio
+    } else if (modo >= 6) {
+        alvo = alvoRoteiroReativo(modo);  // combate reativo (game/combate_reativo.cpp)
     }
     // corrige a câmera um pouco a cada quadro até o centro da tela apontar para o alvo
     Vec3f olho{cam_.position.x, cam_.position.y, cam_.position.z};
@@ -164,6 +170,7 @@ void Jogo::roteiroCircuitos(Entrada& e) {
 bool Jogo::interagirCircuitos(Entrada& e) {
     pertoFogueira_ = arena_.pronta && distXZ(jogador_.pos, arena_.fogueira) < DIST_FOGUEIRA;
     capsulaPerto_ = circuitos_.capsulaPerto(jogador_.pos, circuitos_.p.distRecolher);
+    pistaPerto_ = pistaPerto(pistas_, jogador_.pos, circuitos_.p.distRecolher);
     if (!e.interagir) return false;
     if (pertoFogueira_) {
         painel_.aberto = true;
@@ -173,6 +180,7 @@ bool Jogo::interagirCircuitos(Entrada& e) {
         e.interagir = false;
         return true;
     }
+    if (interagirPista(e)) return true;  // inspecionar ensina uma receita (combate_reativo.cpp)
     if (capsulaPerto_ >= 0) {
         int n = circuitos_.recolher(jogador_.pos, circuitos_.p.distRecolher);
         char buf[96];
@@ -185,16 +193,40 @@ bool Jogo::interagirCircuitos(Entrada& e) {
     return false;
 }
 
-void Jogo::atualizarPainelFogueira() {
+void Jogo::atualizarPainelFogueira(float dt) {
     PainelFogueira& pn = painel_;
-    pn.retornoT = std::max(0.f, pn.retornoT - GetFrameTime());
-    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) {
+    pn.retornoT = std::max(0.f, pn.retornoT - dt);
+    auto responder = [&](const std::string& t) {
+        pn.retorno = t;
+        pn.retornoT = 3.f;
+    };
+    // O que dizer de cada resultado da bancada (core/receitas: gravar).
+    auto explicar = [&](ResultadoPreparo r) -> std::string {
+        if (r == ResultadoPreparo::Ok)
+            return "Slot " + std::to_string(pn.slot + 2) + ": " + nomeCombinacao(pn.circuito) +
+                   (pn.preparo == Preparo::Rapido ? " (imperfeita: pode dar rebote)" : "");
+        if (r == ResultadoPreparo::ReceitaInvalida)
+            return std::string("Receita inválida: ") + nome(pn.circuito.entalhe) + " exige " + nome(doadorDaReceita(pn.circuito.entalhe));
+        return nome(r);
+    };
+    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) {  // fechar interrompe a gravação (nada é gasto)
+        pn.gravando = 0.f;
         pn.aberto = false;
         if (!op_.semEntrada) DisableCursor();
         return;
     }
-    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) pn.linha = (pn.linha + 3) % 4;
-    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) pn.linha = (pn.linha + 1) % 4;
+    // Preparo Cuidadoso em andamento: a barra enche enquanto o mundo segue; as outras teclas esperam.
+    if (pn.gravando > 0.f) {
+        pn.gravando -= dt;
+        if (pn.gravando <= 0.f) {
+            pn.gravando = 0.f;
+            responder(explicar(gravar(arsenal_, receitas_, pn.slot, pn.circuito, Preparo::Cuidadoso)));
+        }
+        return;
+    }
+    const int linhas = PainelFogueira::LINHAS;
+    if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) pn.linha = (pn.linha + linhas - 1) % linhas;
+    if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) pn.linha = (pn.linha + 1) % linhas;
     int passo = (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) - (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A));
     if (passo != 0) {
         auto girar = [&](int v, int n) { return (v + passo + n) % n; };
@@ -206,17 +238,20 @@ void Jogo::atualizarPainelFogueira() {
         if (pn.linha == 1) c.entalhe = Entalhe(girar(int(c.entalhe), N_ENTALHES));
         if (pn.linha == 2) c.pasta = Pasta(girar(int(c.pasta), N_PASTAS));
         if (pn.linha == 3) c.doador = Doador(girar(int(c.doador), N_DOADORES));
+        if (pn.linha == 4) pn.preparo = Preparo(girar(int(pn.preparo), 2));
     }
-    auto responder = [&](const std::string& t) {
-        pn.retorno = t;
-        pn.retornoT = 3.f;
-    };
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
-        ResultadoPreparo r = arsenal_.preparar(pn.slot, pn.circuito);
-        if (r == ResultadoPreparo::Ok) responder("Slot " + std::to_string(pn.slot + 2) + ": " + nomeCombinacao(pn.circuito));
-        else if (r == ResultadoPreparo::ReceitaInvalida)
-            responder(std::string("Receita inválida: ") + nome(pn.circuito.entalhe) + " exige " + nome(doadorDaReceita(pn.circuito.entalhe)));
-        else responder(nome(r));
+        // Ensaio numa cópia do arsenal: o Cuidadoso avisa na hora se não vai dar, sem esperar a barra.
+        Arsenal ensaio = arsenal_;
+        const ResultadoPreparo r = gravar(ensaio, receitas_, pn.slot, pn.circuito, pn.preparo);
+        if (r != ResultadoPreparo::Ok) {
+            responder(explicar(r));
+        } else if (pn.preparo == Preparo::Rapido) {
+            responder(explicar(gravar(arsenal_, receitas_, pn.slot, pn.circuito, Preparo::Rapido)));
+        } else {
+            pn.gravando = circuitos_.p.tempoPreparoCuidadoso;
+            responder("Gravando com cuidado...");
+        }
     }
     if (IsKeyPressed(KEY_X) || IsKeyPressed(KEY_BACKSPACE)) {
         arsenal_.esvaziar(pn.slot);
@@ -230,21 +265,85 @@ void Jogo::atualizarPainelFogueira() {
 
 // ---------------------------------------------------------------- disparo
 
-bool Jogo::balaGravadaFalhou(Vec3f boca) {
-    if (!arsenal_.preparadaNaVez() || pavio_.estado() != EstadoPavio::Molhado) return false;
-    arma_.espera = Revolver::CADENCIA;  // o cão bate, nada acende
-    soltarFaiscas(boca, 5, Rgb{0.55f, 0.55f, 0.55f}, 0.6f, 0.7f, 0.07f, false, -0.4f);
-    avisar("Pavio molhado: a bala gravada falhou. Troque para a comum (1) ou espere secar.");
-    return true;
+DecisaoGatilho Jogo::puxarGatilho(Vec3f boca) {
+    const ParametrosCircuito& p = circuitos_.p;
+    // O pavio mede no peito; o cano dentro do Ferro Frio também apaga o circuito.
+    Pavio pavio = pavio_;
+    if (circuitos_.noFerro(boca)) pavio.ferro = true;
+    const float sorteio = sorteioRebote_ >= 0.f ? sorteioRebote_ : aleatorio01(rngRebote_);
+    const DecisaoGatilho d = decidirGatilho(arsenal_.slotNaVez(), pavio, janelaForcar_ > 0.f, sorteio, p);
+    janelaForcar_ = 0.f;
+    if (d.gatilho == Gatilho::Falha) {
+        arma_.espera = Revolver::CADENCIA;  // o cão bate, nada acende e nada é gasto
+        soltarFaiscas(boca, 5, Rgb{0.55f, 0.55f, 0.55f}, 0.6f, 0.7f, 0.07f, false, -0.4f);
+        if (d.pedeForcar) {  // pavio úmido: o próximo clique dentro da janela força
+            janelaForcar_ = p.janelaForcar;
+            char buf[160];
+            std::snprintf(buf, sizeof buf, "Pavio úmido: não acendeu. Atire de novo em %.1f s para forçar (rebote: %.0f%%).", p.janelaForcar,
+                          d.chanceRebote * 100.f);
+            avisar(buf);
+        } else {
+            avisar("Pavio molhado: a bala gravada falhou. Troque para a comum (1) ou saia da água.");
+        }
+    } else if (d.gatilho == Gatilho::Rebote) {
+        sofrerRebote(boca);
+    }
+    if (d.gatilho != Gatilho::Comum) std::printf("circuitos: gatilho %s (rebote %.0f%%)\n", nome(d.gatilho), d.chanceRebote * 100.f);
+    return d;
 }
 
-bool Jogo::dispararCircuito(Vec3f boca, Vec3f dir) {
-    if (!arsenal_.preparadaNaVez()) return false;
-    const Circuito c = arsenal_.consumirNaVez();
-    // Vestígio: a cápsula marcada cai ao lado do caçador em todo disparo de bala gravada.
+void Jogo::soltarCapsulaMarcada(const Circuito& c) {
+    // A cápsula cai ao lado do caçador em todo disparo de bala gravada: é o vestígio que os
+    // inimigos em patrulha percebem (combate_reativo.cpp) e que E recolhe.
     Vec3f casca = jogador_.pos + direitaJogador() * 0.55f - frenteDe(jogador_.yaw) * 0.25f;
     circuitos_.soltarCapsula(pontoChao(casca), jogador_.yaw + h01(uint32_t(tempo_ * 1000.f)) * 6.28f, c);
-    if (pavio_.estado() == EstadoPavio::BloqueadoFerro || circuitos_.noFerro(boca)) {
+}
+
+void Jogo::sofrerRebote(Vec3f boca) {
+    const ParametrosCircuito& p = circuitos_.p;
+    const bool imperfeita = arsenal_.slotNaVez() && arsenal_.slotNaVez()->imperfeita();
+    // A bala estoura na câmara: o cartucho e o doador se perdem; a cápsula marcada cai mesmo assim.
+    arma_.atirar();
+    arma_.espera = std::max(arma_.espera, p.travaRebote);
+    const Circuito c = arsenal_.consumirNaVez();
+    soltarCapsulaMarcada(c);
+    if (!dbg_.invencivel) vida_.dano(p.danoRebote);
+    // A mira dá um tranco para cima e treme; aplicarTremorMira() devolve aos poucos.
+    tremor_.disparar(p.duracaoTremor, p.recuoRebote, p.tremorRebote);
+    float dYaw, dPitch;
+    tremor_.deslocamento(dYaw, dPitch);
+    rig_.yaw += dYaw;
+    rig_.pitch = std::clamp(rig_.pitch - dPitch, RigCamera::PITCH_MIN, RigCamera::PITCH_MAX);
+    // visual e som provisórios: estouro abafado, faíscas, a cor do circuito e fumaça
+    claroes_.push_back({boca, frenteDe(jogador_.yaw), DURACAO_FLASH});
+    soltarFaiscas(boca, 18, Rgb{1.f, 0.62f, 0.25f}, 3.f, 0.35f, 0.06f, true, 3.f);
+    soltarFaiscas(boca, 8, Rgb{0.4f, 0.38f, 0.36f}, 0.7f, 1.1f, 0.12f, false, -0.3f);
+    soltarFaiscas(boca, 6, corDe(resolverEfeito(c, p).propriedade), 1.5f, 0.3f, 0.08f, true, 0.f);
+    if (sons_.ok()) sons_.tiro(AcusticaTiro::Obstruida, 0.9f, .47f);
+    tiroOuvido_ = true;  // os bandidos ouvem o estouro
+    tiroT_ = 0.18f;
+    char buf[192];
+    std::snprintf(buf, sizeof buf, "REBOTE na câmara (%s): %s perdida, -%.0f de vida e mira tremida.",
+                  imperfeita ? "bala imperfeita" : "pavio úmido", nomeCombinacao(c).c_str(), p.danoRebote);
+    avisar(buf);
+}
+
+void Jogo::aplicarTremorMira(float dt) {
+    if (!tremor_.ativo()) return;
+    // soma só a diferença de um quadro para o outro: quando o tremor acaba, a mira voltou ao lugar
+    float y0, p0, y1, p1;
+    tremor_.deslocamento(y0, p0);
+    tremor_.atualizar(dt);
+    tremor_.deslocamento(y1, p1);
+    rig_.yaw += y1 - y0;
+    rig_.pitch = std::clamp(rig_.pitch - (p1 - p0), RigCamera::PITCH_MIN, RigCamera::PITCH_MAX);  // pitch > 0 olha para baixo
+}
+
+bool Jogo::dispararCircuito(Vec3f boca, Vec3f dir, Gatilho gatilho) {
+    if (gatilho != Gatilho::Acende && gatilho != Gatilho::ApagaNoFerro) return false;  // munição comum
+    const Circuito c = arsenal_.consumirNaVez();
+    soltarCapsulaMarcada(c);
+    if (gatilho == Gatilho::ApagaNoFerro) {
         soltarFaiscas(boca, 8, CINZA_CHUMBO, 1.5f, 0.4f, 0.05f, true, 3.f);
         avisar("Ferro Frio: o circuito não acendeu. Saiu chumbo comum.");
         return false;
@@ -268,7 +367,14 @@ std::vector<Alvo> Jogo::alvosCircuito() const {
         if (!b.ativo()) a.pes.y = -1e6f;  // destruído: fora do alcance
         r.push_back(a);
     }
+    for (const InimigoTeste& in : inimigos_) r.push_back(in.alvo(paramInimigo_));  // agachado = mais baixo
     return r;
+}
+
+bool Jogo::golpearAlvoDaArena(int k, const GolpeAlvo& g) {
+    if (k < 0) return false;
+    if (k < int(bonecos_.size())) return golpear(bonecos_[size_t(k)], g);
+    return golpearInimigo(k - int(bonecos_.size()), g);
 }
 
 void Jogo::aplicarImpacto(const Impacto& im) {
@@ -298,6 +404,18 @@ void Jogo::aplicarImpacto(const Impacto& im) {
         if (direto) g.dano += p.danoBala;
         if (!g.vazio()) {
             matou |= golpear(b, g);
+            acertou = true;
+        }
+    }
+    const int nBonecos = int(bonecos_.size());
+    for (size_t k = 0; k < inimigos_.size(); k++) {  // inimigos de teste (combate_reativo.cpp)
+        const InimigoTeste& in = inimigos_[k];
+        if (!in.ativo()) continue;
+        const bool direto = im.alvo == nB + nBonecos + int(k);
+        GolpeAlvo g = golpeDoImpacto(im, in.pes() + Vec3f{0, in.agachado ? 0.55f : 0.9f, 0}, direto, p);
+        if (direto) g.dano += p.danoBala;
+        if (!g.vazio()) {
+            matou |= golpearInimigo(int(k), g);
             acertou = true;
         }
     }
@@ -368,19 +486,29 @@ void Jogo::atualizarCircuitos(float dt, const Entrada& e) {
         else if (arsenal_.selecionado() >= 0) avisar("Slot " + std::to_string(arsenal_.selecionado() + 2) + " vazio: atira comum.");
         else avisar("Na vez: munição comum.");
     }
-    if (montadoEm_ >= 0) pertoFogueira_ = false, capsulaPerto_ = -1;  // interagirCircuitos() só roda a pé
+    if (montadoEm_ >= 0) pertoFogueira_ = false, capsulaPerto_ = pistaPerto_ = -1;  // interagirCircuitos() só roda a pé
 
     // pavio
     const Vec3f peito = jogador_.pos + Vec3f{0, montadoEm_ >= 0 ? 2.2f : 1.3f, 0};
     const EstadoPavio antes = pavio_.estado();
     pavio_.atualizar(dt, naAgua(jogador_.pos) || naAgua(peito), circuitos_.noFerro(peito), p.tempoSecagem);
     if (pavio_.estado() != antes) {
-        if (pavio_.estado() == EstadoPavio::Molhado && antes == EstadoPavio::Seco) avisar("O pavio molhou: as balas gravadas vão falhar.");
-        if (pavio_.estado() == EstadoPavio::BloqueadoFerro) avisar("Ferro Frio: nenhum circuito acende aqui.");
-        if (pavio_.estado() == EstadoPavio::Seco && antes == EstadoPavio::Molhado) avisar("O pavio secou.");
+        switch (pavio_.estado()) {
+        case EstadoPavio::Molhado: avisar("O pavio molhou: as balas gravadas vão falhar."); break;
+        case EstadoPavio::Umido:
+            if (antes == EstadoPavio::Molhado) avisar("Pavio úmido: a gravada falha; atire duas vezes para forçar (risco de rebote).");
+            break;
+        case EstadoPavio::BloqueadoFerro: avisar("Ferro Frio: nenhum circuito acende aqui."); break;
+        case EstadoPavio::Seco:
+            if (antes == EstadoPavio::Umido || antes == EstadoPavio::Molhado) avisar("O pavio secou.");
+            break;
+        }
     }
+    janelaForcar_ = std::max(0.f, janelaForcar_ - dt);
+    aplicarTremorMira(dt);  // rebote: a mira treme e volta
 
     for (AlvoTreino& b : bonecos_) ::atualizar(b, dt, *terreno_, col_);  // a do core, nao Jogo::atualizar
+    atualizarCombateReativo(dt);  // inimigos de teste: física, patrulha e vestígios
 
     // projéteis, impactos e zonas
     EventosCircuito ev = circuitos_.atualizar(dt, *terreno_, col_, alvosCircuito());
@@ -400,6 +528,10 @@ void Jogo::atualizarCircuitos(float dt, const Entrada& e) {
         for (AlvoTreino& b : bonecos_) {
             GolpeAlvo g = golpeDaZona(z, b.pos, dt, p);
             if (!g.vazio()) golpear(b, g);
+        }
+        for (size_t k = 0; k < inimigos_.size(); k++) {  // a zona congelante deixa lento quem pisa nela
+            GolpeAlvo g = golpeDaZona(z, inimigos_[k].corpo.pos, dt, p);
+            if (!g.vazio()) golpearInimigo(int(k), g);
         }
     }
 
@@ -422,12 +554,10 @@ void Jogo::desenharCircuitos() {
     const float t = tempo_;
     const Vec3f olho{cam_.position.x, cam_.position.y, cam_.position.z};
     const Vec3f frente = normalizar(Vec3f{cam_.target.x, cam_.target.y, cam_.target.z} - olho);
-    std::vector<Sprite> alfa, brilho;
-    struct Caixa {
-        Vec3f c, tam;
-        Color cor;
-    };
-    std::vector<Caixa> vidros;  // gelo e Ferro Frio, translúcidos
+    Transparencias tr;  // juntadas aqui e desenhadas no fim, de trás para a frente
+    auto& alfa = tr.fumaca;
+    auto& brilho = tr.brilho;
+    auto& vidros = tr.vidros;  // gelo e Ferro Frio, translúcidos
 
     // ---- arena (só perto) ----
     const bool arenaPerto = distXZ(olho, arena_.fogueira) < DIST_DESENHO_ARENA;
@@ -504,15 +634,14 @@ void Jogo::desenharCircuitos() {
         Vec3f topo = pes + Vec3f{0, 2.05f, 0};
         DrawCube(v3(topo), 0.62f, 0.06f, 0.06f, Color{30, 26, 22, 230});
         DrawCube(v3(topo - direitaDe(b.yaw) * (0.3f * (1.f - vida))), 0.6f * vida, 0.07f, 0.07f, vida < 0.35f ? Color{200, 50, 40, 255} : Color{230, 220, 190, 255});
-        if (f.congelado > 0.f) vidros.push_back({pes + Vec3f{0, 0.9f, 0}, {0.85f, 1.95f, 0.85f}, Color{170, 225, 255, 95}});
-        if (f.queimando > 0.f)
-            for (int k = 0; k < 3; k++)
-                brilho.push_back({pes + Vec3f{0, 0.5f + 0.45f * float(k) + 0.1f * std::sin(t * 9.f + float(k)), 0}, 0.55f, Color{255, 120, 40, 150}});
+        desenharEstadoDoAlvo(pes, 1.75f, f, tr);  // gelo, fogo, geada e estrelas do atordoamento
     }
-    // bandidos congelados ganham o mesmo bloco de gelo
+    // bandidos: as mesmas marcas de estado
     if (!cacada_.bando().vazio())
         for (const Bandido& b : cacada_.bando().bandidos())
-            if (b.fisica.congelado > 0.f) vidros.push_back({b.corpo.pos + Vec3f{0, b.fisica.voo + 0.92f, 0}, {0.9f, 2.f, 0.9f}, Color{170, 225, 255, 95}});
+            if (b.estado != EstadoBandido::Morto && b.estado != EstadoBandido::Sumiu)
+                desenharEstadoDoAlvo(b.corpo.pos + Vec3f{0, b.fisica.voo, 0}, 1.8f, b.fisica, tr);
+    desenharCombateReativo(tr);  // inimigos de teste, baia de cobertura e pistas (combate_reativo.cpp)
 
     // ---- cápsulas de vestígio ----
     for (const CapsulaVestigio& c : circuitos_.capsulas()) {
@@ -576,16 +705,16 @@ void Jogo::desenharCircuitos() {
     }
 
     // ---- transparências: ordenadas de trás para a frente, sem escrever profundidade ----
-    std::sort(alfa.begin(), alfa.end(), [&](const Sprite& a, const Sprite& b) { return dot(a.pos - olho, frente) > dot(b.pos - olho, frente); });
+    std::sort(alfa.begin(), alfa.end(), [&](const SpriteEfeito& a, const SpriteEfeito& b) { return dot(a.pos - olho, frente) > dot(b.pos - olho, frente); });
     rlDrawRenderBatchActive();
     rlDisableDepthMask();
-    for (const Caixa& c : vidros) {
-        DrawCubeV(v3(c.c), v3(c.tam), c.cor);
-        DrawCubeWiresV(v3(c.c), v3(c.tam), Color{c.cor.r, c.cor.g, c.cor.b, 150});
+    for (const CaixaVidro& c : vidros) {
+        DrawCubeV(v3(c.centro), v3(c.tam), c.cor);
+        DrawCubeWiresV(v3(c.centro), v3(c.tam), Color{c.cor.r, c.cor.g, c.cor.b, 150});
     }
-    for (const Sprite& s : alfa) DrawBillboard(cam_, texturaFumaca_, v3(s.pos), s.tam, s.cor);
+    for (const SpriteEfeito& s : alfa) DrawBillboard(cam_, texturaFumaca_, v3(s.pos), s.tam, s.cor);
     BeginBlendMode(BLEND_ADDITIVE);
-    for (const Sprite& s : brilho) DrawBillboard(cam_, texturaFumaca_, v3(s.pos), s.tam, s.cor);
+    for (const SpriteEfeito& s : brilho) DrawBillboard(cam_, texturaFumaca_, v3(s.pos), s.tam, s.cor);
     EndBlendMode();
     rlDrawRenderBatchActive();
     rlEnableDepthMask();
@@ -595,28 +724,40 @@ void Jogo::desenharCircuitos() {
 
 void Jogo::desenharHudCircuitos() {
     using namespace estilo;
-    const float x = 18.f, y = 44.f, w = 300.f;
-    DrawRectangleRounded({x - 10, y - 8, w + 20, 198}, 0.07f, 6, Color{18, 16, 14, 165});
+    const ParametrosCircuito& p = circuitos_.p;
+    const float x = 18.f, y = 44.f, w = 330.f;
+    const Color LARANJA{232, 150, 80, 255}, AZUL_UMIDO{150, 185, 225, 255};
+    DrawRectangleRounded({x - 10, y - 8, w + 20, 240}, 0.07f, 6, Color{18, 16, 14, 165});
     texto(Fonte::Forte, "Circuitos de Queima", x, y, 20, OURO);
     const Circuito* naVez = arsenal_.circuitoNaVez();
     std::string vez = naVez ? nomeCombinacao(*naVez) : "Munição comum";
     texto(Fonte::Forte, "Ativa: " + vez, x, y + 26, 17, naVez ? MARFIM : MARFIM_ESC);
-    // slots: 1 = comum, 2..4 = balas gravadas
+    // slots: 1 = comum, 2..4 = balas gravadas (as do Preparo Rápido aparecem como imperfeitas)
     float ly = y + 48;
     texto(Fonte::Texto, std::string(arsenal_.selecionado() < 0 ? "> " : "   ") + "1  Comum", x, ly, 16, arsenal_.selecionado() < 0 ? OURO : MARFIM_ESC);
     for (int i = 0; i < arsenal_.slots(); i++) {
         const SlotMunicao& s = arsenal_.slot(i);
         bool sel = arsenal_.selecionado() == i;
-        std::string linha = std::string(sel ? "> " : "   ") + std::to_string(i + 2) + "  " + (s.cheio ? nomeCombinacao(s.circuito) : "vazio");
-        texto(Fonte::Texto, linha, x, ly + 18.f * float(i + 1), 16, sel ? OURO : (s.cheio ? MARFIM : MARFIM_ESC));
+        std::string linha = std::string(sel ? "> " : "   ") + std::to_string(i + 2) + "  " +
+                            (s.cheio ? nomeCombinacao(s.circuito) + (s.imperfeita() ? "  (imperfeita)" : "") : "vazio");
+        texto(Fonte::Texto, linha, x, ly + 18.f * float(i + 1), 16, sel ? OURO : (s.imperfeita() ? LARANJA : (s.cheio ? MARFIM : MARFIM_ESC)));
     }
     ly += 18.f * float(arsenal_.slots() + 1) + 4;
-    char buf[128];
+    char buf[160];
     Color corPavio = MARFIM;
     switch (pavio_.estado()) {
     case EstadoPavio::Seco: std::snprintf(buf, sizeof buf, "Pavio: Seco"); break;
+    case EstadoPavio::Umido:
+        if (janelaForcar_ > 0.f) {
+            std::snprintf(buf, sizeof buf, "Pavio: Úmido · atire agora para FORÇAR (%.1f s)", janelaForcar_);
+            corPavio = LARANJA;
+        } else {
+            std::snprintf(buf, sizeof buf, "Pavio: Úmido (seca em %.1f s) · 2 cliques forçam", pavio_.umidade);
+            corPavio = AZUL_UMIDO;
+        }
+        break;
     case EstadoPavio::Molhado:
-        std::snprintf(buf, sizeof buf, "Pavio: Molhado (seca em %.1f s)", pavio_.umidade);
+        std::snprintf(buf, sizeof buf, "Pavio: Molhado (na água: a gravada falha)");
         corPavio = Color{140, 180, 225, 255};
         break;
     case EstadoPavio::BloqueadoFerro:
@@ -625,17 +766,28 @@ void Jogo::desenharHudCircuitos() {
         break;
     }
     texto(Fonte::Forte, buf, x, ly, 17, corPavio);
+    // risco de rebote da bala na vez, se houver (core/rebote)
+    const SlotMunicao* bala = arsenal_.slotNaVez();
+    const float risco = bala ? chanceRebote(*bala, pavio_, p) : 0.f;
+    if (risco > 0.f) std::snprintf(buf, sizeof buf, "Risco de rebote da bala na vez: %.0f%%", risco * 100.f);
+    else std::snprintf(buf, sizeof buf, "Risco de rebote: nenhum");
+    texto(Fonte::Texto, buf, x, ly + 21, 14, risco > 0.f ? LARANJA : MARFIM_ESC);
     std::snprintf(buf, sizeof buf, "Doadores: Pena %d · Pedra %d · Carvão %d   ·   Vestígios no chão: %d", arsenal_.estoque(Doador::Pena),
                   arsenal_.estoque(Doador::PedraPesada), arsenal_.estoque(Doador::CarvaoEmBrasa), int(circuitos_.capsulas().size()));
-    texto(Fonte::Texto, buf, x, ly + 21, 14, MARFIM_ESC);
-    texto(Fonte::Texto, "1 comum · 2-4 gravadas · Tab troca · E: fogueira / cápsula", x, ly + 38, 14, MARFIM_ESC);
+    texto(Fonte::Texto, buf, x, ly + 38, 14, MARFIM_ESC);
+    std::snprintf(buf, sizeof buf, "Receitas: %d/%d entalhes · %d/%d pastas (inspecione pistas)", receitas_.entalhesConhecidos(), N_ENTALHES,
+                  receitas_.pastasConhecidas(), N_PASTAS);
+    texto(Fonte::Texto, buf, x, ly + 55, 14, MARFIM_ESC);
+    texto(Fonte::Texto, "1 comum · 2-4 gravadas · Tab troca · E: fogueira / pista / cápsula", x, ly + 72, 14, MARFIM_ESC);
 }
 
 void Jogo::desenharPainelFogueira() {
     using namespace estilo;
     const PainelFogueira& pn = painel_;
+    const ParametrosCircuito& p = circuitos_.p;
+    const Color BLOQUEADO{204, 96, 72, 255}, LARANJA{232, 150, 80, 255};
     const float W = float(GetScreenWidth()), H = float(GetScreenHeight());
-    const float pw = 620, ph = 370, px = (W - pw) * 0.5f, py = (H - ph) * 0.5f;
+    const float pw = 680, ph = 470, px = (W - pw) * 0.5f, py = (H - ph) * 0.5f;
     DrawRectangle(0, 0, int(W), int(H), Color{0, 0, 0, 110});
     DrawRectangleRounded({px, py, pw, ph}, 0.04f, 8, Color{24, 20, 16, 235});
     DrawRectangleRoundedLinesEx({px, py, pw, ph}, 0.04f, 8, 1.5f, comAlfa(OURO, 0.7f));
@@ -644,21 +796,54 @@ void Jogo::desenharPainelFogueira() {
 
     const Circuito& c = pn.circuito;
     const SlotMunicao& s = arsenal_.slot(pn.slot);
-    std::string valores[4] = {"Slot " + std::to_string(pn.slot + 2) + (s.cheio ? "  (" + nomeCombinacao(s.circuito) + ")" : "  (vazio)"),
-                              nome(c.entalhe), nome(c.pasta),
-                              std::string(nome(c.doador)) + "  (estoque " + std::to_string(arsenal_.estoque(c.doador)) + ")"};
-    const char* rotulos[4] = {"Bala", "Entalhe", "Pasta", "Doador"};
-    for (int i = 0; i < 4; i++) {
+    // entalhes e pastas que o caçador ainda não aprendeu aparecem, mas marcados (core/receitas)
+    auto marcar = [](bool conhece, const char* n) { return conhece ? std::string(n) : std::string(n) + "  (desconhecido)"; };
+    char preparo[96];
+    if (pn.preparo == Preparo::Cuidadoso) std::snprintf(preparo, sizeof preparo, "Cuidadoso  (%.0f s, sem risco)", p.tempoPreparoCuidadoso);
+    else std::snprintf(preparo, sizeof preparo, "Rápido / Imperfeito  (na hora, %.0f%% de rebote)", p.chanceReboteRapido * 100.f);
+    const std::string valores[PainelFogueira::LINHAS] = {
+        "Slot " + std::to_string(pn.slot + 2) + (s.cheio ? "  (" + nomeCombinacao(s.circuito) + (s.imperfeita() ? ", imperfeita)" : ")") : "  (vazio)"),
+        marcar(receitas_.conhece(c.entalhe), nome(c.entalhe)), marcar(receitas_.conhece(c.pasta), nome(c.pasta)),
+        std::string(nome(c.doador)) + "  (estoque " + std::to_string(arsenal_.estoque(c.doador)) + ")", preparo};
+    const bool bloqueado[PainelFogueira::LINHAS] = {false, !receitas_.conhece(c.entalhe), !receitas_.conhece(c.pasta), false, false};
+    const char* rotulos[PainelFogueira::LINHAS] = {"Bala", "Entalhe", "Pasta", "Doador", "Preparo"};
+    for (int i = 0; i < PainelFogueira::LINHAS; i++) {
         float ly = py + 92 + 40.f * float(i);
         bool sel = pn.linha == i;
         if (sel) DrawRectangleRounded({px + 24, ly - 4, pw - 48, 32}, 0.3f, 6, Color{70, 56, 36, 200});
         texto(Fonte::Forte, rotulos[i], px + 44, ly, 20, sel ? OURO : MARFIM_ESC);
-        texto(Fonte::Texto, std::string(sel ? "<  " : "") + valores[i] + (sel ? "  >" : ""), px + 170, ly, 20, MARFIM);
+        Color cv = bloqueado[i] ? BLOQUEADO : (i == 4 && pn.preparo == Preparo::Rapido ? LARANJA : MARFIM);
+        texto(Fonte::Texto, std::string(sel ? "<  " : "") + valores[i] + (sel ? "  >" : ""), px + 170, ly, 20, cv);
     }
     // o que a receita faz, ou por que não vale
-    std::string desc = descreverEfeito(c, circuitos_.p);
-    texto(Fonte::Texto, desc, px + pw * 0.5f, py + 258, 17, c.valido() ? MARFIM : Color{214, 80, 58, 255}, CENTRO);
-    if (pn.retornoT > 0.f) texto(Fonte::Forte, pn.retorno, px + pw * 0.5f, py + 286, 18, comAlfa(OURO, std::min(1.f, pn.retornoT)), CENTRO);
+    std::string desc = descreverEfeito(c, p);
+    Color corDesc = c.valido() ? MARFIM : Color{214, 80, 58, 255};
+    if (!receitas_.permite(c)) {
+        desc = "Receita desconhecida: inspecione pistas (equipamentos entalhados) para aprender.";
+        corDesc = BLOQUEADO;
+    }
+    texto(Fonte::Texto, desc, px + pw * 0.5f, py + 298, 17, corDesc, CENTRO);
+    if (pn.retornoT > 0.f) texto(Fonte::Forte, pn.retorno, px + pw * 0.5f, py + 326, 18, comAlfa(OURO, std::min(1.f, pn.retornoT)), CENTRO);
+    // barra do Preparo Cuidadoso
+    if (pn.gravando > 0.f) {
+        const float bw = pw - 160, bx = px + 80, by = py + 356;
+        const float feito = clamp01(1.f - pn.gravando / std::max(0.01f, p.tempoPreparoCuidadoso));
+        DrawRectangleRounded({bx, by, bw, 10}, 1.f, 6, Color{50, 40, 28, 255});
+        DrawRectangleRounded({bx, by, bw * feito, 10}, 1.f, 6, comAlfa(OURO, 0.9f));
+        char buf[64];
+        std::snprintf(buf, sizeof buf, "Gravando com cuidado... %.1f s (E cancela)", pn.gravando);
+        texto(Fonte::Texto, buf, px + pw * 0.5f, by + 14, 15, MARFIM_ESC, CENTRO);
+    }
+    // o que já se sabe gravar
+    std::string sabe = "Conhece:";
+    for (int i = 0; i < N_ENTALHES; i++)
+        if (receitas_.conhece(Entalhe(i))) sabe += std::string(" ") + nome(Entalhe(i)) + ",";
+    sabe.back() = ' ';
+    sabe += "·";
+    for (int i = 0; i < N_PASTAS; i++)
+        if (receitas_.conhece(Pasta(i))) sabe += std::string(" ") + nome(Pasta(i)) + ",";
+    sabe.pop_back();
+    texto(Fonte::Texto, sabe, px + pw * 0.5f, py + ph - 60, 15, MARFIM_ESC, CENTRO);
     texto(Fonte::Texto, "Setas: escolher · Enter: gravar · X: esvaziar · R: repor doadores (teste) · E: fechar", px + pw * 0.5f, py + ph - 34,
           15, MARFIM_ESC, CENTRO);
 }

@@ -12,14 +12,19 @@
 #include "core/motion.h"
 #include "core/npc.h"
 #include "game/actors.h"
+#include "game/arena_teste.h"
 #include "game/sons.h"
 #include "core/places.h"
 #include "core/bounty.h"
 #include "core/cacada.h"
+#include "core/baia_cobertura.h"
 #include "core/circuito.h"
 #include "core/combat.h"
+#include "core/inimigo_teste.h"
 #include "core/projetil_encantado.h"
 #include "core/quality.h"
+#include "core/rebote.h"
+#include "core/receitas.h"
 #include "core/terrain.h"
 #include "core/rota.h"
 #include "render/grama.h"
@@ -57,9 +62,13 @@ struct OpcoesJogo {
     bool abrirDepuracao = false;  // comeca com o painel F1 aberto (screenshots)  // comeca com o mapa grande aberto (screenshots)
     float pitch = -999;    // inclinacao da camera em graus (screenshots; < 0 = olhando para cima)
     // screenshots dos Circuitos de Queima: 1 Espiral+Resina (ricochete), 2 Grade+Enxofre (onda de
-    // pressao), 3 Onda+Prata (zona de gelo), 4 pavio molhado (falha), 5 atravessando o Ferro Frio
+    // pressao), 3 Onda+Prata (zona de gelo), 4 pavio molhado (falha), 5 atravessando o Ferro Frio.
+    // Combate reativo: 6 Grade+Enxofre atordoa a Dupla, 7 Onda+Prata deixa o Patrulheiro lento,
+    // 8 Espiral+Resina pega o Sentinela atras da cobertura, 9 rebote do preparo rapido,
+    // 10 o Patrulheiro percebe a capsula no chao e vai investigar
     int roteiroCircuito = 0;
     bool abrirFogueira = false;  // comeca com o painel da fogueira aberto (screenshots)
+    bool receitasTodas = false;  // comeca sabendo todos os entalhes e pastas (testes)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };
@@ -217,10 +226,14 @@ private:
         AABB ferro{};                      // barreira de Ferro Frio (volume atravessavel)
     };
     // Painel da fogueira: monta [Entalhe] + [Pasta] + [Doador] e grava num dos slots.
+    // O Preparo Cuidadoso leva tempoPreparoCuidadoso: a barra enche com o painel aberto (E/Esc cancela).
     struct PainelFogueira {
+        static constexpr int LINHAS = 5;
         bool aberto = false;
-        int linha = 0, slot = 0;  // linha: 0 slot, 1 entalhe, 2 pasta, 3 doador
+        int linha = 0, slot = 0;  // linha: 0 slot, 1 entalhe, 2 pasta, 3 doador, 4 preparo
         Circuito circuito;
+        Preparo preparo = Preparo::Cuidadoso;
+        float gravando = 0;  // > 0: gravacao cuidadosa em andamento (s que faltam)
         std::string retorno;
         float retornoT = 0;
     };
@@ -236,6 +249,24 @@ private:
         Rgb cor;
         bool sobe;
     };
+    // O que o desenho provisorio junta para o fim do passe: billboards (fumaca e brilho aditivo) e
+    // volumes translucidos (gelo, Ferro Frio), desenhados de tras para a frente sem gravar profundidade.
+    struct SpriteEfeito {
+        Vec3f pos;
+        float tam;
+        Color cor;
+    };
+    struct CaixaVidro {
+        Vec3f centro, tam;
+        Color cor;
+    };
+    struct Transparencias {
+        std::vector<SpriteEfeito> fumaca, brilho;
+        std::vector<CaixaVidro> vidros;
+    };
+    // Marcas de estado sobre qualquer alvo (bandido, boneco ou inimigo de teste): estrelas do
+    // atordoamento, geada da lentidao, bloco de gelo e fogo. 'altura' = altura do corpo de pe.
+    void desenharEstadoDoAlvo(Vec3f pes, float altura, const FisicaAlvo& f, Transparencias& tr) const;
     CircuitosNoMundo circuitos_;
     Arsenal arsenal_{circuitos_.p};  // depois de circuitos_: nasce dos mesmos parametros
     Pavio pavio_;
@@ -250,17 +281,58 @@ private:
     Vec3f pontoChao(Vec3f p) const;  // mesmo x,z na altura do terreno
     bool naAgua(Vec3f p) const;      // rio do terreno ou zona de chuva da arena
     bool interagirCircuitos(Entrada& e);  // E: abre a fogueira ou recolhe a capsula perto
-    void atualizarPainelFogueira();
+    void atualizarPainelFogueira(float dt);
     void roteiroCircuitos(Entrada& e);
-    // Disparo: true = a bala gravada falhou (pavio molhado) e nada sai do cano.
-    bool balaGravadaFalhou(Vec3f boca);
+    // Gatilho (regra em core/rebote): decide o que a bala na vez faz e ja resolve Falha (o cao bate,
+    // nada sai) e Rebote (sofrerRebote). Comum/Acende/ApagaNoFerro seguem para o disparo.
+    DecisaoGatilho puxarGatilho(Vec3f boca);
+    void sofrerRebote(Vec3f boca);
+    void soltarCapsulaMarcada(const Circuito& c);  // o vestigio de toda bala gravada gasta
+    void aplicarTremorMira(float dt);  // soma o tremor do rebote a camera (a mira volta no fim)
     // true = saiu um projetil encantado (o dano vem no impacto); false = tiro comum (raio instantaneo).
-    bool dispararCircuito(Vec3f boca, Vec3f dir);
-    std::vector<Alvo> alvosCircuito() const;  // bandidos primeiro, depois os bonecos
+    bool dispararCircuito(Vec3f boca, Vec3f dir, Gatilho gatilho);
+    // bandidos primeiro (mesmo indice do bando), depois os bonecos, depois os inimigos de teste
+    std::vector<Alvo> alvosCircuito() const;
+    // Golpe num alvo da arena pelo indice em alvosCircuito() menos os bandidos: bonecos e depois os
+    // inimigos de teste. true se derrotou.
+    bool golpearAlvoDaArena(int indice, const GolpeAlvo& g);
+    Vec3f pontoDaArena(arena::Ponto q) const;  // largada + frente/direita, no chao
     void aplicarImpacto(const Impacto& im);
     void atualizarCircuitos(float dt, const Entrada& e);
     void soltarFaiscas(Vec3f p, int n, Rgb cor, float vel, float vida, float tam, bool aditiva, float gravidade, Vec3f base = {});
     void desenharCircuitos();      // 3D, no passe de efeitos
     void desenharHudCircuitos();   // 2D: slots, pavio e combinacao ativa
     void desenharPainelFogueira();
+
+    // ---- Combate reativo (regra em core/inimigo_teste, core/receitas, core/rebote e
+    //      core/baia_cobertura; jogo em game/combate_reativo.cpp). Primitivas provisorias, sem o
+    //      modelo final do personagem. ----
+    // Patio de patrulha ao lado da arena: inimigos de teste que patrulham, percebem as capsulas
+    // deixadas no chao e reagem aos golpes; pistas que ensinam entalhes e pastas; uma baia com
+    // cobertura baixa e paredes laterais para o ricochete.
+    ParametrosInimigo paramInimigo_;
+    std::vector<InimigoTeste> inimigos_;
+    std::vector<PistaEntalhada> pistas_;
+    ReceitasConhecidas receitas_;  // o que a fogueira deixa gravar (comeca com Espiral + Polvora)
+    BaiaCobertura baia_;
+    bool baiaPronta_ = false;
+    int pistaPerto_ = -1;
+    bool depuracaoCombate_ = true;  // F3: rotulos sobre os inimigos e quadro de depuracao
+    // rebote (core/rebote)
+    TremorMira tremor_;
+    float janelaForcar_ = 0;    // > 0: o proximo clique forca o pavio umido
+    float sorteioRebote_ = -1;  // >= 0: sorteio fixo do rebote (capturas); < 0 = aleatorio
+    uint32_t rngRebote_ = 90731;
+    void iniciarCombateReativo();  // chamado por iniciarCircuitos(): inimigos, baia e pistas
+    void atualizarCombateReativo(float dt);
+    bool interagirPista(Entrada& e);  // E perto de uma pista: inspeciona e ensina a receita
+    // Golpe no inimigo de teste k: aplica, alerta (se for ataque) e larga o espolio ao derrotar.
+    bool golpearInimigo(int k, const GolpeAlvo& g);
+    void soltarEspolio(InimigoTeste& in);
+    // capturas --roteiro-circuito 6..10: onde o cacador comeca e para onde a mira vai
+    void prepararRoteiroReativo(int modo);
+    Vec3f alvoRoteiroReativo(int modo) const;
+    void desenharCombateReativo(Transparencias& tr);  // 3D: inimigos, baia, pistas e cones de visao
+    void desenharRotulosCombate();     // 2D: estado sobre cada inimigo, pistas e vestigios descobertos
+    void desenharDepuracaoCombate();   // 2D: quadro com inimigos, receitas, vestigios e rebote
 };

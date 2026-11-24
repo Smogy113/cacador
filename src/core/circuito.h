@@ -79,11 +79,26 @@ struct ParametrosCircuito {
     float levante = 9.f;                 // m/s para cima (Grade invertida)
     float danoQueimaInstantanea = 45.f;  // Onda + Pólvora: labareda no ponto
     float danoCalorPorSegundo = 14.f;    // dentro da zona de fogo
-    float tempoCongelamento = 3.f;       // Onda invertida + Pólvora: congela na hora
+    float tempoCongelamento = 3.f;       // Onda invertida + Pólvora: congela na hora (para por completo)
     float duracaoZona = 6.f;             // zonas de fogo e de gelo no chão
     float multPersistente = 2.f;         // Resina e Cera: zonas duram isto vezes mais
+    // ---- reação dos alvos (combate reativo: inimigos de teste, bandidos e bonecos) ----
+    float tempoAtordoado = 2.5f;         // Grade: zonzo de pé, sem andar nem atirar, no raio do impacto
+    float fatorLentidaoGelo = 0.2f;      // zona congelante: quem pisa nela anda a 20% da velocidade
+    float tempoLentidaoGelo = 0.4f;      // a lentidão que sobra depois de sair da zona
     // ---- pavio ----
-    float tempoSecagem = 5.f;            // depois de sair da água, o pavio ainda falha por isto
+    float tempoSecagem = 5.f;            // depois de sair da água o pavio fica úmido por isto
+    float janelaForcar = 1.5f;           // pavio úmido: o 2º clique dentro disto força o disparo
+    // ---- preparo e rebote (core/rebote) ----
+    float tempoPreparoCuidadoso = 3.f;   // a gravação cuidadosa na fogueira leva isto (o mundo segue)
+    float chanceReboteRapido = 0.35f;    // bala do Preparo Rápido: chance de rebote no disparo
+    float chanceReboteUmidoMin = 0.3f;   // forçar com o pavio quase seco
+    float chanceReboteUmidoMax = 0.85f;  // forçar logo depois de sair da água
+    float danoRebote = 12.f;             // o caçador se fere com o rebote na câmara
+    float travaRebote = 0.9f;            // s sem poder atirar depois do rebote
+    float duracaoTremor = 1.4f;          // s de mira tremida
+    float recuoRebote = 0.09f;           // rad: o tranco que joga a mira para cima
+    float tremorRebote = 0.035f;         // rad: o balanço da mira (some até o fim do tremor)
     // ---- vestígios ----
     int maxCapsulas = 24;                // cápsulas marcadas no chão (a mais velha some)
     float distRecolher = 1.6f;           // alcance do E para recolher uma cápsula
@@ -108,25 +123,38 @@ std::string descreverEfeito(const Circuito& c, const ParametrosCircuito& p);
 
 // ---------------------------------------------------------------- pavio
 
-enum class EstadoPavio { Seco, Molhado, BloqueadoFerro };
+// Seco: acende. Úmido: acabou de sair da água; falha, mas dá para forçar (risco de rebote).
+// Molhado: dentro da água/chuva; falha sempre. Ferro Frio: nenhum circuito acende.
+enum class EstadoPavio { Seco, Umido, Molhado, BloqueadoFerro };
 const char* nome(EstadoPavio e);
 
 // O pavio da munição gravada: molha na água/chuva e só seca tempoSecagem depois de sair.
 struct Pavio {
-    float umidade = 0;  // segundos até secar
-    bool ferro = false; // dentro do Ferro Frio agora
+    float umidade = 0;        // segundos até secar
+    bool encharcado = false;  // dentro da água/chuva agora
+    bool ferro = false;       // dentro do Ferro Frio agora
     void atualizar(float dt, bool naAgua, bool noFerro, float tempoSecagem);
     EstadoPavio estado() const;
+    // 1 = acabou de sair da água, 0 = seco
+    float fracaoUmidade(float tempoSecagem) const { return tempoSecagem > 0.f ? umidade / tempoSecagem : 0.f; }
 };
 
 // ---------------------------------------------------------------- arsenal
 
+// Como a bala foi gravada na fogueira. O Rápido grava na hora, mas a bala sai imperfeita e pode
+// dar rebote na câmara (core/rebote); o Cuidadoso leva tempoPreparoCuidadoso.
+enum class Preparo : uint8_t { Cuidadoso, Rapido };
+const char* nome(Preparo p);
+
 struct SlotMunicao {
     bool cheio = false;
     Circuito circuito;
+    Preparo preparo = Preparo::Cuidadoso;
+    bool imperfeita() const { return cheio && preparo == Preparo::Rapido; }
 };
 
-enum class ResultadoPreparo { Ok, SlotInvalido, ReceitaInvalida, SemDoador };
+// EntalheDesconhecido/PastaDesconhecida: a receita ainda não foi aprendida (core/receitas).
+enum class ResultadoPreparo { Ok, SlotInvalido, ReceitaInvalida, SemDoador, EntalheDesconhecido, PastaDesconhecida };
 const char* nome(ResultadoPreparo r);
 
 // Balas preparadas, estoque de doadores e qual munição está na vez.
@@ -139,7 +167,8 @@ public:
     void reporEstoque();  // protótipo: volta ao estoque inicial
 
     // Grava o circuito no slot: prende o doador à bala (sai do estoque). Regravar devolve o anterior.
-    ResultadoPreparo preparar(int slot, const Circuito& c);
+    // Não confere se o caçador conhece a receita: para isso use gravar() de core/receitas.
+    ResultadoPreparo preparar(int slot, const Circuito& c, Preparo preparo = Preparo::Cuidadoso);
     void esvaziar(int slot);  // devolve o doador
 
     // -1 = munição comum; 0..slots-1 = bala preparada (pode estar vazia: aí atira comum)
@@ -148,6 +177,7 @@ public:
     void proximo();  // comum -> próximos slots cheios -> comum
     bool preparadaNaVez() const { return sel_ >= 0 && slots_[size_t(sel_)].cheio; }
     const Circuito* circuitoNaVez() const { return preparadaNaVez() ? &slots_[size_t(sel_)].circuito : nullptr; }
+    const SlotMunicao* slotNaVez() const { return preparadaNaVez() ? &slots_[size_t(sel_)] : nullptr; }
     // Tira a bala da vez do slot (o doador queima no disparo) e volta para a munição comum.
     Circuito consumirNaVez();
 

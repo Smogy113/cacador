@@ -186,6 +186,81 @@ bool MundoColisao::raioLivre(Vec3f a, Vec3f b) const {
     return true;
 }
 
+namespace {
+// Teste de lajes que tambem diz por qual face o segmento entrou. o/d/mn/mx: origem, deslocamento e
+// limites nos tres eixos. Devolve false se nao toca ou se ja comeca dentro (normal indefinida).
+bool entradaNaCaixa(const float o[3], const float d[3], const float mn[3], const float mx[3], float& t, int& eixo, float& sinal) {
+    float tmin = 0, tmax = 1;
+    eixo = -1;
+    for (int e = 0; e < 3; e++) {
+        if (std::abs(d[e]) < 1e-8f) {
+            if (o[e] < mn[e] || o[e] > mx[e]) return false;
+            continue;
+        }
+        float t1 = (mn[e] - o[e]) / d[e], t2 = (mx[e] - o[e]) / d[e];
+        float s = -1.f;  // entrando pela face minima, a normal aponta para -e
+        if (t1 > t2) {
+            std::swap(t1, t2);
+            s = 1.f;
+        }
+        if (t1 > tmin) {
+            tmin = t1;
+            eixo = e;
+            sinal = s;
+        }
+        tmax = std::min(tmax, t2);
+        if (tmin > tmax) return false;
+    }
+    if (eixo < 0) return false;
+    t = tmin;
+    return true;
+}
+}  // namespace
+
+bool MundoColisao::primeiroContato(Vec3f a, Vec3f b, float& tSaida, Vec3f& normalSaida) const {
+    bool achou = false;
+    float melhor = 2.f;
+    const Vec3f d = b - a;
+    auto testarGirada = [&](const CaixaGirada& c) {
+        float ax, az, bx, bz;
+        paraLocal(c, a.x, a.z, ax, az);
+        paraLocal(c, b.x, b.z, bx, bz);
+        const float o[3] = {ax, a.y, az}, dd[3] = {bx - ax, b.y - a.y, bz - az};
+        const float mn[3] = {-c.meiaX, c.y0, -c.meiaZ}, mx[3] = {c.meiaX, c.y1, c.meiaZ};
+        float t, sinal = 0;
+        int eixo;
+        if (!entradaNaCaixa(o, dd, mn, mx, t, eixo, sinal) || t >= melhor) return;
+        melhor = t;
+        achou = true;
+        // normal local -> mundo (so gira: paraMundo sem a translacao)
+        float lx = eixo == 0 ? sinal : 0.f, lz = eixo == 2 ? sinal : 0.f;
+        float co = std::cos(c.rot), si = std::sin(c.rot);
+        normalSaida = {lx * co + lz * si, eixo == 1 ? sinal : 0.f, -lx * si + lz * co};
+    };
+    for (const CaixaGirada& c : dinamicas_) testarGirada(c);
+    int i0 = int(std::floor(std::min(a.x, b.x) / CEL)), i1 = int(std::floor(std::max(a.x, b.x) / CEL));
+    int j0 = int(std::floor(std::min(a.z, b.z) / CEL)), j1 = int(std::floor(std::max(a.z, b.z) / CEL));
+    for (int j = j0; j <= j1; j++)
+        for (int i = i0; i <= i1; i++) {
+            auto it = grade_.find(chave(i, j));
+            if (it != grade_.end())
+                for (int id : it->second) {
+                    const AABB& bx = caixas_[id];
+                    float t, sinal = 0;
+                    int eixo;
+                    if (!entradaNaCaixa(&a.x, &d.x, &bx.min.x, &bx.max.x, t, eixo, sinal) || t >= melhor) continue;
+                    melhor = t;
+                    achou = true;
+                    normalSaida = {eixo == 0 ? sinal : 0.f, eixo == 1 ? sinal : 0.f, eixo == 2 ? sinal : 0.f};
+                }
+            auto ig = gradeGirada_.find(chave(i, j));
+            if (ig != gradeGirada_.end())
+                for (int id : ig->second) testarGirada(giradas_[id]);
+        }
+    if (achou) tSaida = melhor;
+    return achou;
+}
+
 void MundoColisao::adicionarPiso(AABB p) { pisos_.push_back(p); }
 
 float MundoColisao::alturaPiso(float x, float z, float y) const {

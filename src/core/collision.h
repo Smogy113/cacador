@@ -25,6 +25,10 @@ public:
     Vec3f resolver(Vec3f pos, float raio, float altura = medidas::ALTURA_ADULTO) const;
     // Segmento a->b nao atravessa nenhuma caixa?
     bool raioLivre(Vec3f a, Vec3f b) const;
+    // Primeiro contato do segmento a->b com uma caixa (normal ou girada): 't' recebe a fracao 0..1 do
+    // caminho e 'normal' a normal exata da face atingida, apontando para fora da caixa. false = livre.
+    // O ricochete usa esta normal (a sondagem em volta erra o angulo das paredes giradas).
+    bool primeiroContato(Vec3f a, Vec3f b, float& t, Vec3f& normal) const;
     size_t tamanho() const { return caixas_.size() + giradas_.size(); }
     // Caixas que encostam no quadrado de lado 2r em volta de p (plano xz).
     std::vector<AABB> caixasPerto(Vec3f p, float r) const;

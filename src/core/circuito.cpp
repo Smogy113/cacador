@@ -131,6 +131,7 @@ std::string descreverEfeito(const Circuito& c, const ParametrosCircuito& p) {
 const char* nome(EstadoPavio e) {
     switch (e) {
     case EstadoPavio::Seco: return "Seco";
+    case EstadoPavio::Umido: return "Úmido";
     case EstadoPavio::Molhado: return "Molhado";
     case EstadoPavio::BloqueadoFerro: return "Bloqueado por Ferro Frio";
     }
@@ -139,16 +140,26 @@ const char* nome(EstadoPavio e) {
 
 void Pavio::atualizar(float dt, bool naAgua, bool noFerro, float tempoSecagem) {
     umidade = naAgua ? tempoSecagem : std::max(0.f, umidade - dt);
+    encharcado = naAgua;
     ferro = noFerro;
 }
 
 EstadoPavio Pavio::estado() const {
     if (ferro) return EstadoPavio::BloqueadoFerro;
-    if (umidade > 0.f) return EstadoPavio::Molhado;
+    if (encharcado) return EstadoPavio::Molhado;
+    if (umidade > 0.f) return EstadoPavio::Umido;
     return EstadoPavio::Seco;
 }
 
 // ---------------------------------------------------------------- arsenal
+
+const char* nome(Preparo p) {
+    switch (p) {
+    case Preparo::Cuidadoso: return "Cuidadoso";
+    case Preparo::Rapido: return "Rápido / Imperfeito";
+    }
+    return "?";
+}
 
 const char* nome(ResultadoPreparo r) {
     switch (r) {
@@ -156,6 +167,8 @@ const char* nome(ResultadoPreparo r) {
     case ResultadoPreparo::SlotInvalido: return "Slot inválido";
     case ResultadoPreparo::ReceitaInvalida: return "Receita inválida";
     case ResultadoPreparo::SemDoador: return "Sem objeto doador no estoque";
+    case ResultadoPreparo::EntalheDesconhecido: return "Entalhe desconhecido: inspecione pistas para aprender";
+    case ResultadoPreparo::PastaDesconhecida: return "Pasta desconhecida: inspecione pistas para aprender";
     }
     return "?";
 }
@@ -168,7 +181,7 @@ void Arsenal::reporEstoque() {
     for (int& e : estoque_) e = estoqueInicial_;
 }
 
-ResultadoPreparo Arsenal::preparar(int i, const Circuito& c) {
+ResultadoPreparo Arsenal::preparar(int i, const Circuito& c, Preparo preparo) {
     if (i < 0 || i >= slots()) return ResultadoPreparo::SlotInvalido;
     if (!c.valido()) return ResultadoPreparo::ReceitaInvalida;
     SlotMunicao& s = slots_[size_t(i)];
@@ -178,6 +191,7 @@ ResultadoPreparo Arsenal::preparar(int i, const Circuito& c) {
     estoque_[int(c.doador)]--;
     s.cheio = true;
     s.circuito = c;
+    s.preparo = preparo;
     return ResultadoPreparo::Ok;
 }
 

@@ -52,11 +52,13 @@ struct ZonaElemental {
     bool contem(Vec3f pes) const;
 };
 
-// Cápsula marcada que cai a cada disparo com bala gravada: o rastro do caçador.
+// Cápsula marcada que cai a cada disparo com bala gravada: o rastro do caçador. Um inimigo em
+// patrulha que passa perto e a percebe marca 'descoberta' e vai investigar (core/inimigo_teste).
 struct CapsulaVestigio {
     Vec3f pos;
     float yaw = 0, idade = 0;
     Circuito circuito;
+    bool descoberta = false;  // algum inimigo já a viu (não chama outro de novo)
 };
 
 struct EventosCircuito {
@@ -68,8 +70,11 @@ struct EventosCircuito {
 
 // Efeito mágico de um impacto num alvo com o meio do corpo em 'centroAlvo' (sem o dano do chumbo,
 // que o jogo aplica ao alvo atingido em cheio). 'direto' = este é o alvo atingido.
+// A Grade (Peso) empurra para fora, derruba e atordoa quem está no raio; o atordoamento passa do
+// tempo caído, então o alvo levanta zonzo.
 GolpeAlvo golpeDoImpacto(const Impacto& im, Vec3f centroAlvo, bool direto, const ParametrosCircuito& p);
-// O que uma zona faz num alvo com os pés em 'pes' durante dt.
+// O que uma zona faz num alvo com os pés em 'pes' durante dt. Fogo queima; a zona congelante deixa
+// lento (fatorLentidaoGelo) quem pisa nela, e a lentidão some tempoLentidaoGelo depois de sair.
 GolpeAlvo golpeDaZona(const ZonaElemental& z, Vec3f pes, float dt, const ParametrosCircuito& p);
 
 class CircuitosNoMundo {
@@ -84,6 +89,7 @@ public:
 
     void soltarCapsula(Vec3f chao, float yaw, const Circuito& c);
     int capsulaPerto(Vec3f q, float raio) const;  // índice da mais próxima, -1 se nenhuma
+    void marcarDescoberta(int i);                 // um inimigo percebeu esta cápsula
     int recolher(Vec3f q, float raio);            // apaga as cápsulas no raio; devolve quantas
 
     const std::vector<ProjetilEncantado>& projeteis() const { return projeteis_; }

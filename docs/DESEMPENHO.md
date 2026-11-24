@@ -91,6 +91,32 @@ O custo extra na arena vem das primitivas desenhadas no modo imediato da raylib,
 cilindros e as linhas da chuva. Quando os modelos finais entrarem, troque a arena por malhas
 estáticas.
 
+### Combate reativo (0.29)
+
+A lógica dos quatro inimigos de teste é O(inimigos × cápsulas) por quadro. São no máximo 4 × 24
+testes de percepção, e cada um só faz o `raioLivre` quando a cápsula está no raio e no cone. O
+ricochete passou a pedir a normal exata a `MundoColisao::primeiroContato`, que é um segmento curto
+por quadricada e só roda quando o projétil bate em algo. No desenho, cada manequim custa cerca de 12
+primitivas, e a depuração (F3) soma as linhas do cone de visão e da rota. Tudo some além de 90 m. Os
+rótulos 2D só aparecem até 45 m.
+
+A 0.29 não foi medida no executável nativo, porque o PC da entrega tem o Smart App Control ligado e
+ele bloqueia o `cacador.exe` recém-compilado. Na versão web, no navegador do app (Radeon do Ryzen 7
+5700G, nível Baixo), o pátio rodou entre 30 e 60 FPS. Ao medir no nativo, use as mesmas cenas dos
+roteiros:
+
+```bash
+./build/cacador --benchmark --qualidade alto --pos -40 10 --yaw 160 --hora 16 --frames 120 --roteiro-circuito 6
+./build/cacador --screenshot dupla.png --qualidade medio --hora 16 --roteiro-circuito 6 --frames 45
+./build/cacador --screenshot gelo-patrulheiro.png --qualidade medio --hora 16 --roteiro-circuito 7 --frames 100
+./build/cacador --screenshot ricochete-baia.png --qualidade medio --hora 16 --roteiro-circuito 8 --frames 40
+./build/cacador --screenshot rebote.png --qualidade medio --hora 16 --roteiro-circuito 9 --frames 32
+./build/cacador --screenshot vestigio.png --qualidade medio --hora 16 --roteiro-circuito 10 --frames 150
+```
+
+Na versão web, as mesmas cenas vão na URL, por exemplo
+`index.html?--direto&--qualidade&baixo&--sem-entrada&--hora&16&--roteiro-circuito&8&--congelar-no-quadro&40`.
+
 ## Onde atuar nos gargalos
 
 - Geometria em `src/render/terrain_mesh.cpp`, `props.cpp` e `grama.cpp`. Reaproveite os

@@ -1,6 +1,7 @@
 #pragma once
-// O que um golpe mágico faz no corpo de um alvo, igual para bandidos e bonecos de treino:
-// empurrão pelo chão, arremesso para cima (com queda), derrubada e congelamento.
+// O que um golpe mágico faz no corpo de um alvo, igual para bandidos, bonecos de treino e inimigos de
+// teste: empurrão pelo chão, arremesso para cima (com queda), derrubada, atordoamento, congelamento e
+// lentidão.
 // Lógica pura: só mexe na posição; quem desenha lê o estado (voo, derrubado, congelado...).
 #include "core/collision.h"
 #include "core/combat.h"
@@ -13,11 +14,15 @@ struct GolpeAlvo {
     float dano = 0;
     Vec3f empurrao{};    // m/s horizontal
     float levante = 0;   // m/s para cima
-    float derrubar = 0;  // s caído no chão
-    float congelar = 0;  // s congelado
-    float queimar = 0;   // s pegando fogo (visual; o dano já vem em 'dano')
+    float derrubar = 0;    // s caído no chão
+    float atordoar = 0;    // s zonzo de pé: não anda nem atira (Grade)
+    float congelar = 0;    // s congelado: parado por completo (Onda invertida concentrada)
+    float lentidao = 0;    // s andando devagar (zona congelante)
+    float fatorLento = 1;  // velocidade enquanto lento (0..1)
+    float queimar = 0;     // s pegando fogo (visual; o dano já vem em 'dano')
     bool vazio() const {
-        return dano <= 0 && empurrao.x == 0 && empurrao.z == 0 && levante <= 0 && derrubar <= 0 && congelar <= 0 && queimar <= 0;
+        return dano <= 0 && empurrao.x == 0 && empurrao.z == 0 && levante <= 0 && derrubar <= 0 && atordoar <= 0 && congelar <= 0 &&
+               lentidao <= 0 && queimar <= 0;
     }
 };
 
@@ -27,11 +32,14 @@ struct FisicaAlvo {
     static constexpr float DANO_POR_MS = 4.f;     // vida por m/s acima disso
     Vec3f empurrao{};
     float voo = 0, vy = 0;  // altura acima do chão e velocidade vertical
-    float congelado = 0, derrubado = 0, queimando = 0;
+    float congelado = 0, derrubado = 0, atordoado = 0, queimando = 0;
+    float lento = 0, fatorLento = 1;  // s de lentidão que faltam e a velocidade enquanto dura
 
     bool noAr() const { return voo > 0.f || vy > 0.f; }
-    // Sem controle próprio (a IA espera): no ar, congelado ou caído.
-    bool ocupado() const { return noAr() || congelado > 0.f || derrubado > 0.f; }
+    // Sem controle próprio (a IA espera): no ar, congelado, caído ou zonzo.
+    bool ocupado() const { return noAr() || congelado > 0.f || derrubado > 0.f || atordoado > 0.f; }
+    // Quanto da velocidade normal o corpo pode usar agora: 0 se ocupado, fatorLento se lento.
+    float multVelocidade() const { return ocupado() ? 0.f : (lento > 0.f ? fatorLento : 1.f); }
     void aplicar(const GolpeAlvo& g);
     // Integra um passo. 'pos' é a posição dos pés no chão (y = terreno); o voo fica à parte.
     // Devolve o dano da queda ao aterrissar.

@@ -36,8 +36,11 @@ Em **Personagem**, escolha **Ondulado** ou **Sem cabelo**. A seleção é guarda
 | R | recarregar o revólver (6 balas) |
 | 1 / 2 / 3 / 4 | munição comum / balas gravadas dos slots 1 a 3 (Circuitos de Queima) |
 | Tab | passar para a próxima munição gravada |
-| E (na fogueira) | gravar munição: entalhe + pasta + objeto doador |
+| E (na fogueira) | gravar munição: entalhe + pasta + objeto doador + preparo (cuidadoso ou rápido) |
+| E (numa pista) | inspecionar o equipamento entalhado e aprender o entalhe ou a pasta dele |
 | E (numa cápsula) | recolher a cápsula marcada e apagar o rastro |
+| Clicar 2× com o pavio úmido | forçar a bala gravada logo depois de sair da água (risco de rebote) |
+| F3 | mostrar/esconder a depuração do combate reativo (estados dos inimigos, receitas, rebote) |
 | Esc | pausa (lá dentro: 1/2/3 trocam a qualidade gráfica, Q sai) |
 
 O nível **Baixo** atende PCs modestos. O **Médio** usa sombras suaves e o **Alto** usa
@@ -101,8 +104,10 @@ Na fogueira (E), você grava até três balas, cada uma com três partes:
 
 Escolha a munição com 1 (comum) e 2–4 (gravadas), ou passe para a próxima com Tab. Cada disparo de
 bala gravada larga uma cápsula marcada no chão, e E recolhe a cápsula e apaga o rastro. Com o pavio
-molhado (na água, na chuva e por 5 s depois de sair), a bala gravada falha e não sai nada do cano.
-No Ferro Frio, nenhum circuito acende, e o projétil que atravessa a barreira vira chumbo comum.
+molhado (dentro da água ou da chuva), a bala gravada falha e não sai nada do cano. Por 5 s depois de
+sair, o pavio fica úmido: o primeiro clique falha e avisa, e um segundo clique em até 1,5 s força o
+disparo, com risco de rebote. No Ferro Frio, nenhum circuito acende, e o projétil que atravessa a
+barreira vira chumbo comum.
 
 A entrada de Pedrabranca tem uma arena de teste com a fogueira, um corredor de paredes para o
 ricochete, quatro bonecos de treino, a zona de chuva e a barreira de Ferro Frio, com um boneco
@@ -112,6 +117,46 @@ caçador. Os números de ajuste ficam em `ParametrosCircuito` ([src/core/circuit
 slots, ricochetes, raio do Enxofre, duração das zonas, secagem do pavio e outros. A regra fica em
 `src/core/circuito.cpp`, `projetil_encantado.cpp` e `fisica_alvo.cpp`, testada em
 `tests/test_circuitos.cpp`. A interface e o desenho ficam em `src/game/circuitos_jogo.cpp`.
+
+**Combate reativo (0.29, protótipo):** ao lado da arena há um pátio de patrulha com quatro inimigos
+de teste, manequins de pano azul-ardósia que reagem aos circuitos:
+- **Patrulheiro:** faz um laço que passa perto da fogueira.
+- **Dupla A e Dupla B:** vão e voltam lado a lado. A Grade com Enxofre e Sal empurra os dois para
+  fora do impacto, derruba e deixa os dois **Atordoados** (estrelas sobre a cabeça, sem andar).
+- **Sentinela:** fica agachado atrás de uma cobertura baixa, entre duas paredes laterais viradas a
+  45°. O tiro reto para na cobertura. A Espiral com Resina e Cera, mirada na parede lateral ao lado
+  da cobertura, ricocheteia de lado e acerta o Sentinela.
+
+A Onda com Pó de Prata deixa uma zona congelante no chão, e quem pisa nela fica **Congelado**, andando
+a 20% da velocidade. Uma cápsula marcada esquecida no chão chama atenção: o inimigo em patrulha que a
+vê (até 8 m no cone de visão, ou 2,5 m em volta) passa a **Alerta**, vai até ela, olha e volta à
+rota. Quem leva um golpe também fica em alerta e vai até de onde veio o tiro.
+
+**Engenharia reversa:** o caçador começa sabendo só a Espiral e a Pólvora Fina. A fogueira mostra o
+resto como "desconhecido" e não grava. Cada inimigo derrotado larga uma vez um equipamento entalhado:
+Resina e Cera (Patrulheiro), Enxofre e Sal (Dupla A), Pó de Prata (Dupla B) e o entalhe Onda
+(Sentinela). A cartucheira com a Grade está no chão, perto dos bonecos. Chegue perto e use E para
+inspecionar e aprender. Os inimigos voltam ao começo da rota 20 s depois de derrotados.
+
+**Rebote:** na fogueira, a última linha escolhe o preparo. O **Cuidadoso** leva 3 s e não tem risco.
+O **Rápido / Imperfeito** grava na hora, mas a bala tem 35% de chance de estourar na câmara. O pavio
+úmido também arrisca, de 30% a 85% conforme a umidade, e os dois riscos se somam. No rebote, a bala e o
+doador se perdem, o caçador leva 12 de dano, a mira dá um tranco para cima e treme por 1,4 s, e o
+revólver fica travado por 0,9 s.
+
+A depuração (F3, ligada por padrão) mostra o estado sobre cada inimigo (Patrulha, Alerta, Congelado,
+Atordoado, Derrotado), o cone de visão, a rota e um quadro com vida, receitas desbloqueadas,
+vestígios descobertos e o risco de rebote da bala na vez. A regra fica no núcleo, sem raylib e sem a
+malha do personagem:
+- `src/core/inimigo_teste.*`: patrulha, percepção e investigação.
+- `src/core/receitas.*`: o que o caçador sabe e as pistas.
+- `src/core/rebote.*`: a decisão do gatilho e o tremor da mira.
+- `src/core/baia_cobertura.*`: a geometria da cobertura.
+
+O corpo dos inimigos reusa `core/fisica_alvo`, agora com atordoamento e lentidão. Os testes ficam em
+`tests/test_combate_reativo.cpp`, e o jogo e o desenho em `src/game/combate_reativo.cpp`. A planta
+da arena está em `src/game/arena_teste.h`. Os números ficam em `ParametrosInimigo` e em
+`ParametrosCircuito`, nas seções de reação dos alvos e de preparo e rebote.
 
 **Painel de depuração (F1):** em "Gráficos" dá para ligar e desligar a cabeça por raymarching (com
 o tempo do quadro ao lado, para comparar o custo), a luz de personagem, a profundidade de campo e a
@@ -204,9 +249,39 @@ No Windows sem WSL, o MinGW-w64 do WinLibs já traz GCC, CMake e Ninja (`winget 
 Com a pasta `mingw64/bin` dele no `PATH`, `cmake -B build -G Ninja && cmake --build build` gera o jogo e os testes.
 O `testes.exe` precisa dessa pasta no `PATH` para achar as DLLs do GCC.
 
-Para os Circuitos de Queima, `--roteiro-circuito 1..5` simula a entrada: 1 é a Espiral com Resina quicando no corredor,
-2 é a Grade com Enxofre nos bonecos, 3 é a Onda com Pó de Prata (zona de gelo), 4 é o pavio molhado na chuva e
-5 é o tiro atravessando o Ferro Frio. `--abrir-fogueira` começa com o painel da fogueira aberto.
+Para os Circuitos de Queima, `--roteiro-circuito 1..10` simula a entrada:
+
+| Roteiro | O que testa |
+| --- | --- |
+| 1 | Espiral com Resina quicando no corredor |
+| 2 | Grade com Enxofre nos bonecos |
+| 3 | Onda com Pó de Prata (zona de gelo) |
+| 4 | Pavio molhado na chuva |
+| 5 | Tiro atravessando o Ferro Frio |
+| 6 | Grade com Enxofre atordoando a Dupla |
+| 7 | Onda com Prata deixando o Patrulheiro lento |
+| 8 | Espiral com Resina ricocheteando no Sentinela atrás da cobertura |
+| 9 | Rebote da bala do Preparo Rápido |
+| 10 | Patrulheiro achando a cápsula no chão e indo investigar |
+
+Os roteiros liberam todas as receitas. Outras opções:
+- `--abrir-fogueira` começa com o painel da fogueira aberto.
+- `--receitas-todas` começa sabendo todos os entalhes e pastas.
+- `--sem-entrada` roda o roteiro sem tirar print.
+- `--congelar-no-quadro N` para a lógica no quadro N e continua desenhando.
+
+As duas últimas servem para a versão web.
+
+**Windows com o Smart App Control ligado:** o Windows bloqueia executáveis recém-compilados, como
+`cacador.exe` e `testes.exe`, e algumas ferramentas do Emscripten. Para testar assim:
+1. Compile os testes e o jogo para a web com
+   `emcmake cmake -B build-web -G Ninja -DCACADOR_WEB_ASYNCIFY=OFF`.
+2. Rode a lógica com `node build-web/testes.js`. Para os testes da cabeça, que usam threads, configure
+   com `-DCMAKE_CXX_FLAGS=-pthread -DCMAKE_EXE_LINKER_FLAGS="-pthread -sPTHREAD_POOL_SIZE=16"`.
+3. Abra o jogo servindo `build-web/` com `python -m http.server`.
+
+Os argumentos vão na URL, separados por `&` ([web/argumentos.js](web/argumentos.js)):
+`index.html?--direto&--sem-entrada&--roteiro-circuito&6&--congelar-no-quadro&45`.
 
 Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).
 
