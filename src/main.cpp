@@ -60,7 +60,6 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--sem-paredes") o.jogo.semParedes = true;
         else if (a == "--portas-abertas") o.jogo.portasAbertas = true;
         else if (a == "--yaw") o.jogo.yaw = (float)std::atof(prox());
-        else if (a == "--roteiro-cinza") o.jogo.roteiroCinza = std::atoi(prox());  // 1 canaliza, 2 detona, 3 escudo
         else if (a == "--cabelo") {
             std::string c = prox();
             if (c == "sem" || c == "ondulado") {

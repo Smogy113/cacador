@@ -16,7 +16,6 @@
 #include "core/places.h"
 #include "core/bounty.h"
 #include "core/cacada.h"
-#include "core/cinza.h"
 #include "core/combat.h"
 #include "core/quality.h"
 #include "core/terrain.h"
@@ -55,7 +54,6 @@ struct OpcoesJogo {
     bool abrirMapa = false;
     bool abrirDepuracao = false;  // comeca com o painel F1 aberto (screenshots)  // comeca com o mapa grande aberto (screenshots)
     float pitch = -999;    // inclinacao da camera em graus (screenshots; < 0 = olhando para cima)
-    int roteiroCinza = 0;      // screenshots: 1 = canaliza, 2 = atira e detona, 3 = ergue o escudo
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };
@@ -200,27 +198,4 @@ private:
     void desenharEfeitos();
     Pose poseDoJogador(const Esqueleto& e) const;
     Vec3f canoDoJogador() const;
-
-    // ---- Corrente da Cinza e Custo de Sangue (regra em core/cinza; jogo em game/cinza_jogo.cpp) ----
-    // Arena de teste perto do inicio: fogueira que solta fumaca e restaura o desgaste, e uma zona de
-    // chuva forte que apaga a fumaca e bloqueia a conjuracao. Tudo desenhado com primitivas.
-    struct ArenaCinza {
-        bool pronta = false;
-        Vec3f fogueira{}, chuva{};
-        float raioChuva = 4.5f, alturaChuva = 14.f;
-    };
-    CorrenteCinza cinza_;
-    ArenaCinza arena_;
-    bool pertoFogueira_ = false, conjurarAntes_ = false;
-    int quadroRoteiro_ = 0;
-    Vec3f moldeAtual_{};  // para onde a fumaca capturada esta sendo puxada (marcador visual)
-    Vec3f peitoJogador() const;  // centro do corpo: destino do puxao e alvo dos tiros (escudo)
-    void iniciarCinza();
-    Vec3f pontoLivreArena(Vec3f desejado, float folga) const;
-    bool naAgua(Vec3f p) const;          // rio do terreno ou zona de chuva da arena
-    bool interagirFogueira(Entrada& e);  // consome o E perto da fogueira
-    void roteiroCinza(Entrada& e);       // entrada simulada para screenshots (--roteiro-cinza N)
-    void atualizarCinza(float dtReal, float dtMundo, const Entrada& e);
-    void desenharCinza();     // 3D: arena, nuvens, escudo e explosoes (dentro do passe de efeitos)
-    void desenharHudCinza();  // 2D: vida atual, vida maxima com desgaste e estado da conjuracao
 };
