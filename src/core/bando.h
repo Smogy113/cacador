@@ -22,10 +22,12 @@ struct Bandido {
     float tempoCobertura = 0, proxTiro = 0, lado = 1, tempoLado = 0, semLinha = 0;
     int rajada = 0;  // tiros que faltam na rajada atual (> 0 = atirando)
     uint32_t semente = 1;
+    Vec3f empurrao{};  // m/s horizontal de uma explosao; some em ~0,3 s
 };
 
 struct EventosBando {
     int tirosNoJogador = 0;
+    std::vector<Vec3f> origensAcertos;  // boca de cada tiro que acertou (o escudo decide se barra)
     std::vector<Vec3f> claroes;  // de onde saiu cada tiro (clarao do cano)
     bool chefeRendeu = false, chefeMorreu = false;
 };
@@ -47,6 +49,11 @@ public:
                            const Terreno& ter, const MundoColisao& col);
     // O jogador acertou o bandido 'indice'. Retorna true se matou.
     bool levarTiro(int indice, Parte parte);
+    // Dano direto (explosao, por exemplo). Retorna true se matou. Reage como a um tiro no corpo.
+    bool levarDano(int indice, float dano);
+    // Explosao em 'centro': dano e empurrao caem em linha reta ate zero em 'raio'. Retorna quantos
+    // foram atingidos; 'mortos' (opcional) recebe quantos morreram.
+    int explosao(Vec3f centro, float raio, float dano, float empurrao, int* mortos = nullptr);
     // Um alvo por bandido, no mesmo indice; quem nao pode levar tiro fica fora do alcance.
     std::vector<Alvo> alvos() const;
     std::vector<Bandido>& bandidos() { return b_; }

@@ -85,10 +85,36 @@ void Bando::alertarTodos() {
 
 bool Bando::levarTiro(int i, Parte parte) {
     if (i < 0 || i >= int(b_.size())) return false;
+    const Bandido& b = b_[i];
+    bool indefeso = b.estado == EstadoBandido::Rendido || b.estado == EstadoBandido::Amarrado;
+    return levarDano(i, indefeso || parte == Parte::Cabeca ? 1e9f : DANO_CORPO);
+}
+
+int Bando::explosao(Vec3f centro, float raio, float dano, float empurrao, int* mortos) {
+    int atingidos = 0, caidos = 0;
+    for (int i = 0; i < int(b_.size()); i++) {
+        Bandido& b = b_[i];
+        if (fora(b.estado) || raio <= 0.f) continue;
+        Vec3f d = b.corpo.pos + Vec3f{0, 0.9f, 0} - centro;  // mede ate o meio do corpo
+        float dist = len(d);
+        if (dist >= raio) continue;
+        float forca = 1.f - dist / raio;
+        float n = std::hypot(d.x, d.z);
+        Vec3f paraFora = n > 1e-3f ? Vec3f{d.x / n, 0, d.z / n} : frenteDe(b.corpo.yaw) * -1.f;
+        b.empurrao = b.empurrao + paraFora * (empurrao * forca);
+        atingidos++;
+        caidos += levarDano(i, dano * forca);
+    }
+    if (mortos) *mortos = caidos;
+    if (atingidos > 0) alertarTodos();
+    return atingidos;
+}
+
+bool Bando::levarDano(int i, float dano) {
+    if (i < 0 || i >= int(b_.size()) || dano <= 0.f) return false;
     Bandido& b = b_[i];
     if (fora(b.estado)) return false;
-    bool indefeso = b.estado == EstadoBandido::Rendido || b.estado == EstadoBandido::Amarrado;
-    b.vida.dano(indefeso || parte == Parte::Cabeca ? 1e9f : DANO_CORPO);
+    b.vida.dano(dano);
     b.tranco = 1;
     if (b.vida.morto()) {
         b.estado = EstadoBandido::Morto;
@@ -147,6 +173,16 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
 
     for (auto& b : b_) {
         b.tranco = std::max(0.f, b.tranco - dt * 4.f);
+        if (b.estado != EstadoBandido::Sumiu && (b.empurrao.x != 0.f || b.empurrao.z != 0.f)) {
+            // Empurrao de explosao: desliza pelo chao, respeita paredes e nao entra no rio.
+            Vec3f q = col.resolver(b.corpo.pos + b.empurrao * dt, RAIO_PESSOA);
+            if (t.mascaraRio(q.x, q.z) <= 0.5f) {
+                q.y = t.altura(q.x, q.z);
+                b.corpo.pos = q;
+            }
+            b.empurrao = b.empurrao * std::exp(-10.f * dt);
+            if (std::hypot(b.empurrao.x, b.empurrao.z) < 0.05f) b.empurrao = {};
+        }
         b.arma.atualizar(dt);
         b.tempoEstado += dt;
         float d = distXZ(b.corpo.pos, jog);
@@ -246,8 +282,12 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
             if (b.rajada > 0 && b.proxTiro <= 0) {
                 if (b.arma.podeAtirar()) {
                     b.arma.atirar();
-                    ev.claroes.push_back(b.corpo.pos + Vec3f{0, 1.4f, 0} + frenteDe(b.corpo.yaw) * 0.55f);
-                    if (aleatorio01(rng) < chanceAcerto(d, velJog)) ev.tirosNoJogador++;
+                    Vec3f boca = b.corpo.pos + Vec3f{0, 1.4f, 0} + frenteDe(b.corpo.yaw) * 0.55f;
+                    ev.claroes.push_back(boca);
+                    if (aleatorio01(rng) < chanceAcerto(d, velJog)) {
+                        ev.tirosNoJogador++;
+                        ev.origensAcertos.push_back(boca);
+                    }
                     b.rajada--;
                     b.proxTiro = b.rajada > 0 ? 0.45f : 1.2f + aleatorio01(rng) * 1.3f;
                 } else if (b.arma.balas == 0) {

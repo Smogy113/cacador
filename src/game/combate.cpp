@@ -241,7 +241,9 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
             float escala = e.ossos[CABECA].fim.y / 1.8f;
             Vec3f p = ossos[MAO_D].ponto(bocaDoRevolver(e, escala));
             Vec3f frente = ossos[MAO_D].vetor(eixo);
-            efeitoTiro(jogador_.pos + rotY(p, jogador_.yaw), normalizar(rotY(frente, jogador_.yaw)));
+            Vec3f boca = jogador_.pos + rotY(p, jogador_.yaw);
+            efeitoTiro(boca, normalizar(rotY(frente, jogador_.yaw)));
+            cinza_.emitirDisparo(boca, dir);  // combustivel da Corrente da Cinza, na trajetoria da bala
         }
     }
     // ---- amarrar (segurar E) ----
@@ -259,7 +261,10 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
     // ---- bando ----
     EventosBando ev = cacada_.atualizar(dt, jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.vel : jogador_.vel,
                                         montadoEm_ >= 0, tiroOuvido_, *terreno_, col_);
-    if (vivoJ && ev.tirosNoJogador > 0 && !dbg_.invencivel) vida_.dano(DANO_BANDIDO * float(ev.tirosNoJogador));
+    if (vivoJ && !dbg_.invencivel) {
+        // cada acerto vem de uma boca: o Escudo de Fuligem barra parte do que chega pela frente
+        for (Vec3f origem : ev.origensAcertos) vida_.dano(DANO_BANDIDO * cinza_.fatorDano(origem, peitoJogador()));
+    }
     if (!recarregavaAntes && arma_.recarregando()) sons_.recarga();
     for (Vec3f c : ev.claroes) {
         Vec3f d = c - jogador_.pos;
@@ -276,6 +281,7 @@ void Jogo::atualizarCombate(float dt, Entrada& e) {
             sons_.tiro(acustica, ganho * (abafado ? .50f : 1.f), panSonoro(c, .38f));
         }
         efeitoTiro(c, normalizar(Vec3f{-d.x, 0, -d.z}));
+        cinza_.emitirDisparo(c, peitoJogador() - c);  // o tiroteio do bando tambem deixa fumaca
     }
     if (const Bandido* c = cacada_.bando().chefe()) {
         if (c->estado != estadoChefeAntes_) {

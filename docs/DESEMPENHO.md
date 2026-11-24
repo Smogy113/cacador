@@ -57,6 +57,38 @@ animar vento e granulação.
 O ponto do interior fica na casa da Fazenda dos Moura, no mapa padrão. Ao mudar a implantação
 da fazenda em `gerarFazenda`, confira se a câmera ainda começa dentro da casa e olha para a porta.
 
+## Corrente da Cinza
+
+A lógica (`src/core/cinza.cpp`) é O(nuvens) por quadro, com teto de `ParametrosCinza::maxNuvens`
+(40). O desenho (`src/game/cinza_jogo.cpp`) usa até 3 sprites por nuvem, 20 no escudo e 3 por
+explosão, ordenados no processador e enviados no lote da raylib. A fogueira e a chuva só são
+montadas com a câmera a menos de 90 m. A luz da fogueira acende junto com as tochas, porque uma
+luz pontual a mais pesa em cada pixel do shader. O raio da mira só é lançado enquanto F está
+segurado.
+
+Para medir e capturar, use a entrada de Pedrabranca. `--roteiro-cinza` simula a entrada. Com 1, o
+caçador atira e canaliza. Com 2, ele atira, lança a fumaça e detona. Com 3, ele ergue o escudo.
+Para a detonação acertar o bando, nivele a câmera com `--pitch 0`.
+
+```bash
+./build/cacador --benchmark --qualidade alto --pos -40 10 --yaw 160 --hora 17 --frames 120
+./build/cacador --benchmark --qualidade alto --pos -40 10 --yaw 160 --hora 17 --frames 120 --roteiro-cinza 2
+./build/cacador --screenshot cinza.png --qualidade medio --hora 17 --roteiro-cinza 3 --frames 90 --girar-camera 70
+./build/cacador --screenshot tiroteio.png --qualidade medio --tiroteio --roteiro-cinza 2 --pitch 0 --frames 140
+```
+
+Na 0.28.0 a medição usou uma Intel UHD Graphics 770 no Windows, em 1280×720, nível Alto, com 120
+quadros e mediana de duas rodadas. A comparação é com a 0.27.0 (`51a162c`).
+
+| Cena | p50 antes → depois | Média antes → depois |
+| --- | ---: | ---: |
+| Arena da Cinza, parada | 16,66 → 16,82 ms | 24,29 → 24,45 ms |
+| Arena, atirando e detonando (`--roteiro-cinza 2`) | — → 17,9 ms | — → 25,56 ms |
+| Cidade (`--pos 320 345 --yaw 90 --hora 12`) | 99,00 → 98,90 ms | 94,85 → 94,88 ms |
+
+A detonação mostra outra parte do cenário, porque a câmera gira para a mira. Por isso, compare os
+passes no F1 (**Efeitos**) em vez do tempo total.
+
 ## Onde atuar nos gargalos
 
 - Geometria em `src/render/terrain_mesh.cpp`, `props.cpp` e `grama.cpp`. Reaproveite os

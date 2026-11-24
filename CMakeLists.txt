@@ -46,8 +46,10 @@ if(EMSCRIPTEN)
     --preload-file ${CMAKE_SOURCE_DIR}/data@data --exclude-file "${CMAKE_SOURCE_DIR}/data/solo")
 endif()
 
-# --- testes (so no build nativo) ---
-if(NOT EMSCRIPTEN AND NOT WIN32)
+# --- testes (so no build nativo: Linux ou Windows com MinGW; fora da compilacao cruzada e da web) ---
+if(NOT EMSCRIPTEN AND NOT CMAKE_CROSSCOMPILING)
+  # O CMakeLists do doctest 2.4.11 pede uma versao antiga; o CMake 4 so aceita com este piso.
+  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
   FetchContent_Declare(doctest
     GIT_REPOSITORY https://github.com/doctest/doctest.git
     GIT_TAG v2.4.11 GIT_SHALLOW TRUE)

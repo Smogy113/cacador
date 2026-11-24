@@ -131,6 +131,7 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
         montadoEm_ = 0;
     }
     iniciarCombate();
+    iniciarCinza();
     sons_.carregar();
     if (op.recompensa >= 0) aceitarCartaz(0, op.recompensa);
     sombra_.carregar();
@@ -151,6 +152,7 @@ Entrada Jogo::lerEntrada() {
     e.mirar = op_.mirar;
     e.frente = op_.andar > 0 ? 1.f : 0.f;
     e.correr = op_.andar == 2;
+    if (op_.roteiroCinza > 0) roteiroCinza(e);
     if (op_.semEntrada) return e;
     e.frente = (IsKeyDown(KEY_W) ? 1.f : 0.f) - (IsKeyDown(KEY_S) ? 1.f : 0.f);
     e.lado = (IsKeyDown(KEY_D) ? 1.f : 0.f) - (IsKeyDown(KEY_A) ? 1.f : 0.f);
@@ -160,8 +162,9 @@ Entrada Jogo::lerEntrada() {
     e.mirar = IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
     e.atirar = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     e.recarregar = IsKeyPressed(KEY_R);
+    e.conjurar = IsKeyDown(KEY_F) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE);  // Corrente da Cinza
     if (dbg_.aberto) {  // o mouse e do painel
-        e.mirar = e.atirar = false;
+        e.mirar = e.atirar = e.conjurar = false;
         return e;
     }
     Vector2 md = GetMouseDelta();
@@ -239,7 +242,10 @@ void Jogo::desenharInterface() {
         } else {
             desenharBussola(rig_.yaw, false, 0, 0);
         }
-        desenharHud(vida_.fracao(), arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_, MapaTela::centroMini(), MapaTela::RAIO_MINI);
+        // a barra sob o minimapa mede contra a vida base: o desgaste da Cinza aparece como falta
+        desenharHud(vida_.atual / cinza_.sangue().vidaBase, arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_,
+                    MapaTela::centroMini(), MapaTela::RAIO_MINI);
+        desenharHudCinza();
         desenharMensagem(mensagem_, mensagemT_);
         if (!mapaAberto_)
             mapaTela_.desenharMini(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rig_.yaw, rota_,
@@ -252,6 +258,7 @@ void Jogo::desenharInterface() {
         else if (xerifePerto_ >= 0 && cacada_.fase() == FaseCacada::Levando) desenharDica("E", "entregar ao xerife");
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E", "puxar pela corda");
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos)) desenharDica("", "Traga um cavalo: monte perto do corpo para levar");
+        else if (pertoFogueira_) desenharDica("E", "descansar na fogueira (restaura a vida máxima)");
         else if (quadroPerto_ >= 0) desenharDica("E", "ver recompensas");
         else if (cavaloPerto_ >= 0) desenharDica("E", "montar");
         else if (portaPerto_ >= 0) desenharDica("E", cenario_.portas()[portaPerto_].querAberta ? "fechar a porta" : "abrir a porta");
@@ -354,6 +361,10 @@ void Jogo::atualizar(float dt) {
             return;
         }
     }
+    // Corrente da Cinza: canalizando, o mundo inteiro (o caçador incluso) anda no fator de tempo da
+    // magia. dtReal fica para o que precisa do relógio de verdade (puxão da fumaça e Custo de Sangue).
+    const float dtReal = dt;
+    dt *= cinza_.fatorTempo();
     tempo_ += dt;
     if (!op_.congelarHora) relogio_.avancar(dt * dbg_.velTempo);
     Entrada e = lerEntrada();
@@ -401,6 +412,7 @@ void Jogo::atualizar(float dt) {
         for (size_t i = 0; i < cavalos_.size(); i++)
             if (std::hypot(cavalos_[i].corpo.pos.x - jogador_.pos.x, cavalos_[i].corpo.pos.z - jogador_.pos.z) < DIST_MONTAR) cavaloPerto_ = int(i);
         interagirCacada(e);
+        interagirFogueira(e);
         if (cacada_.carga() == Carga::Seguindo || mira_ > 0.5f) e.correr = false;
         Vec3f antes = jogador_.pos;
         moverAPe(jogador_, e, rig_.yaw, dt * dbg_.velJogador, *terreno_, col_, primeira);
@@ -441,6 +453,7 @@ void Jogo::atualizar(float dt) {
     atualizarCamera(dt);  // o tiro usa a direção da câmera deste quadro
     int montariaAntes = montadoEm_;
     atualizarCombate(dt, e);
+    atualizarCinza(dtReal, dt, e);
     modeloJogador_.empunharArma(revolverEmMaos());
     if (montariaAntes != montadoEm_) atualizarCamera(0.f);
     atualizarRota(dt);
@@ -469,6 +482,14 @@ void Jogo::atualizar(float dt) {
     for (const Clarao& flash : claroes_) {
         float brilho = clamp01(flash.vida / DURACAO_FLASH);
         luzes_.insert(luzes_.begin(), {flash.pos, Rgb{1.f, 0.64f, 0.32f} * (4.5f * brilho), 4.f, 0.f});
+    }
+    // Corrente da Cinza: a fogueira de teste acende a luz junto com as tochas (de dia ela nao paga o
+    // custo de uma luz pontual a mais no shader) e cada detonacao da um clarao curto
+    if (arena_.pronta && noite > 0.01f && std::hypot(arena_.fogueira.x - jogador_.pos.x, arena_.fogueira.z - jogador_.pos.z) < 60.f)
+        luzes_.insert(luzes_.begin(), {arena_.fogueira + Vec3f{0, 0.7f, 0}, Rgb{1.f, 0.55f, 0.25f} * (3.f * noite), 9.f, 1.f});
+    for (const ExplosaoCinza& x : cinza_.explosoes()) {
+        float brilho = 1.f - clamp01(x.idade / x.duracao);
+        luzes_.insert(luzes_.begin(), {x.pos, Rgb{1.f, 0.5f, 0.2f} * (4.f * brilho * brilho), x.raio * 3.f, 0.f});
     }
 }
 
@@ -670,6 +691,7 @@ void Jogo::desenhar() {
     luz_.desenharCeu(cam_);  // depois da cena: o ceu (e as nuvens) so e calculado onde aparece
     perfil_.terminar();
     perfil_.comecar(P_EFEITOS);
+    desenharCinza();
     desenharEfeitos();
     perfil_.terminar();
     EndMode3D();

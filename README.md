@@ -34,6 +34,8 @@ Em **Personagem**, escolha **Ondulado** ou **Sem cabelo**. A seleção é guarda
 | Botão direito | mirar |
 | Botão esquerdo | atirar |
 | R | recarregar o revólver (6 balas) |
+| Segurar F (ou botão do meio) | canalizar a Corrente da Cinza; soltar acende a faísca |
+| E (na fogueira) | descansar: devolve a vida máxima perdida para a Cinza |
 | Esc | pausa (lá dentro: 1/2/3 trocam a qualidade gráfica, Q sai) |
 
 O nível **Baixo** atende PCs modestos. O **Médio** usa sombras suaves e o **Alto** usa
@@ -84,6 +86,23 @@ da pose ficou ~25% mais barato.
 O capim cresce em tufos irregulares, com folhas finas, alturas variadas e algumas pontas
 secas. No Médio e no Alto, perto da câmera aparecem também folhas curvas que balançam com o
 vento. A cobertura fica mais baixa junto às trilhas e aos poços, e muda de tom na margem do rio.
+
+**Corrente da Cinza e Custo de Sangue (0.28, protótipo):** cada tiro, seu ou do bando, deixa uma
+nuvem de fumaça que fica no ar por 10 s. Segure **F** para canalizar: o mundo desacelera para 0,4x
+e a fumaça num raio de 12 m é puxada. Sem mirar, ela vem para junto do corpo; mirando, vai para o
+ponto da mira. As nuvens presas escurecem e pulsam com brasas. Ao soltar, a faísca decide pela
+distância. Fumaça junto ao corpo vira um **Escudo de Fuligem** frontal por 4 s, que barra de 50% a
+90% dos tiros vindos da frente. Fumaça longe **detona**, causando dano em área e empurrão, e a
+explosão salta para as nuvens vizinhas em cadeia. Não há mana: canalizar e detonar gastam a vida
+atual e desgastam a vida máxima. A conjuração nunca derruba o caçador. Só descansar na fogueira (E)
+devolve a vida máxima. Na água ou debaixo de chuva, a fumaça se apaga e a Cinza não acende.
+
+Para testar logo no começo, a entrada de Pedrabranca tem uma fogueira que solta fumaça sem parar e,
+à esquerda, uma zona de chuva forte. Tudo é provisório: primitivas e sprites, sem depender do
+modelo final do caçador. O painel no canto superior esquerdo mostra a vida atual, a vida máxima
+com o desgaste e o estado da conjuração. Os números de ajuste ficam todos em `ParametrosCinza`
+([src/core/cinza.h](src/core/cinza.h)). A regra fica em `src/core/cinza.cpp`, testada em
+`tests/test_cinza.cpp`. O desenho, a entrada e o HUD ficam em `src/game/cinza_jogo.cpp`.
 
 **Painel de depuração (F1):** em "Gráficos" dá para ligar e desligar a cabeça por raymarching (com
 o tempo do quadro ao lado, para comparar o custo), a luz de personagem, a profundidade de campo e a
@@ -170,7 +189,12 @@ Opções úteis para testes: `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidad
 `--montado`, `--abrir-quadro`, `--mapa arquivo.txt`, `--recompensa N` (aceita o cartaz N),
 `--tiroteio` (começa perto do bando, já em combate), `--mirar`, `--andar` e `--correr` (o caçador
 anda sozinho para a frente, para capturar a marcha), `--estudio --retrato 0.5` (só o
-caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`.
+caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`,
+`--roteiro-cinza 1|2|3` (simula a Corrente da Cinza: 1 canaliza, 2 atira, lança e detona, 3 ergue o escudo).
+
+No Windows sem WSL, o MinGW-w64 do WinLibs já traz GCC, CMake e Ninja (`winget install BrechtSanders.WinLibs.POSIX.UCRT`).
+Com a pasta `mingw64/bin` dele no `PATH`, `cmake -B build -G Ninja && cmake --build build` gera o jogo e os testes.
+O `testes.exe` precisa dessa pasta no `PATH` para achar as DLLs do GCC.
 
 Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).
 
