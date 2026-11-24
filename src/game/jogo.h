@@ -14,6 +14,7 @@
 #include "game/actors.h"
 #include "game/arena_teste.h"
 #include "game/sons.h"
+#include "game/ui_oeste.h"
 #include "core/places.h"
 #include "core/bounty.h"
 #include "core/cacada.h"
@@ -234,6 +235,7 @@ private:
         Circuito circuito;
         Preparo preparo = Preparo::Cuidadoso;
         float gravando = 0;  // > 0: gravacao cuidadosa em andamento (s que faltam)
+        float animT = 0;     // s desde que abriu (fade e escala de entrada do painel)
         std::string retorno;
         float retornoT = 0;
     };
@@ -277,6 +279,8 @@ private:
     std::vector<OndaVisual> ondas_;
     bool pertoFogueira_ = false;
     int capsulaPerto_ = -1, quadroRoteiro_ = 0;
+    float trocaMunicaoT_ = 1.f;  // s desde a ultima troca de municao (pulso do cartucho no HUD)
+    oeste::Banner banner_;       // "NOVO ENTALHE DESCOBERTO: ..." (engenharia reversa)
     void iniciarCircuitos();
     Vec3f pontoChao(Vec3f p) const;  // mesmo x,z na altura do terreno
     bool naAgua(Vec3f p) const;      // rio do terreno ou zona de chuva da arena
@@ -301,7 +305,10 @@ private:
     void atualizarCircuitos(float dt, const Entrada& e);
     void soltarFaiscas(Vec3f p, int n, Rgb cor, float vel, float vida, float tam, bool aditiva, float gravidade, Vec3f base = {});
     void desenharCircuitos();      // 3D, no passe de efeitos
-    void desenharHudCircuitos();   // 2D: slots, pavio e combinacao ativa
+    // 2D, no estilo de game/ui_oeste: cartuchos dos slots, modo e pavio (canto inferior direito)
+    void desenharHudCircuitos();
+    // Bancada da Fogueira: 3 colunas (entalhe, pasta, doador + preparo) e o tambor na base.
+    // Teclado e mouse; o layout (layoutFogueira em circuitos_jogo.cpp) e o mesmo na atualizacao e no desenho.
     void desenharPainelFogueira();
 
     // ---- Combate reativo (regra em core/inimigo_teste, core/receitas, core/rebote e
@@ -333,6 +340,12 @@ private:
     void prepararRoteiroReativo(int modo);
     Vec3f alvoRoteiroReativo(int modo) const;
     void desenharCombateReativo(Transparencias& tr);  // 3D: inimigos, baia, pistas e cones de visao
-    void desenharRotulosCombate();     // 2D: estado sobre cada inimigo, pistas e vestigios descobertos
-    void desenharDepuracaoCombate();   // 2D: quadro com inimigos, receitas, vestigios e rebote
+    // 2D: marcadores sobre inimigos e bandidos (sempre) e, com F3, o texto de depuracao de cada um
+    void desenharRotulosCombate();
+    // 2D: prompt flutuante "[E] Inspecionar Entalhe" / "[E] Recolher Capsula" sobre o item perto.
+    // false se o item esta fora da tela (o jogo cai na dica da base da tela).
+    bool desenharPromptNoChao();
+    // 2D, F3 (ligado por padrao), canto superior esquerdo: todos os numeros crus dos Circuitos
+    // (pavio, rebote, doadores, receitas, atalhos) e do combate reativo (estado e vida dos inimigos).
+    void desenharDepuracaoCombate();
 };

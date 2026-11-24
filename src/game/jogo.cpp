@@ -246,7 +246,7 @@ void Jogo::desenharInterface() {
     }
     if (!pausado_) {
         desenharBordaDano(vida_.fracao());
-        if (depuracaoCombate_) desenharRotulosCombate();  // estado sobre cada inimigo de teste
+        desenharRotulosCombate();  // marcadores sobre os inimigos (o texto de depuração só com F3)
         if (cacada_.ativa()) {
             Vec3f obj = cacada_.objetivo(jogador_.pos, xerifes_);
             desenharBussola(rig_.yaw, true, posicaoNaBussola(rig_.yaw, jogador_.pos, obj, 1.6f),
@@ -254,10 +254,11 @@ void Jogo::desenharInterface() {
         } else {
             desenharBussola(rig_.yaw, false, 0, 0);
         }
-        desenharHud(vida_.fracao(), arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_, MapaTela::centroMini(), MapaTela::RAIO_MINI);
+        desenharHud(vida_.atual, vida_.max, arma_.balas, arma_.recarregando(), dinheiro_, mira_ > 0.5f, marcaAcerto_, marcaMatou_, MapaTela::centroMini(), MapaTela::RAIO_MINI);
         desenharHudCircuitos();
-        if (depuracaoCombate_) desenharDepuracaoCombate();
+        if (depuracaoCombate_) desenharDepuracaoCombate();  // F3: números crus, canto superior esquerdo
         desenharMensagem(mensagem_, mensagemT_);
+        banner_.desenhar(tempo_);  // "NOVO ENTALHE DESCOBERTO: ..."
         if (!mapaAberto_)
             mapaTela_.desenharMini(jogador_.pos, montadoEm_ >= 0 ? cavalos_[montadoEm_].corpo.yaw : jogador_.yaw, rig_.yaw, rota_,
                                    cacada_.ativa(), objetivoRota_);
@@ -270,6 +271,7 @@ void Jogo::desenharInterface() {
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos) && cacada_.bando().chefe()->estado == EstadoBandido::Amarrado) desenharDica("E", "puxar pela corda");
         else if (montadoEm_ < 0 && cavaloPerto_ < 0 && cacada_.podeLevar(jogador_.pos)) desenharDica("", "Traga um cavalo: monte perto do corpo para levar");
         else if (pertoFogueira_) desenharDica("E", "gravar munição na fogueira");
+        else if ((pistaPerto_ >= 0 || capsulaPerto_ >= 0) && desenharPromptNoChao()) {}  // prompt flutuante sobre o item
         else if (pistaPerto_ >= 0) desenharDica("E", "inspecionar: " + pistas_[size_t(pistaPerto_)].objeto);
         else if (capsulaPerto_ >= 0) desenharDica("E", "recolher a cápsula (apaga o rastro)");
         else if (quadroPerto_ >= 0) desenharDica("E", "ver recompensas");
