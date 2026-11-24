@@ -5,7 +5,8 @@
 // Ferro Frio, zonas, cápsulas), core/fisica_alvo (empurrão, arremesso, derrubada, gelo, atordoamento,
 // lentidão), core/receitas (o que a fogueira deixa gravar) e core/rebote (falha crítica no gatilho).
 // Os números de ajuste ficam em ParametrosCircuito (circuitos_.p). Este arquivo só liga isso ao jogo
-// e desenha com primitivas da raylib: para trocar o visual, mexa só em desenharCircuitos().
+// e desenha com primitivas da raylib: efeitos 3D em desenharCircuitos(); HUD de cartuchos e Bancada
+// da Fogueira em desenharHudCircuitos()/desenharPainelFogueira(), com paleta e ícones de game/ui_oeste.
 // Os inimigos de teste, as pistas e a baia de cobertura ficam em game/combate_reativo.cpp.
 #include <algorithm>
 #include <cmath>
@@ -49,6 +50,61 @@ Rgb corDe(Propriedade p) {
     return {1, 1, 1};
 }
 const Rgb CINZA_CHUMBO{0.62f, 0.62f, 0.6f};
+
+// ---- Bancada da Fogueira: onde fica cada card. Usado pela atualização (cliques) e pelo desenho.
+// Painel fixo de 1060x620 no centro da tela, em quatro faixas:
+//   cabeçalho | três colunas (I entalhe, II pasta, III doador + preparo) | tambor + resumo | rodapé
+struct LayoutFogueira {
+    static constexpr int MAX_SLOTS = 6;
+    static constexpr float W = 1060, H = 620, TOPO_COLUNAS = 88, ALT_COLUNAS = 330, TOPO_BASE = 432;
+    Rectangle painel, colunas[3];
+    Rectangle entalhes[N_ENTALHES], pastas[N_PASTAS], doadores[N_DOADORES], preparos[2];
+    Rectangle slots[MAX_SLOTS], resumo;
+    Rectangle gravar, esvaziar, repor, fechar;
+};
+LayoutFogueira layoutFogueira(int nSlots) {
+    LayoutFogueira L{};
+    const float px = (float(GetScreenWidth()) - L.W) * 0.5f, py = (float(GetScreenHeight()) - L.H) * 0.5f;
+    L.painel = {px, py, L.W, L.H};
+    const float m = 24, gap = 16, colW = (L.W - 2 * m - 2 * gap) / 3.f, cy = py + L.TOPO_COLUNAS, cab = 34;
+    for (int k = 0; k < 3; k++) L.colunas[k] = {px + m + float(k) * (colW + gap), cy, colW, L.ALT_COLUNAS};
+    for (int i = 0; i < N_ENTALHES; i++) L.entalhes[i] = {L.colunas[0].x, cy + cab + float(i) * 98.f, colW, 90};
+    for (int i = 0; i < N_PASTAS; i++) L.pastas[i] = {L.colunas[1].x, cy + cab + float(i) * 74.f, colW, 68};
+    const float dw = (colW - 2 * 8) / 3.f;
+    for (int i = 0; i < N_DOADORES; i++) L.doadores[i] = {L.colunas[2].x + float(i) * (dw + 8), cy + cab, dw, 92};
+    for (int i = 0; i < 2; i++) L.preparos[i] = {L.colunas[2].x, cy + cab + 92 + 46 + float(i) * 74.f, colW, 68};
+    // base: tambor à esquerda, resumo e botões à direita
+    const float by = py + L.TOPO_BASE + 30;
+    for (int i = 0; i < nSlots && i < L.MAX_SLOTS; i++) L.slots[i] = {px + m + float(i) * 104.f, by, 96, 108};
+    const float rx = px + m + 3 * 104.f + 12;
+    L.resumo = {rx, by, px + L.W - m - rx, 108};
+    const float bw = 190, bh = 34, bx = L.resumo.x + L.resumo.width - bw - 10, b0 = by + 4;
+    L.gravar = {bx, b0, bw, bh};
+    L.esvaziar = {bx, b0 + 38, bw * 0.48f, 30};
+    L.repor = {bx + bw * 0.52f, b0 + 38, bw * 0.48f, 30};
+    L.fechar = {bx, b0 + 72, bw, 30};
+    return L;
+}
+
+// Descrição curta de cada etapa da bancada (a regra completa fica em core/circuito).
+const char* descricaoEntalhe(Entalhe e) {
+    switch (e) {
+    case Entalhe::Espiral: return "Velocidade: voa reto, rápido e sem cair";
+    case Entalhe::Grade: return "Peso: impacto que empurra, derruba e atordoa";
+    case Entalhe::Onda: return "Calor: labareda no ponto ou zona de fogo";
+    }
+    return "";
+}
+std::string descricaoPasta(Pasta pa, const ParametrosCircuito& p) {
+    char b[96];
+    switch (pa) {
+    case Pasta::PolvoraFina: std::snprintf(b, sizeof b, "Concentrada: raio %.1f m, força x%.1f", p.raioConcentrado, p.intensidadeConcentrada); break;
+    case Pasta::ResinaECera: std::snprintf(b, sizeof b, "Persistente: %d ricochetes, zonas x%.0f", p.ricochetes, p.multPersistente); break;
+    case Pasta::EnxofreESal: std::snprintf(b, sizeof b, "Área: espalha num raio de %.0f m", p.raioEnxofre); break;
+    case Pasta::PoDePrata: std::snprintf(b, sizeof b, "Invertida: inverte a propriedade (raio %.1f m)", p.raioPadrao); break;
+    }
+    return b;
+}
 }  // namespace
 
 Vec3f Jogo::pontoChao(Vec3f p) const { return {p.x, terreno_->altura(p.x, p.z), p.z}; }
@@ -174,6 +230,7 @@ bool Jogo::interagirCircuitos(Entrada& e) {
     if (!e.interagir) return false;
     if (pertoFogueira_) {
         painel_.aberto = true;
+        painel_.animT = 0.f;
         painel_.retorno.clear();
         if (arsenal_.slot(painel_.slot).cheio) painel_.circuito = arsenal_.slot(painel_.slot).circuito;
         EnableCursor();
@@ -195,7 +252,10 @@ bool Jogo::interagirCircuitos(Entrada& e) {
 
 void Jogo::atualizarPainelFogueira(float dt) {
     PainelFogueira& pn = painel_;
+    pn.animT += dt;
     pn.retornoT = std::max(0.f, pn.retornoT - dt);
+    // O mouse usa o mesmo layout do desenho; cada clique equivale a uma tecla (o teclado segue igual).
+    const LayoutFogueira lay = layoutFogueira(arsenal_.slots());
     auto responder = [&](const std::string& t) {
         pn.retorno = t;
         pn.retornoT = 3.f;
@@ -209,7 +269,7 @@ void Jogo::atualizarPainelFogueira(float dt) {
             return std::string("Receita inválida: ") + nome(pn.circuito.entalhe) + " exige " + nome(doadorDaReceita(pn.circuito.entalhe));
         return nome(r);
     };
-    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE)) {  // fechar interrompe a gravação (nada é gasto)
+    if (IsKeyPressed(KEY_E) || IsKeyPressed(KEY_ESCAPE) || oeste::clicou(lay.fechar)) {  // fechar interrompe a gravação (nada é gasto)
         pn.gravando = 0.f;
         pn.aberto = false;
         if (!op_.semEntrada) DisableCursor();
@@ -240,7 +300,21 @@ void Jogo::atualizarPainelFogueira(float dt) {
         if (pn.linha == 3) c.doador = Doador(girar(int(c.doador), N_DOADORES));
         if (pn.linha == 4) pn.preparo = Preparo(girar(int(pn.preparo), 2));
     }
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+    // cliques nos cards: escolhem o valor e põem o foco (pn.linha) na etapa clicada
+    for (int i = 0; i < arsenal_.slots() && i < LayoutFogueira::MAX_SLOTS; i++)
+        if (oeste::clicou(lay.slots[i])) {
+            pn.linha = 0, pn.slot = i;
+            if (arsenal_.slot(i).cheio) pn.circuito = arsenal_.slot(i).circuito;
+        }
+    for (int i = 0; i < N_ENTALHES; i++)
+        if (oeste::clicou(lay.entalhes[i])) pn.linha = 1, pn.circuito.entalhe = Entalhe(i);
+    for (int i = 0; i < N_PASTAS; i++)
+        if (oeste::clicou(lay.pastas[i])) pn.linha = 2, pn.circuito.pasta = Pasta(i);
+    for (int i = 0; i < N_DOADORES; i++)
+        if (oeste::clicou(lay.doadores[i])) pn.linha = 3, pn.circuito.doador = Doador(i);
+    for (int i = 0; i < 2; i++)
+        if (oeste::clicou(lay.preparos[i])) pn.linha = 4, pn.preparo = Preparo(i);
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) || oeste::clicou(lay.gravar)) {
         // Ensaio numa cópia do arsenal: o Cuidadoso avisa na hora se não vai dar, sem esperar a barra.
         Arsenal ensaio = arsenal_;
         const ResultadoPreparo r = gravar(ensaio, receitas_, pn.slot, pn.circuito, pn.preparo);
@@ -253,11 +327,11 @@ void Jogo::atualizarPainelFogueira(float dt) {
             responder("Gravando com cuidado...");
         }
     }
-    if (IsKeyPressed(KEY_X) || IsKeyPressed(KEY_BACKSPACE)) {
+    if (IsKeyPressed(KEY_X) || IsKeyPressed(KEY_BACKSPACE) || oeste::clicou(lay.esvaziar)) {
         arsenal_.esvaziar(pn.slot);
         responder("Slot " + std::to_string(pn.slot + 2) + " esvaziado; o doador voltou ao estoque.");
     }
-    if (IsKeyPressed(KEY_R)) {
+    if (IsKeyPressed(KEY_R) || oeste::clicou(lay.repor)) {
         arsenal_.reporEstoque();
         responder("Estoque de doadores reposto (teste).");
     }
@@ -481,11 +555,13 @@ void Jogo::atualizarCircuitos(float dt, const Entrada& e) {
     if (e.escolherMunicao >= -1 || e.proximaMunicao) {
         if (e.proximaMunicao) arsenal_.proximo();
         else arsenal_.selecionar(e.escolherMunicao);
+        trocaMunicaoT_ = 0.f;  // o cartucho escolhido pulsa no HUD
         const Circuito* c = arsenal_.circuitoNaVez();
         if (c) avisar("Na vez: " + nomeCombinacao(*c));
         else if (arsenal_.selecionado() >= 0) avisar("Slot " + std::to_string(arsenal_.selecionado() + 2) + " vazio: atira comum.");
         else avisar("Na vez: munição comum.");
     }
+    trocaMunicaoT_ += dt;
     if (montadoEm_ >= 0) pertoFogueira_ = false, capsulaPerto_ = pistaPerto_ = -1;  // interagirCircuitos() só roda a pé
 
     // pavio
@@ -721,120 +797,218 @@ void Jogo::desenharCircuitos() {
 }
 
 // ---------------------------------------------------------------- HUD e painel
+// Visual no estilo de game/ui_oeste. Os números crus (timers, chances, estoque) ficam no quadro de
+// depuração F3 (desenharDepuracaoCombate, em combate_reativo.cpp).
+
+namespace {
+// "Velocidade: voa reto" -> {"Velocidade", "voa reto"}
+std::pair<std::string, std::string> dividirDescricao(const std::string& s) {
+    const size_t k = s.find(": ");
+    if (k == std::string::npos) return {"", s};
+    return {s.substr(0, k), s.substr(k + 2)};
+}
+// Relógio de bolso: o ícone do Preparo Cuidadoso.
+void iconeRelogio(Vector2 c, float r, Color cor) {
+    DrawCircleLinesV(c, r, cor);
+    DrawCircleLinesV(c, r - 2.f, estilo::comAlfa(cor, 0.5f));
+    DrawLineEx(c, {c.x, c.y - r * 0.7f}, 2.f, cor);
+    DrawLineEx(c, {c.x + r * 0.5f, c.y + r * 0.1f}, 2.f, cor);
+    DrawRectangleRec({c.x - 3, c.y - r - 5, 6, 4}, cor);
+}
+}  // namespace
 
 void Jogo::desenharHudCircuitos() {
-    using namespace estilo;
-    const ParametrosCircuito& p = circuitos_.p;
-    const float x = 18.f, y = 44.f, w = 330.f;
-    const Color LARANJA{232, 150, 80, 255}, AZUL_UMIDO{150, 185, 225, 255};
-    DrawRectangleRounded({x - 10, y - 8, w + 20, 240}, 0.07f, 6, Color{18, 16, 14, 165});
-    texto(Fonte::Forte, "Circuitos de Queima", x, y, 20, OURO);
-    const Circuito* naVez = arsenal_.circuitoNaVez();
-    std::string vez = naVez ? nomeCombinacao(*naVez) : "Munição comum";
-    texto(Fonte::Forte, "Ativa: " + vez, x, y + 26, 17, naVez ? MARFIM : MARFIM_ESC);
-    // slots: 1 = comum, 2..4 = balas gravadas (as do Preparo Rápido aparecem como imperfeitas)
-    float ly = y + 48;
-    texto(Fonte::Texto, std::string(arsenal_.selecionado() < 0 ? "> " : "   ") + "1  Comum", x, ly, 16, arsenal_.selecionado() < 0 ? OURO : MARFIM_ESC);
-    for (int i = 0; i < arsenal_.slots(); i++) {
-        const SlotMunicao& s = arsenal_.slot(i);
-        bool sel = arsenal_.selecionado() == i;
-        std::string linha = std::string(sel ? "> " : "   ") + std::to_string(i + 2) + "  " +
-                            (s.cheio ? nomeCombinacao(s.circuito) + (s.imperfeita() ? "  (imperfeita)" : "") : "vazio");
-        texto(Fonte::Texto, linha, x, ly + 18.f * float(i + 1), 16, sel ? OURO : (s.imperfeita() ? LARANJA : (s.cheio ? MARFIM : MARFIM_ESC)));
+    using namespace oeste;
+    using estilo::Fonte;
+    using estilo::texto;
+    const float W = float(GetScreenWidth()), H = float(GetScreenHeight());
+    const int n = arsenal_.slots();
+    // Acima do contador de balas e pratas do tiroteio (game/ui.cpp: desenharHud), que ocupa ~90 px.
+    const float largura = 370.f, altura = 132.f;
+    const Rectangle r{W - MARGEM - largura, H - 30.f - 96.f - altura, largura, altura};
+    painel(r);
+
+    // ---- cartuchos dos slots preparados (teclas 2..4); o selecionado brilha e pulsa ao trocar
+    const float cw = 34.f, ch = 84.f, passo = 44.f, x0 = r.x + PAD + 4.f, y0 = r.y + PAD;
+    const float pulso = 1.f + 0.18f * (1.f - suave(trocaMunicaoT_ / 0.3f));
+    for (int i = 0; i < n; i++) {
+        const bool sel = arsenal_.selecionado() == i;
+        Rectangle rc{x0 + float(i) * passo, y0 + 4.f, cw, ch};
+        if (sel) rc = escalar(rc, pulso);
+        cartucho(rc, &arsenal_.slot(i), sel ? 0.75f + 0.25f * std::sin(tempo_ * 4.f) : 0.f);
+        texto(Fonte::Forte, std::to_string(i + 2), x0 + float(i) * passo + cw * 0.5f, y0 + ch + 8.f, 15, sel ? BRASA : CINZA, estilo::CENTRO, false);
     }
-    ly += 18.f * float(arsenal_.slots() + 1) + 4;
-    char buf[160];
-    Color corPavio = MARFIM;
-    switch (pavio_.estado()) {
-    case EstadoPavio::Seco: std::snprintf(buf, sizeof buf, "Pavio: Seco"); break;
-    case EstadoPavio::Umido:
-        if (janelaForcar_ > 0.f) {
-            std::snprintf(buf, sizeof buf, "Pavio: Úmido · atire agora para FORÇAR (%.1f s)", janelaForcar_);
-            corPavio = LARANJA;
-        } else {
-            std::snprintf(buf, sizeof buf, "Pavio: Úmido (seca em %.1f s) · 2 cliques forçam", pavio_.umidade);
-            corPavio = AZUL_UMIDO;
-        }
-        break;
-    case EstadoPavio::Molhado:
-        std::snprintf(buf, sizeof buf, "Pavio: Molhado (na água: a gravada falha)");
-        corPavio = Color{140, 180, 225, 255};
-        break;
-    case EstadoPavio::BloqueadoFerro:
-        std::snprintf(buf, sizeof buf, "Pavio: Bloqueado por Ferro Frio");
-        corPavio = Color{170, 180, 200, 255};
-        break;
-    }
-    texto(Fonte::Forte, buf, x, ly, 17, corPavio);
-    // risco de rebote da bala na vez, se houver (core/rebote)
+
+    // ---- modo atual
+    const float tx = x0 + float(n) * passo + 8.f, tw = r.x + r.width - PAD - tx;
+    DrawLineEx({tx - 6.f, r.y + PAD}, {tx - 6.f, r.y + r.height - PAD}, 1.f, estilo::comAlfa(LATAO, 0.4f));
+    texto(Fonte::Forte, "MODO", tx + 4, y0, 13, CINZA, estilo::ESQ, false);
+    if (arsenal_.selecionado() < 0) texto(Fonte::Forte, "1", tx + tw, y0, 13, BRASA, estilo::DIR, false);
     const SlotMunicao* bala = arsenal_.slotNaVez();
-    const float risco = bala ? chanceRebote(*bala, pavio_, p) : 0.f;
-    if (risco > 0.f) std::snprintf(buf, sizeof buf, "Risco de rebote da bala na vez: %.0f%%", risco * 100.f);
-    else std::snprintf(buf, sizeof buf, "Risco de rebote: nenhum");
-    texto(Fonte::Texto, buf, x, ly + 21, 14, risco > 0.f ? LARANJA : MARFIM_ESC);
-    std::snprintf(buf, sizeof buf, "Doadores: Pena %d · Pedra %d · Carvão %d   ·   Vestígios no chão: %d", arsenal_.estoque(Doador::Pena),
-                  arsenal_.estoque(Doador::PedraPesada), arsenal_.estoque(Doador::CarvaoEmBrasa), int(circuitos_.capsulas().size()));
-    texto(Fonte::Texto, buf, x, ly + 38, 14, MARFIM_ESC);
-    std::snprintf(buf, sizeof buf, "Receitas: %d/%d entalhes · %d/%d pastas (inspecione pistas)", receitas_.entalhesConhecidos(), N_ENTALHES,
-                  receitas_.pastasConhecidas(), N_PASTAS);
-    texto(Fonte::Texto, buf, x, ly + 55, 14, MARFIM_ESC);
-    texto(Fonte::Texto, "1 comum · 2-4 gravadas · Tab troca · E: fogueira / pista / cápsula", x, ly + 72, 14, MARFIM_ESC);
+    if (bala) {
+        texto(Fonte::Forte, maiusculas(nome(bala->circuito.entalhe)), tx + 4, y0 + 15, 21, PERGAMINHO);
+        texto(Fonte::Texto, std::string(nome(bala->circuito.pasta)) + " · " + nome(bala->circuito.doador), tx + 4, y0 + 40, 15, CINZA, estilo::ESQ, false);
+        if (bala->imperfeita()) texto(Fonte::Forte, "IMPERFEITA", tx + tw, y0, 13, BRASA, estilo::DIR, false);
+    } else {
+        texto(Fonte::Forte, "CHUMBO COMUM", tx + 4, y0 + 15, 21, PERGAMINHO);
+        const bool vazio = arsenal_.selecionado() >= 0;
+        texto(Fonte::Texto, vazio ? "slot " + std::to_string(arsenal_.selecionado() + 2) + " vazio" : "sem circuito", tx + 4, y0 + 40, 15, CINZA,
+              estilo::ESQ, false);
+    }
+
+    // ---- pavio: chama (seco), gota com anel de secagem (úmido/molhado) ou corrente (Ferro Frio)
+    const float py = y0 + 66.f;
+    DrawLineEx({tx + 4, py - 4}, {tx + tw, py - 4}, 1.f, estilo::comAlfa(LATAO, 0.3f));
+    const EstadoPavio ep = pavio_.estado();
+    iconePavio(ep, pavio_.fracaoUmidade(circuitos_.p.tempoSecagem), {tx + 20, py + 22}, 15, tempo_);
+    texto(Fonte::Forte, "PAVIO " + maiusculas(nome(ep)), tx + 44, py + 4, 16, corDoPavio(ep), estilo::ESQ, false);
+    const char* sub = "pronto para acender";
+    if (ep == EstadoPavio::Umido) sub = janelaForcar_ > 0.f ? "atire agora para forçar" : "secando · 2 cliques forçam";
+    if (ep == EstadoPavio::Molhado) sub = "na água: a gravada falha";
+    if (ep == EstadoPavio::BloqueadoFerro) sub = "Ferro Frio: nada acende";
+    texto(Fonte::Texto, sub, tx + 44, py + 24, 14, janelaForcar_ > 0.f ? BRASA : CINZA, estilo::ESQ, false);
+    const float risco = bala ? chanceRebote(*bala, pavio_, circuitos_.p) : 0.f;
+    if (risco > 0.f) {
+        char b[24];
+        std::snprintf(b, sizeof b, "REBOTE %.0f%%", risco * 100.f);
+        texto(Fonte::Forte, b, tx + tw, py + 4, 13, BRASA, estilo::DIR, false);
+    }
 }
 
 void Jogo::desenharPainelFogueira() {
-    using namespace estilo;
+    using namespace oeste;
+    using estilo::CENTRO;
+    using estilo::DIR;
+    using estilo::ESQ;
+    using estilo::Fonte;
+    using estilo::comAlfa;
+    using estilo::texto;
     const PainelFogueira& pn = painel_;
     const ParametrosCircuito& p = circuitos_.p;
-    const Color BLOQUEADO{204, 96, 72, 255}, LARANJA{232, 150, 80, 255};
-    const float W = float(GetScreenWidth()), H = float(GetScreenHeight());
-    const float pw = 680, ph = 470, px = (W - pw) * 0.5f, py = (H - ph) * 0.5f;
-    DrawRectangle(0, 0, int(W), int(H), Color{0, 0, 0, 110});
-    DrawRectangleRounded({px, py, pw, ph}, 0.04f, 8, Color{24, 20, 16, 235});
-    DrawRectangleRoundedLinesEx({px, py, pw, ph}, 0.04f, 8, 1.5f, comAlfa(OURO, 0.7f));
-    texto(Fonte::Titulo, "Fogueira", px + pw * 0.5f, py + 14, 34, OURO, CENTRO);
-    texto(Fonte::Texto, "Grave um circuito numa bala: entalhe + pasta + objeto doador", px + pw * 0.5f, py + 56, 17, MARFIM_ESC, CENTRO);
-
     const Circuito& c = pn.circuito;
-    const SlotMunicao& s = arsenal_.slot(pn.slot);
-    // entalhes e pastas que o caçador ainda não aprendeu aparecem, mas marcados (core/receitas)
-    auto marcar = [](bool conhece, const char* n) { return conhece ? std::string(n) : std::string(n) + "  (desconhecido)"; };
-    char preparo[96];
-    if (pn.preparo == Preparo::Cuidadoso) std::snprintf(preparo, sizeof preparo, "Cuidadoso  (%.0f s, sem risco)", p.tempoPreparoCuidadoso);
-    else std::snprintf(preparo, sizeof preparo, "Rápido / Imperfeito  (na hora, %.0f%% de rebote)", p.chanceReboteRapido * 100.f);
-    const std::string valores[PainelFogueira::LINHAS] = {
-        "Slot " + std::to_string(pn.slot + 2) + (s.cheio ? "  (" + nomeCombinacao(s.circuito) + (s.imperfeita() ? ", imperfeita)" : ")") : "  (vazio)"),
-        marcar(receitas_.conhece(c.entalhe), nome(c.entalhe)), marcar(receitas_.conhece(c.pasta), nome(c.pasta)),
-        std::string(nome(c.doador)) + "  (estoque " + std::to_string(arsenal_.estoque(c.doador)) + ")", preparo};
-    const bool bloqueado[PainelFogueira::LINHAS] = {false, !receitas_.conhece(c.entalhe), !receitas_.conhece(c.pasta), false, false};
-    const char* rotulos[PainelFogueira::LINHAS] = {"Bala", "Entalhe", "Pasta", "Doador", "Preparo"};
-    for (int i = 0; i < PainelFogueira::LINHAS; i++) {
-        float ly = py + 92 + 40.f * float(i);
-        bool sel = pn.linha == i;
-        if (sel) DrawRectangleRounded({px + 24, ly - 4, pw - 48, 32}, 0.3f, 6, Color{70, 56, 36, 200});
-        texto(Fonte::Forte, rotulos[i], px + 44, ly, 20, sel ? OURO : MARFIM_ESC);
-        Color cv = bloqueado[i] ? BLOQUEADO : (i == 4 && pn.preparo == Preparo::Rapido ? LARANJA : MARFIM);
-        texto(Fonte::Texto, std::string(sel ? "<  " : "") + valores[i] + (sel ? "  >" : ""), px + 170, ly, 20, cv);
+    const LayoutFogueira L = layoutFogueira(arsenal_.slots());
+    const float a = suave(pn.animT / 0.25f);  // fade e escala de entrada
+    const float W = float(GetScreenWidth()), H = float(GetScreenHeight());
+    const float px = L.painel.x, py = L.painel.y, cx = px + L.W * 0.5f;
+    const Color OURO_CLARO{240, 200, 120, 255};
+
+    DrawRectangle(0, 0, int(W), int(H), Color{0, 0, 0, (unsigned char)(130.f * a)});  // escurece a cena
+    painel(escalar(L.painel, 0.96f + 0.04f * a), a, 16.f);
+    texto(Fonte::Titulo, "Bancada da Fogueira", cx, py + 14, 32, comAlfa(OURO_CLARO, a), CENTRO);
+    texto(Fonte::Texto, "Esquema de armeiro: entalhe + pasta + objeto doador, gravados numa bala", cx, py + 52, 17, comAlfa(CINZA, a), CENTRO);
+
+    // Card de opção (entalhe ou pasta): ícone à esquerda, nome e propriedade na 1ª linha, detalhe na 2ª.
+    auto cardOpcao = [&](Rectangle r, const std::string& nm, const std::string& descricao, bool ativo, bool foco, bool sabe, auto icone) {
+        card(r, sobre(r), ativo, foco, !sabe, a);
+        const float ix = r.x + 38.f, iy = r.y + r.height * 0.5f;
+        icone(Vector2{ix, iy}, sabe ? (ativo ? OURO_CLARO : PERGAMINHO) : FERRO);
+        if (!sabe) iconeCadeado({ix + 18.f, iy + 14.f}, 9.f, PERGAMINHO);
+        const auto [prop, detalhe] = dividirDescricao(descricao);
+        const float tx = r.x + 76.f, top = r.y + r.height * 0.5f - 24.f;
+        texto(Fonte::Forte, nm, tx, top, 19, comAlfa(sabe ? PERGAMINHO : CINZA, a), ESQ, false);
+        texto(Fonte::Forte, maiusculas(prop), r.x + r.width - 10.f, top + 4.f, 12, comAlfa(sabe ? LATAO : FERRO, a), DIR, false);
+        texto(Fonte::Texto, sabe ? detalhe : "Bloqueado: inspecione uma pista no mundo", tx, top + 26.f, 15, comAlfa(sabe ? CINZA : FERRO, a), ESQ, false);
+    };
+
+    // ---- I. entalhe geométrico
+    cabecalho("I", "Entalhe geométrico", L.colunas[0].x, L.colunas[0].y, L.colunas[0].width, pn.linha == 1);
+    for (int i = 0; i < N_ENTALHES; i++) {
+        const Entalhe e = Entalhe(i);
+        cardOpcao(L.entalhes[i], nome(e), descricaoEntalhe(e), c.entalhe == e, pn.linha == 1, receitas_.conhece(e),
+                  [&](Vector2 ic, Color cor) { iconeEntalhe(e, ic, 26.f, comAlfa(cor, a)); });
     }
-    // o que a receita faz, ou por que não vale
+    // ---- II. pasta de preenchimento
+    cabecalho("II", "Pasta de preenchimento", L.colunas[1].x, L.colunas[1].y, L.colunas[1].width, pn.linha == 2);
+    for (int i = 0; i < N_PASTAS; i++) {
+        const Pasta pa = Pasta(i);
+        cardOpcao(L.pastas[i], nome(pa), descricaoPasta(pa, p), c.pasta == pa, pn.linha == 2, receitas_.conhece(pa),
+                  [&](Vector2 ic, Color) { iconeFrasco(pa, ic, 24.f, a); });
+    }
+    // ---- III. objeto doador (estoque) e qualidade do preparo
+    const Rectangle& c3 = L.colunas[2];
+    cabecalho("III", "Doador e preparo", c3.x, c3.y, c3.width, pn.linha == 3 || pn.linha == 4);
+    texto(Fonte::Texto, std::string("receita pede: ") + nome(doadorDaReceita(c.entalhe)), c3.x + c3.width, c3.y + 3, 14, comAlfa(CINZA, a), DIR, false);
+    for (int i = 0; i < N_DOADORES; i++) {
+        const Doador d = Doador(i);
+        const Rectangle& r = L.doadores[i];
+        const bool ativo = c.doador == d, exigido = doadorDaReceita(c.entalhe) == d, semEstoque = arsenal_.estoque(d) <= 0;
+        card(r, sobre(r), ativo, pn.linha == 3, ativo && !exigido, a);
+        iconeDoador(d, {r.x + r.width * 0.5f, r.y + 28.f}, 20.f, a);
+        if (exigido) DrawPoly({r.x + r.width - 11.f, r.y + 11.f}, 4, 5.f, 0, comAlfa(LATAO, a));  // losango: o que a receita pede
+        texto(Fonte::Forte, nome(d), r.x + r.width * 0.5f, r.y + 52.f, 13, comAlfa(PERGAMINHO, a), CENTRO, false);
+        texto(Fonte::Texto, "x" + std::to_string(arsenal_.estoque(d)) + (ativo && !exigido ? "  não serve" : ""), r.x + r.width * 0.5f, r.y + 69.f, 14,
+              comAlfa(semEstoque || (ativo && !exigido) ? BRASA : CINZA, a), CENTRO, false);
+    }
+    const float qy = L.doadores[0].y + L.doadores[0].height + 12.f;
+    texto(Fonte::Forte, "QUALIDADE DO PREPARO", c3.x, qy, 14, comAlfa(pn.linha == 4 ? PERGAMINHO : CINZA, a), ESQ, false);
+    DrawRectangleGradientH(int(c3.x), int(qy + 20), int(c3.width), 1, comAlfa(LATAO, 0.6f * a), comAlfa(LATAO, 0.f));
+    for (int i = 0; i < 2; i++) {
+        const Preparo pr = Preparo(i);
+        const Rectangle& r = L.preparos[i];
+        const bool ativo = pn.preparo == pr;
+        card(r, sobre(r), ativo, pn.linha == 4, false, a);
+        const Vector2 ic{r.x + 34.f, r.y + r.height * 0.5f};
+        char det[80];
+        if (pr == Preparo::Cuidadoso) {
+            iconeRelogio(ic, 14.f, comAlfa(ativo ? OURO_CLARO : PERGAMINHO, a));
+            std::snprintf(det, sizeof det, "%.0f s de gravação · 0%% de rebote", p.tempoPreparoCuidadoso);
+        } else {
+            iconePavio(EstadoPavio::Seco, 0, ic, 14.f, tempo_);
+            std::snprintf(det, sizeof det, "na hora · %.0f%% de rebote no disparo", p.chanceReboteRapido * 100.f);
+        }
+        texto(Fonte::Forte, pr == Preparo::Cuidadoso ? "Preparo Cuidadoso (Seguro)" : "Preparo Rápido (Alto Risco de Rebote)", r.x + 62.f, r.y + 10.f, 16,
+              comAlfa(PERGAMINHO, a), ESQ, false);
+        texto(Fonte::Texto, det, r.x + 62.f, r.y + 36.f, 15, comAlfa(pr == Preparo::Rapido ? BRASA : CINZA, a), ESQ, false);
+    }
+
+    // ---- IV. tambor: os slots onde a bala é gravada
+    cabecalho("IV", "Tambor do revólver", px + 24.f, py + L.TOPO_BASE, 3 * 104.f, pn.linha == 0);
+    for (int i = 0; i < arsenal_.slots() && i < LayoutFogueira::MAX_SLOTS; i++) {
+        const Rectangle& r = L.slots[i];
+        const SlotMunicao& s = arsenal_.slot(i);
+        const bool sel = pn.slot == i;
+        card(r, sobre(r), sel, pn.linha == 0, false, a);
+        cartucho({r.x + r.width * 0.5f - 15.f, r.y + 8.f, 30.f, 70.f}, &s, sel ? 0.6f : 0.f);
+        texto(Fonte::Forte, "Slot " + std::to_string(i + 2), r.x + r.width * 0.5f, r.y + 82.f, 15, comAlfa(sel ? PERGAMINHO : CINZA, a), CENTRO, false);
+    }
+    // ---- resumo do efeito resultante, retorno da bancada e botões
+    const Rectangle& rs = L.resumo;
+    card(rs, false, false, false, false, a);
+    const float rx = rs.x + PAD, tw = L.gravar.x - rx - PAD;
+    iconeEntalhe(c.entalhe, {rx + 14.f, rs.y + 20.f}, 12.f, comAlfa(OURO_CLARO, a));
+    iconeFrasco(c.pasta, {rx + 40.f, rs.y + 20.f}, 12.f, a);
+    texto(Fonte::Forte, nomeCombinacao(c), rx + 60.f, rs.y + 8.f, 18, comAlfa(PERGAMINHO, a), ESQ, false);
     std::string desc = descreverEfeito(c, p);
-    Color corDesc = c.valido() ? MARFIM : Color{214, 80, 58, 255};
+    Color corDesc = c.valido() ? PERGAMINHO : BRASA;
+    if (!c.valido()) desc = std::string("Receita inválida: ") + nome(c.entalhe) + " exige " + nome(doadorDaReceita(c.entalhe));
     if (!receitas_.permite(c)) {
         desc = "Receita desconhecida: inspecione pistas (equipamentos entalhados) para aprender.";
-        corDesc = BLOQUEADO;
+        corDesc = FERRO;
     }
-    texto(Fonte::Texto, desc, px + pw * 0.5f, py + 298, 17, corDesc, CENTRO);
-    if (pn.retornoT > 0.f) texto(Fonte::Forte, pn.retorno, px + pw * 0.5f, py + 326, 18, comAlfa(OURO, std::min(1.f, pn.retornoT)), CENTRO);
-    // barra do Preparo Cuidadoso
-    if (pn.gravando > 0.f) {
-        const float bw = pw - 160, bx = px + 80, by = py + 356;
+    texto(Fonte::Texto, desc, rx, rs.y + 36.f, 16, comAlfa(corDesc, a), ESQ, false);
+    if (pn.gravando > 0.f) {  // barra do Preparo Cuidadoso
         const float feito = clamp01(1.f - pn.gravando / std::max(0.01f, p.tempoPreparoCuidadoso));
-        DrawRectangleRounded({bx, by, bw, 10}, 1.f, 6, Color{50, 40, 28, 255});
-        DrawRectangleRounded({bx, by, bw * feito, 10}, 1.f, 6, comAlfa(OURO, 0.9f));
-        char buf[64];
-        std::snprintf(buf, sizeof buf, "Gravando com cuidado... %.1f s (E cancela)", pn.gravando);
-        texto(Fonte::Texto, buf, px + pw * 0.5f, by + 14, 15, MARFIM_ESC, CENTRO);
+        barra({rx, rs.y + 62.f, tw, 10.f}, feito, LATAO, a);
+        char b[64];
+        std::snprintf(b, sizeof b, "Gravando com cuidado... %.1f s (E cancela)", pn.gravando);
+        texto(Fonte::Texto, b, rx, rs.y + 76.f, 14, comAlfa(CINZA, a), ESQ, false);
+    } else if (pn.retornoT > 0.f) {
+        texto(Fonte::Forte, pn.retorno, rx, rs.y + 62.f, 16, comAlfa(OURO_CLARO, a * std::min(1.f, pn.retornoT)), ESQ, false);
     }
-    // o que já se sabe gravar
+    // o que já está no slot e o risco que esta bala teria agora (com o pavio atual)
+    const SlotMunicao& s = arsenal_.slot(pn.slot);
+    SlotMunicao ensaio;
+    ensaio.cheio = true, ensaio.circuito = c, ensaio.preparo = pn.preparo;
+    char b[160];
+    std::snprintf(b, sizeof b, "Slot %d: %s%s   ·   risco no disparo agora: %.0f%%", pn.slot + 2, s.cheio ? nomeCombinacao(s.circuito).c_str() : "vazio",
+                  s.imperfeita() ? " (imperfeita)" : "", chanceRebote(ensaio, pavio_, p) * 100.f);
+    if (pn.gravando <= 0.f) texto(Fonte::Texto, b, rx, rs.y + 86.f, 14, comAlfa(CINZA, a), ESQ, false);
+    botao(L.gravar, "Enter", "Gravar", true, a);
+    botao(L.esvaziar, "X", "Esvaziar", false, a);
+    botao(L.repor, "R", "Repor", false, a);
+    botao(L.fechar, "E", "Fechar", false, a);
+
+    // ---- rodapé: o que já se sabe gravar e os atalhos
     std::string sabe = "Conhece:";
     for (int i = 0; i < N_ENTALHES; i++)
         if (receitas_.conhece(Entalhe(i))) sabe += std::string(" ") + nome(Entalhe(i)) + ",";
@@ -843,7 +1017,7 @@ void Jogo::desenharPainelFogueira() {
     for (int i = 0; i < N_PASTAS; i++)
         if (receitas_.conhece(Pasta(i))) sabe += std::string(" ") + nome(Pasta(i)) + ",";
     sabe.pop_back();
-    texto(Fonte::Texto, sabe, px + pw * 0.5f, py + ph - 60, 15, MARFIM_ESC, CENTRO);
-    texto(Fonte::Texto, "Setas: escolher · Enter: gravar · X: esvaziar · R: repor doadores (teste) · E: fechar", px + pw * 0.5f, py + ph - 34,
-          15, MARFIM_ESC, CENTRO);
+    texto(Fonte::Texto, sabe, cx, py + L.H - 44.f, 15, comAlfa(CINZA, a), CENTRO, false);
+    texto(Fonte::Texto, "Setas/mouse: escolher · Enter: gravar · X: esvaziar · R: repor doadores (teste) · E: fechar", cx, py + L.H - 26.f, 15,
+          comAlfa(CINZA, a), CENTRO, false);
 }

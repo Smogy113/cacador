@@ -6,13 +6,16 @@
 //     45°: só a Espiral + Resina e Cera, ricocheteando na parede, o alcança.
 //   - Pistas (engenharia reversa): equipamentos entalhados no chão ou largados pelos inimigos
 //     derrotados; inspecionar (E) ensina um entalhe ou uma pasta na fogueira.
-//   - Depuração (F3): rótulos de estado sobre cada inimigo, cone de visão, rota e um quadro com
-//     inimigos, receitas, vestígios e risco de rebote.
+//   - Marcadores (sempre): losango de alerta e badges de gelo/atordoamento sobre os inimigos,
+//     prompts flutuantes "[E] ..." sobre pistas e cápsulas, banner de receita descoberta.
+//   - Depuração (F3, ligada por padrão): nome/vida/estado da IA sob cada marcador, cone de visão,
+//     rota e o quadro do canto superior esquerdo (Circuitos + combate reativo).
 //
 // A regra fica no núcleo, sem raylib e sem a malha do personagem: core/inimigo_teste (cabeça dos
 // inimigos), core/fisica_alvo (corpo), core/receitas (pistas e receitas), core/baia_cobertura
 // (geometria) e core/rebote (gatilho). Este arquivo só monta, liga e desenha com primitivas: para
-// trocar o visual, mexa em desenharCombateReativo() e desenharRotulosCombate().
+// trocar o visual, mexa em desenharCombateReativo() (3D), desenharRotulosCombate() (2D) e
+// game/ui_oeste (paleta e ícones).
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -203,6 +206,12 @@ bool Jogo::interagirPista(Entrada& e) {
     const bool aprendeu = inspecionar(p, receitas_);
     avisar(aprendeu ? "Engenharia reversa: " + p.objeto + ". Novo na fogueira: " + nome(p.ensina) + "."
                     : "Você examinou " + p.objeto + ": nada que já não soubesse.");
+    if (aprendeu) {  // banner no topo: "NOVO ENTALHE DESCOBERTO: GRADE"
+        const bool entalhe = p.ensina.tipo == Descoberta::Tipo::Entalhe;
+        banner_.mostrar(std::string(entalhe ? "NOVO ENTALHE DESCOBERTO: " : "NOVA PASTA DESCOBERTA: ") +
+                            oeste::maiusculas(entalhe ? nome(p.ensina.entalhe) : nome(p.ensina.pasta)),
+                        "Engenharia reversa: " + p.objeto + ". Já vale na fogueira.", tempo_);
+    }
     std::printf("combate reativo: pista inspecionada (%s)%s\n", nome(p.ensina).c_str(), aprendeu ? " aprendeu" : "");
     pistas_.erase(std::remove_if(pistas_.begin(), pistas_.end(), [](const PistaEntalhada& q) { return q.inspecionada; }), pistas_.end());
     pistaPerto_ = -1;
@@ -395,24 +404,30 @@ void Jogo::desenharCombateReativo(Transparencias& tr) {
     }
 }
 
-// ---------------------------------------------------------------- depuração 2D
+// ---------------------------------------------------------------- marcadores, prompts e depuração 2D
+
+namespace {
+// Ponto do mundo na tela; false se atrás da câmera ou longe da borda.
+bool naTela(const Camera3D& cam, Vec3f p, Vector2& s) {
+    const Vec3f olho{cam.position.x, cam.position.y, cam.position.z};
+    const Vec3f frente = normalizar(Vec3f{cam.target.x, cam.target.y, cam.target.z} - olho);
+    if (dot(p - olho, frente) < 0.5f) return false;
+    s = GetWorldToScreen(v3(p), cam);
+    return s.x > -80.f && s.x < float(GetScreenWidth()) + 80.f && s.y > -40.f && s.y < float(GetScreenHeight()) + 40.f;
+}
+}  // namespace
 
 void Jogo::desenharRotulosCombate() {
     using namespace estilo;
-    const float W = float(GetScreenWidth()), H = float(GetScreenHeight());
     const Vec3f olho{cam_.position.x, cam_.position.y, cam_.position.z};
-    const Vec3f frente = normalizar(Vec3f{cam_.target.x, cam_.target.y, cam_.target.z} - olho);
-    auto naTela = [&](Vec3f p, Vector2& s) {
-        if (dot(p - olho, frente) < 0.5f) return false;  // atrás da câmera
-        s = GetWorldToScreen(v3(p), cam_);
-        return s.x > -80.f && s.x < W + 80.f && s.y > -40.f && s.y < H + 40.f;
-    };
-    // Um rótulo por inimigo perto. Os mais próximos ficam no lugar; um rótulo que cairia em cima de
-    // outro sobe até ficar livre (a Dupla anda colada).
+    // Um marcador por inimigo perto: losango com olho (investigando: amarelo se foi um vestígio,
+    // vermelho se foi atacado) e badges de gelo/atordoamento. Com F3, logo abaixo, o nome, a vida e
+    // o estado da IA. Os mais próximos ficam no lugar; um que cairia em cima de outro sobe até ficar
+    // livre (a Dupla anda colada).
+    constexpr float ICONE = 28.f;  // faixa reservada aos ícones, acima da caixa de texto
     struct Rotulo {
-        Rectangle caixa;
-        std::string nome, linha;
-        Color cor;
+        Rectangle caixa;  // ícones + texto de depuração (usada para não sobrepor)
+        const InimigoTeste* in;
         float tam, dist;
     };
     std::vector<Rotulo> rotulos;
@@ -420,13 +435,17 @@ void Jogo::desenharRotulosCombate() {
         const float d = distXZ(olho, in.pes());
         Vector2 s;
         const float alt = in.agachado ? paramInimigo_.alturaAgachado : paramInimigo_.alturaEmPe;
-        if (d > DIST_ROTULO || !naTela(in.pes() + Vec3f{0, alt + 0.55f, 0}, s)) continue;
-        Rotulo r{{}, in.nome, descreverEstado(in), corDoEstado(estado(in)), d < 15.f ? 17.f : 15.f, d};
-        const float w = std::max(largura(Fonte::Forte, r.nome, 14), largura(Fonte::Forte, r.linha, r.tam)) + 18.f;
-        r.caixa = {s.x - w * 0.5f, s.y - 40.f, w, 42.f};
-        rotulos.push_back(r);
+        if (d > DIST_ROTULO || !naTela(cam_, in.pes() + Vec3f{0, alt + 0.55f, 0}, s)) continue;
+        const float tam = d < 15.f ? 16.f : 14.f;
+        float w = 60.f, h = ICONE;
+        if (depuracaoCombate_) {
+            w = std::max(w, std::max(largura(Fonte::Forte, in.nome + " 100/100", 14), largura(Fonte::Forte, descreverEstado(in), tam)) + 18.f);
+            h += 40.f;
+        }
+        rotulos.push_back({{s.x - w * 0.5f, s.y - h, w, h}, &in, tam, d});
     }
     std::sort(rotulos.begin(), rotulos.end(), [](const Rotulo& a, const Rotulo& b) { return a.dist < b.dist; });
+    char hp[32];
     for (size_t i = 0; i < rotulos.size(); i++) {
         for (int tentativa = 0; tentativa < 8; tentativa++) {
             bool bateu = false;
@@ -438,73 +457,175 @@ void Jogo::desenharRotulosCombate() {
             if (!bateu) break;
         }
         const Rotulo& r = rotulos[i];
-        const float cx = r.caixa.x + r.caixa.width * 0.5f;
-        DrawRectangleRounded(r.caixa, 0.3f, 6, Color{14, 12, 10, 175});
-        texto(Fonte::Forte, r.nome, cx, r.caixa.y + 2.f, 14, MARFIM_ESC, CENTRO, false);
-        texto(Fonte::Forte, r.linha, cx, r.caixa.y + 18.f, r.tam, r.cor, CENTRO, false);
+        const InimigoTeste& in = *r.in;
+        const EstadoInimigo e = estado(in);
+        const float cx = r.caixa.x + r.caixa.width * 0.5f, iy = r.caixa.y + ICONE * 0.5f;
+        // ícones: alerta no centro, badges à direita
+        float bx = cx;
+        if (e != EstadoInimigo::Derrotado && in.conduta == Conduta::Investigando) {
+            oeste::losangoAlerta({cx, iy}, 11.f, in.motivo == MotivoAlerta::Atacado ? oeste::PERIGO : oeste::ALERTA);
+            bx += 22.f;
+        }
+        if (e == EstadoInimigo::Congelado) oeste::badgeGelo({bx, iy}, 9.f);
+        if (e == EstadoInimigo::Atordoado) oeste::badgeAtordoado({bx, iy}, 9.f, tempo_);
+        if (!depuracaoCombate_) continue;
+        const Rectangle txt{r.caixa.x, r.caixa.y + ICONE, r.caixa.width, 40.f};
+        DrawRectangleRounded(txt, 0.3f, 6, Color{14, 12, 10, 175});
+        std::snprintf(hp, sizeof hp, " %.0f/%.0f", std::max(0.f, in.corpo.vida.atual), in.corpo.vida.max);
+        texto(Fonte::Forte, in.nome + hp, cx, txt.y + 2.f, 14, MARFIM_ESC, CENTRO, false);
+        texto(Fonte::Forte, descreverEstado(in), cx, txt.y + 18.f, r.tam, corDoEstado(e), CENTRO, false);
     }
-    for (const PistaEntalhada& p : pistas_) {
+    // bandidos da recompensa: alerta (amarelo) e combate (vermelho)
+    if (!cacada_.bando().vazio())
+        for (const Bandido& b : cacada_.bando().bandidos()) {
+            if (b.estado != EstadoBandido::Alerta && b.estado != EstadoBandido::Combate) continue;
+            Vector2 s;
+            if (distXZ(olho, b.corpo.pos) > 60.f || !naTela(cam_, b.corpo.pos + Vec3f{0, 2.3f, 0}, s)) continue;
+            oeste::losangoAlerta(s, 11.f, b.estado == EstadoBandido::Combate ? oeste::PERIGO : oeste::ALERTA);
+        }
+    // pistas: losango de latão sempre; o nome do objeto com F3 (o prompt de perto fica em desenharPromptNoChao)
+    for (size_t k = 0; k < pistas_.size(); k++) {
+        const PistaEntalhada& p = pistas_[k];
         Vector2 s;
-        if (p.inspecionada || distXZ(olho, p.pos) > DIST_ROTULO_PISTA || !naTela(p.pos + Vec3f{0, 0.75f, 0}, s)) continue;
-        texto(Fonte::Forte, "Pista: " + p.objeto, s.x, s.y - 10.f, 15, OURO, CENTRO);
+        if (p.inspecionada || int(k) == pistaPerto_ || distXZ(olho, p.pos) > DIST_ROTULO_PISTA || !naTela(cam_, p.pos + Vec3f{0, 0.75f, 0}, s)) continue;
+        DrawPoly(s, 4, 7.f, 0, comAlfa(oeste::LATAO, 0.5f + 0.3f * std::sin(tempo_ * 3.f)));
+        DrawPolyLinesEx(s, 4, 7.f, 0, 1.5f, oeste::PERGAMINHO);
+        if (depuracaoCombate_) texto(Fonte::Forte, "Pista: " + p.objeto, s.x, s.y - 28.f, 15, OURO, CENTRO);
     }
+    if (!depuracaoCombate_) return;
     for (const CapsulaVestigio& c : circuitos_.capsulas()) {
         Vector2 s;
-        if (!c.descoberta || distXZ(olho, c.pos) > 25.f || !naTela(c.pos + Vec3f{0, 0.4f, 0}, s)) continue;
+        if (!c.descoberta || distXZ(olho, c.pos) > 25.f || !naTela(cam_, c.pos + Vec3f{0, 0.4f, 0}, s)) continue;
         texto(Fonte::Forte, "vestígio descoberto", s.x, s.y - 8.f, 14, Color{230, 90, 70, 255}, CENTRO);
     }
 }
 
-void Jogo::desenharDepuracaoCombate() {
-    using namespace estilo;
-    const float W = float(GetScreenWidth()), w = 390.f, x = W - w - 18.f, y = 44.f;
-    const Color BLOQUEADO{170, 96, 80, 255};
-    const float h = 26.f + 18.f + 18.f * float(inimigos_.size()) + 8.f + 18.f + 36.f + 8.f + 36.f + 6.f;
-    DrawRectangleRounded({x - 10, y - 8, w + 20, h}, 0.06f, 6, Color{18, 16, 14, 170});
-    texto(Fonte::Forte, "Combate reativo · depuração (F3)", x, y, 18, OURO);
-    float ly = y + 26.f;
-    texto(Fonte::Forte, "Inimigos de teste", x, ly, 15, MARFIM_ESC);
-    ly += 18.f;
-    char buf[160];
-    for (const InimigoTeste& in : inimigos_) {
-        texto(Fonte::Texto, in.nome, x, ly, 15, MARFIM);
-        texto(Fonte::Texto, descreverEstado(in), x + 96.f, ly, 15, corDoEstado(estado(in)));
-        std::snprintf(buf, sizeof buf, "%.0f/%.0f", std::max(0.f, in.corpo.vida.atual), in.corpo.vida.max);
-        texto(Fonte::Texto, buf, x + w, ly, 15, MARFIM_ESC, DIR);
-        ly += 18.f;
+bool Jogo::desenharPromptNoChao() {
+    Vector2 s;
+    const float alfa = 0.85f + 0.15f * std::sin(tempo_ * 4.f);  // pulsa de leve
+    if (pistaPerto_ >= 0) {
+        const PistaEntalhada& p = pistas_[size_t(pistaPerto_)];
+        if (!naTela(cam_, p.pos + Vec3f{0, 0.9f, 0}, s)) return false;
+        oeste::prompt("E", p.ensina.tipo == Descoberta::Tipo::Entalhe ? "Inspecionar Entalhe" : "Inspecionar Pasta", s.x, s.y - 40.f, alfa);
+        estilo::texto(estilo::Fonte::Texto, p.objeto, s.x, s.y - 4.f, 15, oeste::CINZA, estilo::CENTRO);
+        return true;
     }
-    // receitas: o que já se aprendeu (claro) e o que falta (apagado)
-    ly += 8.f;
-    std::snprintf(buf, sizeof buf, "Receitas desbloqueadas (%d/%d entalhes · %d/%d pastas)", receitas_.entalhesConhecidos(), N_ENTALHES,
-                  receitas_.pastasConhecidas(), N_PASTAS);
-    texto(Fonte::Forte, buf, x, ly, 15, MARFIM_ESC);
-    ly += 18.f;
-    auto listar = [&](const char* rotulo, int n, auto conhece, auto nomeDe) {
-        float cx = x;
-        texto(Fonte::Texto, rotulo, cx, ly, 14, MARFIM_ESC);
-        cx += largura(Fonte::Texto, rotulo, 14) + 6.f;
-        for (int i = 0; i < n; i++) {
-            const bool sabe = conhece(i);
-            const std::string nm = std::string(nomeDe(i)) + (sabe ? "" : "?");
-            texto(Fonte::Texto, nm, cx, ly, 14, sabe ? MARFIM : BLOQUEADO);
-            cx += largura(Fonte::Texto, nm, 14) + 10.f;
-        }
-        ly += 18.f;
+    if (capsulaPerto_ >= 0 && capsulaPerto_ < int(circuitos_.capsulas().size())) {
+        if (!naTela(cam_, circuitos_.capsulas()[size_t(capsulaPerto_)].pos + Vec3f{0, 0.6f, 0}, s)) return false;
+        oeste::prompt("E", "Recolher Cápsula", s.x, s.y - 40.f, alfa);
+        estilo::texto(estilo::Fonte::Texto, "apaga o rastro", s.x, s.y - 4.f, 15, oeste::CINZA, estilo::CENTRO);
+        return true;
+    }
+    return false;
+}
+
+void Jogo::desenharDepuracaoCombate() {
+    // Quadro F3 (ligado por padrão), canto superior esquerdo: os números crus para testar.
+    // Monta as linhas primeiro (cada uma com trechos de cores diferentes), mede e só então desenha.
+    using namespace estilo;
+    struct Trecho {
+        std::string t;
+        Color cor;
     };
-    listar("Entalhes:", N_ENTALHES, [&](int i) { return receitas_.conhece(Entalhe(i)); }, [](int i) { return nome(Entalhe(i)); });
-    listar("Pastas:", N_PASTAS, [&](int i) { return receitas_.conhece(Pasta(i)); }, [](int i) { return nome(Pasta(i)); });
-    // vestígios, pistas e gatilho
-    ly += 8.f;
+    struct Linha {
+        std::vector<Trecho> trechos;
+        bool titulo = false;
+    };
+    std::vector<Linha> L;
+    const Color BLOQUEADO{170, 96, 80, 255}, LARANJA{232, 150, 80, 255}, AZUL_UMIDO{150, 185, 225, 255};
+    auto titulo = [&](const std::string& t) { L.push_back({{{t, OURO}}, true}); };
+    auto linha = [&](const std::string& t, Color c = MARFIM_ESC) { L.push_back({{{t, c}}}); };
+    char buf[200];
+    const ParametrosCircuito& p = circuitos_.p;
+
+    // ---- Circuitos de Queima: munição, pavio, rebote, estoque e receitas
+    titulo("Circuitos de Queima · depuração (F3)");
+    const Circuito* naVez = arsenal_.circuitoNaVez();
+    linha("Ativa: " + (naVez ? nomeCombinacao(*naVez) : std::string("Munição comum")), naVez ? MARFIM : MARFIM_ESC);
+    linha(std::string(arsenal_.selecionado() < 0 ? "> " : "   ") + "1  Comum", arsenal_.selecionado() < 0 ? OURO : MARFIM_ESC);
+    for (int i = 0; i < arsenal_.slots(); i++) {
+        const SlotMunicao& s = arsenal_.slot(i);
+        const bool sel = arsenal_.selecionado() == i;
+        linha(std::string(sel ? "> " : "   ") + std::to_string(i + 2) + "  " +
+                  (s.cheio ? nomeCombinacao(s.circuito) + (s.imperfeita() ? "  (imperfeita)" : "") : "vazio"),
+              sel ? OURO : (s.imperfeita() ? LARANJA : (s.cheio ? MARFIM : MARFIM_ESC)));
+    }
+    Color corPavio = MARFIM;
+    switch (pavio_.estado()) {
+    case EstadoPavio::Seco: std::snprintf(buf, sizeof buf, "Pavio: Seco"); break;
+    case EstadoPavio::Umido:
+        if (janelaForcar_ > 0.f) {
+            std::snprintf(buf, sizeof buf, "Pavio: Úmido · atire agora para FORÇAR (%.1f s)", janelaForcar_);
+            corPavio = LARANJA;
+        } else {
+            std::snprintf(buf, sizeof buf, "Pavio: Úmido (seca em %.1f s) · 2 cliques forçam", pavio_.umidade);
+            corPavio = AZUL_UMIDO;
+        }
+        break;
+    case EstadoPavio::Molhado:
+        std::snprintf(buf, sizeof buf, "Pavio: Molhado (na água: a gravada falha)");
+        corPavio = Color{140, 180, 225, 255};
+        break;
+    case EstadoPavio::BloqueadoFerro:
+        std::snprintf(buf, sizeof buf, "Pavio: Bloqueado por Ferro Frio");
+        corPavio = Color{170, 180, 200, 255};
+        break;
+    }
+    linha(buf, corPavio);
+    const SlotMunicao* bala = arsenal_.slotNaVez();
+    const float risco = bala ? chanceRebote(*bala, pavio_, p) : 0.f;
+    if (!bala) std::snprintf(buf, sizeof buf, "Gatilho: munição comum (sem risco de rebote)");
+    else
+        std::snprintf(buf, sizeof buf, "Gatilho: %s · pavio %s · rebote %.0f%%", bala->imperfeita() ? "bala imperfeita" : "bala cuidadosa",
+                      nome(pavio_.estado()), risco * 100.f);
+    linha(buf, tremor_.ativo() || risco > 0.f ? LARANJA : MARFIM_ESC);
+    std::snprintf(buf, sizeof buf, "Doadores: Pena %d · Pedra %d · Carvão %d", arsenal_.estoque(Doador::Pena), arsenal_.estoque(Doador::PedraPesada),
+                  arsenal_.estoque(Doador::CarvaoEmBrasa));
+    linha(buf);
+    // receitas: o que já se aprendeu (claro) e o que falta (apagado, com "?")
+    std::snprintf(buf, sizeof buf, "Receitas: %d/%d entalhes · %d/%d pastas (inspecione pistas)", receitas_.entalhesConhecidos(), N_ENTALHES,
+                  receitas_.pastasConhecidas(), N_PASTAS);
+    linha(buf);
+    auto listar = [&](const char* rotulo, int n, auto conhece, auto nomeDe) {
+        Linha l{{{rotulo, MARFIM_ESC}}};
+        for (int i = 0; i < n; i++) l.trechos.push_back({std::string(nomeDe(i)) + (conhece(i) ? "" : "?"), conhece(i) ? MARFIM : BLOQUEADO});
+        L.push_back(l);
+    };
+    listar("   Entalhes:", N_ENTALHES, [&](int i) { return receitas_.conhece(Entalhe(i)); }, [](int i) { return nome(Entalhe(i)); });
+    listar("   Pastas:", N_PASTAS, [&](int i) { return receitas_.conhece(Pasta(i)); }, [](int i) { return nome(Pasta(i)); });
+
+    // ---- Combate reativo: estado e vida de cada inimigo de teste, vestígios e pistas
+    titulo("Combate reativo");
+    for (const InimigoTeste& in : inimigos_) {
+        std::snprintf(buf, sizeof buf, "  %.0f/%.0f", std::max(0.f, in.corpo.vida.atual), in.corpo.vida.max);
+        L.push_back({{{in.nome, MARFIM}, {descreverEstado(in), corDoEstado(estado(in))}, {buf, MARFIM_ESC}}});
+    }
     int descobertas = 0;
     for (const CapsulaVestigio& c : circuitos_.capsulas()) descobertas += c.descoberta;
     std::snprintf(buf, sizeof buf, "Vestígios: %d cápsulas no chão (%d descobertas) · pistas: %d", int(circuitos_.capsulas().size()), descobertas,
                   int(pistas_.size()));
-    texto(Fonte::Texto, buf, x, ly, 14, descobertas > 0 ? Color{230, 110, 80, 255} : MARFIM_ESC);
-    ly += 18.f;
-    const SlotMunicao* bala = arsenal_.slotNaVez();
-    if (!bala) std::snprintf(buf, sizeof buf, "Gatilho: munição comum (sem risco de rebote)");
-    else
-        std::snprintf(buf, sizeof buf, "Gatilho: %s · pavio %s · rebote %.0f%%", bala->imperfeita() ? "bala imperfeita" : "bala cuidadosa",
-                      nome(pavio_.estado()), chanceRebote(*bala, pavio_, circuitos_.p) * 100.f);
-    texto(Fonte::Texto, buf, x, ly, 14, tremor_.ativo() ? Color{232, 150, 80, 255} : MARFIM_ESC);
+    linha(buf, descobertas > 0 ? Color{230, 110, 80, 255} : MARFIM_ESC);
+    linha("1 comum · 2-4 gravadas · Tab troca · E: fogueira / pista / cápsula · F3 esconde");
+
+    // ---- desenho: caixa discreta e linhas
+    constexpr float X = 14.f, Y = 12.f, TAM = 14.f, ALT = 17.f, ESPACO = 8.f;
+    float w = 0, h = 0;
+    for (const Linha& l : L) {
+        float lw = 0;
+        for (const Trecho& t : l.trechos) lw += largura(Fonte::Texto, t.t, TAM) + ESPACO;
+        w = std::max(w, lw);
+        h += l.titulo ? ALT + 6.f : ALT;
+    }
+    DrawRectangleRounded({X - 8, Y - 6, w + 16, h + 12}, 0.03f, 6, Color{10, 8, 7, 165});
+    DrawRectangleRoundedLinesEx({X - 8, Y - 6, w + 16, h + 12}, 0.03f, 6, 1.f, comAlfa(oeste::LATAO, 0.35f));
+    float y = Y;
+    for (const Linha& l : L) {
+        if (l.titulo && y > Y) y += 6.f;
+        float x = X;
+        for (const Trecho& t : l.trechos) {
+            texto(l.titulo ? Fonte::Forte : Fonte::Texto, t.t, x, y, TAM, t.cor, ESQ, false);
+            x += largura(Fonte::Texto, t.t, TAM) + ESPACO;
+        }
+        y += ALT;
+    }
 }

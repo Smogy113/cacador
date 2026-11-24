@@ -3,6 +3,7 @@
 #include <cstdio>
 #include "core/bussola.h"
 #include "core/noise.h"
+#include "game/ui_oeste.h"
 #include "raylib.h"
 #include "render/estilo.h"
 
@@ -132,22 +133,32 @@ void desenharAvisos(const std::vector<ErroMapa>& erros, float t) {
 }
 
 void desenharDica(const char* t, const std::string& acao) {
-    float W = float(GetScreenWidth()), H = float(GetScreenHeight()), tam = 24;
-    float wt = (t && *t) ? std::max(tam * 1.1f, largura(Fonte::Forte, t, tam * 0.8f) + tam * 0.6f) + 12 : 0;
-    float w = wt + largura(Fonte::Texto, acao, tam), x = W / 2 - w / 2, y = H - 92;
-    faixa(W / 2, y - 4, w + 46, 35, 0.68f);
-    if (wt > 0) tecla(t, x, y, tam);
-    texto(Fonte::Texto, acao, x + wt, y - 1, tam, MARFIM);
+    oeste::prompt(t ? t : "", acao, GetScreenWidth() * 0.5f, GetScreenHeight() - 100.f, 1.f, 22.f);
 }
 
 // ---------------- HUD do tiroteio ----------------
-void desenharHud(float vida01, int balas, bool recarregando, int dinheiro, bool mirando, float marca, bool matou, Vector2 mini, float raio) {
+// Barra de vida rústica: painel de couro à direita do minimapa, cruz de latão, barra cor de sangue
+// (brasa abaixo de 35%) com riscos a cada 10% e o HP exato.
+static void desenharVida(float atual, float max, Vector2 mini, float raio) {
+    const float f = std::clamp(atual / std::max(1.f, max), 0.f, 1.f);
+    const Rectangle r{mini.x + raio + 16.f, mini.y + raio - 52.f, 260.f, 52.f};
+    oeste::painel(r, 1.f, 8.f);
+    const Vector2 c{r.x + 22.f, r.y + r.height * 0.5f};  // cruz de latão
+    DrawRectangleRec({c.x - 3, c.y - 10, 6, 20}, oeste::LATAO);
+    DrawRectangleRec({c.x - 10, c.y - 3, 20, 6}, oeste::LATAO);
+    const Rectangle b{r.x + 42.f, r.y + 28.f, r.width - 54.f, 12.f};
+    oeste::barra(b, f, f < 0.35f ? oeste::BRASA : Color{150, 34, 26, 255});
+    for (int k = 1; k < 10; k++) DrawLineEx({b.x + b.width * k / 10.f, b.y + 2}, {b.x + b.width * k / 10.f, b.y + 5}, 1.f, Color{0, 0, 0, 120});
+    texto(Fonte::Forte, "VIDA", b.x, r.y + 8.f, 14, oeste::CINZA, ESQ, false);
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%.0f / %.0f", std::max(0.f, atual), max);
+    texto(Fonte::Forte, buf, b.x + b.width, r.y + 6.f, 17, f < 0.35f ? oeste::BRASA : oeste::PERGAMINHO, DIR, false);
+}
+
+void desenharHud(float vidaAtual, float vidaMax, int balas, bool recarregando, int dinheiro, bool mirando, float marca, bool matou, Vector2 mini, float raio) {
     int W = GetScreenWidth(), H = GetScreenHeight();
     // A vida fica junto da navegacao; a municao tem seu proprio canto.
-    float x = mini.x - raio, y = mini.y + raio + 8;
-    DrawRectangle(int(x - 1), int(y - 1), int(2 * raio + 2), 5, Color{24, 21, 18, 220});
-    DrawRectangle(int(x), int(y), int(2 * raio * std::clamp(vida01, 0.f, 1.f)), 3,
-                  vida01 < 0.35f ? SANGUE : MARFIM);
+    desenharVida(vidaAtual, vidaMax, mini, raio);
     float direita = W - 30.f, base = H - 30.f;
     DrawRectangleGradientH(int(direita - 164), int(base - 59), 164, 58,
                            Color{20, 18, 15, 0}, Color{20, 18, 15, 158});
