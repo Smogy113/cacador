@@ -57,6 +57,40 @@ animar vento e granulação.
 O ponto do interior fica na casa da Fazenda dos Moura, no mapa padrão. Ao mudar a implantação
 da fazenda em `gerarFazenda`, confira se a câmera ainda começa dentro da casa e olha para a porta.
 
+## Circuitos de Queima
+
+A regra é barata. Cada projétil encantado faz um `lancarTiro` curto por quadro, só do tamanho do
+passo. As zonas e os bonecos são O(n) com n pequeno, e as faíscas têm teto de 220. No desenho
+(`src/game/circuitos_jogo.cpp`), a arena (fogueira, chuva, corredor, Ferro Frio e bonecos) só é
+montada com a câmera a menos de 90 m. As cápsulas aparecem até 60 m. A luz da fogueira acende
+junto com as tochas, porque uma luz pontual a mais pesa em cada pixel do shader.
+
+Para medir e capturar, use a entrada de Pedrabranca. `--roteiro-circuito 1..5` mira sozinho e atira
+no quadro 25. Com `--qualidade baixo` o log mostra cada ricochete e impacto (`circuitos: ...`).
+
+```bash
+./build/cacador --benchmark --qualidade alto --pos -40 10 --yaw 160 --hora 16 --frames 120
+./build/cacador --benchmark --qualidade alto --pos -40 10 --yaw 160 --hora 16 --frames 120 --roteiro-circuito 2
+./build/cacador --screenshot espiral.png --qualidade medio --hora 16 --roteiro-circuito 1 --frames 31
+./build/cacador --screenshot grade.png --qualidade medio --hora 16 --roteiro-circuito 2 --frames 42
+./build/cacador --screenshot gelo.png --qualidade medio --hora 16 --roteiro-circuito 3 --frames 70
+./build/cacador --screenshot fogueira.png --qualidade medio --hora 16 --abrir-fogueira --frames 10
+```
+
+Na 0.28.0, a medição usou uma Intel UHD Graphics 770 no Windows, em 1280×720, nível Alto, com
+120 quadros por rodada e duas rodadas. A comparação é com a 0.27.0 (`51a162c`). Neste PC o p95 da
+arena variou bastante entre rodadas, de 62 a 102 ms. Por isso a referência é o p50.
+
+| Cena | p50 antes → depois | Média antes → depois |
+| --- | ---: | ---: |
+| Arena, parada (`--pos -40 10 --yaw 160 --hora 16`) | 16,94–16,97 → 17,15–17,45 ms | 27,86–28,10 → 28,30–29,30 ms |
+| Arena, atirando (`--roteiro-circuito 2`) | — → 18,33–18,46 ms | — → 25,73–29,46 ms |
+| Cidade (`--pos 320 345 --yaw 90 --hora 12`) | 98,70–99,38 → 98,50–100,35 ms | 95,29–98,75 → 97,61–100,76 ms |
+
+O custo extra na arena vem das primitivas desenhadas no modo imediato da raylib, como esferas,
+cilindros e as linhas da chuva. Quando os modelos finais entrarem, troque a arena por malhas
+estáticas.
+
 ## Onde atuar nos gargalos
 
 - Geometria em `src/render/terrain_mesh.cpp`, `props.cpp` e `grama.cpp`. Reaproveite os

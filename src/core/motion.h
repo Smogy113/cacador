@@ -8,6 +8,8 @@ struct Entrada {
     float frente = 0, lado = 0;  // -1..1 (lado > 0 = direita)
     bool correr = false, interagir = false;
     bool mirar = false, atirar = false, recarregar = false, segurarInteragir = false, aceitar = false;
+    int escolherMunicao = -2;      // -1 comum, 0..2 slot de bala gravada, -2 = sem troca neste quadro
+    bool proximaMunicao = false;   // Tab: passa para a proxima municao carregada
     float mouseDx = 0, mouseDy = 0, rodinha = 0;
 };
 

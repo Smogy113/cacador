@@ -60,6 +60,8 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--sem-paredes") o.jogo.semParedes = true;
         else if (a == "--portas-abertas") o.jogo.portasAbertas = true;
         else if (a == "--yaw") o.jogo.yaw = (float)std::atof(prox());
+        else if (a == "--abrir-fogueira") o.jogo.abrirFogueira = true;
+        else if (a == "--roteiro-circuito") o.jogo.roteiroCircuito = std::atoi(prox());  // 1..5, ver OpcoesJogo
         else if (a == "--cabelo") {
             std::string c = prox();
             if (c == "sem" || c == "ondulado") {

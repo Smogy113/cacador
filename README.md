@@ -34,6 +34,10 @@ Em **Personagem**, escolha **Ondulado** ou **Sem cabelo**. A seleção é guarda
 | Botão direito | mirar |
 | Botão esquerdo | atirar |
 | R | recarregar o revólver (6 balas) |
+| 1 / 2 / 3 / 4 | munição comum / balas gravadas dos slots 1 a 3 (Circuitos de Queima) |
+| Tab | passar para a próxima munição gravada |
+| E (na fogueira) | gravar munição: entalhe + pasta + objeto doador |
+| E (numa cápsula) | recolher a cápsula marcada e apagar o rastro |
 | Esc | pausa (lá dentro: 1/2/3 trocam a qualidade gráfica, Q sai) |
 
 O nível **Baixo** atende PCs modestos. O **Médio** usa sombras suaves e o **Alto** usa
@@ -84,6 +88,30 @@ da pose ficou ~25% mais barato.
 O capim cresce em tufos irregulares, com folhas finas, alturas variadas e algumas pontas
 secas. No Médio e no Alto, perto da câmera aparecem também folhas curvas que balançam com o
 vento. A cobertura fica mais baixa junto às trilhas e aos poços, e muda de tom na margem do rio.
+
+**Circuitos de Queima (0.28, protótipo):** a magia passa a propriedade de um objeto para a bala.
+Na fogueira (E), você grava até três balas, cada uma com três partes:
+- **Entalhe:** Espiral é velocidade sem gravidade, Grade é peso esmagador e Onda é calor.
+- **Pasta:** Pólvora Fina concentra tudo no ponto do impacto e Resina e Cera faz a bala ricochetear
+  até 3 vezes mantendo o efeito. Enxofre e Sal espalha o efeito em área. Pó de Prata inverte o
+  entalhe: Onda vira gelo, Grade vira um impulso que arremessa para cima e Espiral vira um voo
+  lento em arco.
+- **Objeto doador:** a Espiral exige Pena, a Grade exige Pedra Pesada e a Onda exige Carvão em
+  Brasa. O doador queima na boca do cano no disparo.
+
+Escolha a munição com 1 (comum) e 2–4 (gravadas), ou passe para a próxima com Tab. Cada disparo de
+bala gravada larga uma cápsula marcada no chão, e E recolhe a cápsula e apaga o rastro. Com o pavio
+molhado (na água, na chuva e por 5 s depois de sair), a bala gravada falha e não sai nada do cano.
+No Ferro Frio, nenhum circuito acende, e o projétil que atravessa a barreira vira chumbo comum.
+
+A entrada de Pedrabranca tem uma arena de teste com a fogueira, um corredor de paredes para o
+ricochete, quatro bonecos de treino, a zona de chuva e a barreira de Ferro Frio, com um boneco
+atrás dela. Os bandidos também levam os golpes: são empurrados, derrubados, arremessados e
+congelados. Tudo é provisório, feito com primitivas e sprites, sem depender do modelo final do
+caçador. Os números de ajuste ficam em `ParametrosCircuito` ([src/core/circuito.h](src/core/circuito.h)):
+slots, ricochetes, raio do Enxofre, duração das zonas, secagem do pavio e outros. A regra fica em
+`src/core/circuito.cpp`, `projetil_encantado.cpp` e `fisica_alvo.cpp`, testada em
+`tests/test_circuitos.cpp`. A interface e o desenho ficam em `src/game/circuitos_jogo.cpp`.
 
 **Painel de depuração (F1):** em "Gráficos" dá para ligar e desligar a cabeça por raymarching (com
 o tempo do quadro ao lado, para comparar o custo), a luz de personagem, a profundidade de campo e a
@@ -175,6 +203,10 @@ caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personage
 No Windows sem WSL, o MinGW-w64 do WinLibs já traz GCC, CMake e Ninja (`winget install BrechtSanders.WinLibs.POSIX.UCRT`).
 Com a pasta `mingw64/bin` dele no `PATH`, `cmake -B build -G Ninja && cmake --build build` gera o jogo e os testes.
 O `testes.exe` precisa dessa pasta no `PATH` para achar as DLLs do GCC.
+
+Para os Circuitos de Queima, `--roteiro-circuito 1..5` simula a entrada: 1 é a Espiral com Resina quicando no corredor,
+2 é a Grade com Enxofre nos bonecos, 3 é a Onda com Pó de Prata (zona de gelo), 4 é o pavio molhado na chuva e
+5 é o tiro atravessando o Ferro Frio. `--abrir-fogueira` começa com o painel da fogueira aberto.
 
 Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).
 

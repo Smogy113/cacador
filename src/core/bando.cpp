@@ -85,10 +85,27 @@ void Bando::alertarTodos() {
 
 bool Bando::levarTiro(int i, Parte parte) {
     if (i < 0 || i >= int(b_.size())) return false;
+    const Bandido& b = b_[i];
+    bool indefeso = b.estado == EstadoBandido::Rendido || b.estado == EstadoBandido::Amarrado;
+    return levarDano(i, indefeso || parte == Parte::Cabeca ? 1e9f : DANO_CORPO);
+}
+
+bool Bando::aplicarGolpe(int i, const GolpeAlvo& g) {
+    if (i < 0 || i >= int(b_.size()) || g.vazio()) return false;
     Bandido& b = b_[i];
     if (fora(b.estado)) return false;
-    bool indefeso = b.estado == EstadoBandido::Rendido || b.estado == EstadoBandido::Amarrado;
-    b.vida.dano(indefeso || parte == Parte::Cabeca ? 1e9f : DANO_CORPO);
+    b.fisica.aplicar(g);
+    if (g.dano > 0.f) return levarDano(i, g.dano);
+    // golpe sem dano (gelo, arremesso): ainda assim e um ataque
+    if (b.estado == EstadoBandido::Vigiando || b.estado == EstadoBandido::Alerta) b.estado = EstadoBandido::Combate;
+    alertarTodos();
+    return false;
+}
+
+bool Bando::levarDano(int i, float dano) {
+    Bandido& b = b_[i];
+    if (fora(b.estado) || dano <= 0.f) return false;
+    b.vida.dano(dano);
     b.tranco = 1;
     if (b.vida.morto()) {
         b.estado = EstadoBandido::Morto;
@@ -115,7 +132,7 @@ bool Bando::levarTiro(int i, Parte parte) {
 std::vector<Alvo> Bando::alvos() const {
     std::vector<Alvo> r;
     for (auto& x : b_) {
-        Alvo a{x.corpo.pos, 1.8f};
+        Alvo a{x.corpo.pos + Vec3f{0, x.fisica.voo, 0}, 1.8f};  // no ar, o corpo sobe junto
         if (fora(x.estado)) a.pes.y = -1e6f;
         r.push_back(a);
     }
@@ -147,6 +164,17 @@ EventosBando Bando::atualizar(float dt, Vec3f jog, float velJog, bool montado, b
 
     for (auto& b : b_) {
         b.tranco = std::max(0.f, b.tranco - dt * 4.f);
+        if (b.estado != EstadoBandido::Sumiu) {
+            // golpes dos circuitos: desliza, voa, cai; no ar, caido ou congelado nao anda nem atira
+            float queda = b.fisica.atualizar(dt, b.corpo.pos, t, col, RAIO_PESSOA);
+            if (queda > 0.f) levarDano(int(&b - b_.data()), queda);
+            if (b.fisica.ocupado() && b.estado != EstadoBandido::Morto) {
+                b.corpo.vel = 0;
+                b.rajada = 0;
+                b.arma.atualizar(dt);
+                continue;
+            }
+        }
         b.arma.atualizar(dt);
         b.tempoEstado += dt;
         float d = distXZ(b.corpo.pos, jog);

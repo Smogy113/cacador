@@ -16,7 +16,9 @@
 #include "core/places.h"
 #include "core/bounty.h"
 #include "core/cacada.h"
+#include "core/circuito.h"
 #include "core/combat.h"
+#include "core/projetil_encantado.h"
 #include "core/quality.h"
 #include "core/terrain.h"
 #include "core/rota.h"
@@ -54,6 +56,10 @@ struct OpcoesJogo {
     bool abrirMapa = false;
     bool abrirDepuracao = false;  // comeca com o painel F1 aberto (screenshots)  // comeca com o mapa grande aberto (screenshots)
     float pitch = -999;    // inclinacao da camera em graus (screenshots; < 0 = olhando para cima)
+    // screenshots dos Circuitos de Queima: 1 Espiral+Resina (ricochete), 2 Grade+Enxofre (onda de
+    // pressao), 3 Onda+Prata (zona de gelo), 4 pavio molhado (falha), 5 atravessando o Ferro Frio
+    int roteiroCircuito = 0;
+    bool abrirFogueira = false;  // comeca com o painel da fogueira aberto (screenshots)
     std::string arquivoMapa = "data/lugares.txt";
     std::string arquivoConfig;  // vazio = nao salvar
 };
@@ -198,4 +204,63 @@ private:
     void desenharEfeitos();
     Pose poseDoJogador(const Esqueleto& e) const;
     Vec3f canoDoJogador() const;
+
+    // ---- Circuitos de Queima (regra em core/circuito, core/projetil_encantado e core/fisica_alvo;
+    //      jogo em game/circuitos_jogo.cpp). Tudo desenhado com primitivas e sprites provisorios. ----
+    // Arena de teste perto do inicio: fogueira (gravar balas), corredor de paredes (ricochete),
+    // bonecos de treino, zona de chuva (pavio molhado) e uma barreira de Ferro Frio.
+    struct ArenaCircuitos {
+        bool pronta = false;
+        Vec3f fogueira{}, chuva{};
+        float raioChuva = 4.f, alturaChuva = 14.f;
+        std::vector<CaixaGirada> paredes;  // corredor de ricochete (tambem na colisao)
+        AABB ferro{};                      // barreira de Ferro Frio (volume atravessavel)
+    };
+    // Painel da fogueira: monta [Entalhe] + [Pasta] + [Doador] e grava num dos slots.
+    struct PainelFogueira {
+        bool aberto = false;
+        int linha = 0, slot = 0;  // linha: 0 slot, 1 entalhe, 2 pasta, 3 doador
+        Circuito circuito;
+        std::string retorno;
+        float retornoT = 0;
+    };
+    struct Faisca {  // particula aditiva ou de fumaca dos efeitos provisorios
+        Vec3f pos, vel;
+        float vida, duracao, tam, gravidade;
+        Rgb cor;
+        bool aditiva;
+    };
+    struct OndaVisual {  // anel de pressao (Grade) ou coluna de levante (Grade invertida)
+        Vec3f centro;
+        float raio, idade, duracao;
+        Rgb cor;
+        bool sobe;
+    };
+    CircuitosNoMundo circuitos_;
+    Arsenal arsenal_{circuitos_.p};  // depois de circuitos_: nasce dos mesmos parametros
+    Pavio pavio_;
+    std::vector<AlvoTreino> bonecos_;
+    ArenaCircuitos arena_;
+    PainelFogueira painel_;
+    std::vector<Faisca> faiscas_;
+    std::vector<OndaVisual> ondas_;
+    bool pertoFogueira_ = false;
+    int capsulaPerto_ = -1, quadroRoteiro_ = 0;
+    void iniciarCircuitos();
+    Vec3f pontoChao(Vec3f p) const;  // mesmo x,z na altura do terreno
+    bool naAgua(Vec3f p) const;      // rio do terreno ou zona de chuva da arena
+    bool interagirCircuitos(Entrada& e);  // E: abre a fogueira ou recolhe a capsula perto
+    void atualizarPainelFogueira();
+    void roteiroCircuitos(Entrada& e);
+    // Disparo: true = a bala gravada falhou (pavio molhado) e nada sai do cano.
+    bool balaGravadaFalhou(Vec3f boca);
+    // true = saiu um projetil encantado (o dano vem no impacto); false = tiro comum (raio instantaneo).
+    bool dispararCircuito(Vec3f boca, Vec3f dir);
+    std::vector<Alvo> alvosCircuito() const;  // bandidos primeiro, depois os bonecos
+    void aplicarImpacto(const Impacto& im);
+    void atualizarCircuitos(float dt, const Entrada& e);
+    void soltarFaiscas(Vec3f p, int n, Rgb cor, float vel, float vida, float tam, bool aditiva, float gravidade, Vec3f base = {});
+    void desenharCircuitos();      // 3D, no passe de efeitos
+    void desenharHudCircuitos();   // 2D: slots, pavio e combinacao ativa
+    void desenharPainelFogueira();
 };

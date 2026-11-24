@@ -3,6 +3,7 @@
 #include <vector>
 #include "core/bounty.h"
 #include "core/combat.h"
+#include "core/fisica_alvo.h"
 #include "core/motion.h"
 
 class Terreno;
@@ -22,6 +23,7 @@ struct Bandido {
     float tempoCobertura = 0, proxTiro = 0, lado = 1, tempoLado = 0, semLinha = 0;
     int rajada = 0;  // tiros que faltam na rajada atual (> 0 = atirando)
     uint32_t semente = 1;
+    FisicaAlvo fisica;  // golpes dos Circuitos de Queima: empurrado, no ar, caido ou congelado
 };
 
 struct EventosBando {
@@ -47,6 +49,9 @@ public:
                            const Terreno& ter, const MundoColisao& col);
     // O jogador acertou o bandido 'indice'. Retorna true se matou.
     bool levarTiro(int indice, Parte parte);
+    // Golpe de um circuito (dano, empurrao, arremesso, derrubada, gelo). Retorna true se matou.
+    // Quem esta no ar, caido ou congelado nao anda nem atira ate se recuperar.
+    bool aplicarGolpe(int indice, const GolpeAlvo& g);
     // Um alvo por bandido, no mesmo indice; quem nao pode levar tiro fica fora do alcance.
     std::vector<Alvo> alvos() const;
     std::vector<Bandido>& bandidos() { return b_; }
@@ -58,6 +63,7 @@ public:
     int atirando() const;
 
 private:
+    bool levarDano(int indice, float dano);  // reage como a um tiro no corpo; true se matou
     void alertarTodos();
     std::vector<Bandido> b_;
     bool pendRendeu_ = false, pendMorreu_ = false;
