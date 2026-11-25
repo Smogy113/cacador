@@ -53,7 +53,40 @@ Color misturar(Color a, Color b, float t) {
     auto m = [t](unsigned char x, unsigned char y) { return (unsigned char)(x + (y - x) * std::clamp(t, 0.f, 1.f)); };
     return {m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), m(a.a, b.a)};
 }
-bool sobre(Rectangle r) { return CheckCollisionPointRec(GetMousePosition(), r); }
+// ---------------------------------------------------------------- tela ampliada
+
+namespace {
+Ampliacao ampliacaoAtual;  // a do EspacoAmpliado mais interno; zoom 1 fora de qualquer um
+}  // namespace
+
+float Ampliacao::larguraVirtual() const { return float(GetScreenWidth()) / zoom; }
+float Ampliacao::alturaVirtual() const { return float(GetScreenHeight()) / zoom; }
+
+Ampliacao ampliacaoParaCaber(float largura, float altura, float ocupacao) {
+    const float zoom = std::min(float(GetScreenWidth()) * ocupacao / largura, float(GetScreenHeight()) * ocupacao / altura);
+    // Abaixo de 0,5 o texto fica ilegível de qualquer jeito; acima de 4 só em telas que ainda não existem.
+    return {std::clamp(zoom, 0.5f, 4.f)};
+}
+
+EspacoAmpliado::EspacoAmpliado(Ampliacao a, bool desenhar) : anterior_(ampliacaoAtual), desenhar_(desenhar) {
+    ampliacaoAtual = a;
+    if (desenhar_) {
+        Camera2D camera{};
+        camera.zoom = a.zoom;
+        BeginMode2D(camera);
+    }
+}
+
+EspacoAmpliado::~EspacoAmpliado() {
+    if (desenhar_) EndMode2D();
+    ampliacaoAtual = anterior_;
+}
+
+Vector2 mouse() {
+    const Vector2 m = GetMousePosition();
+    return {m.x / ampliacaoAtual.zoom, m.y / ampliacaoAtual.zoom};
+}
+bool sobre(Rectangle r) { return CheckCollisionPointRec(mouse(), r); }
 bool clicou(Rectangle r) { return IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && sobre(r); }
 
 // ---------------------------------------------------------------- painéis e controles

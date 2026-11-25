@@ -4,6 +4,7 @@
 #include <vector>
 #include "core/skeleton.h"
 #include "core/hair_profile.h"
+#include "core/penteado.h"
 
 enum OssoHumano {
     QUADRIL, COLUNA, PEITO, PESCOCO, CABECA,
@@ -26,7 +27,7 @@ struct Visual {
     bool corpoBase = false;           // manequim anatomico sem roupa, cabelo ou equipamento
     bool semCabelo = false;           // mantem a cabeca limpa para receber penteados por cima
     bool cabeloLongo = false;  // mechas compridas ate a nuca, com fisica (o heroi)
-    bool cabeloOndulado = false;  // penteado da base humana
+    Penteado penteado = Penteado::Sem;  // penteado da base humana (corpoHumanoBase)
     bool heroi = false;        // cabeca esculpida em resolucao maxima (o jogador); os outros usam celulas maiores
     bool semPeleCabeca = false;  // a pele esculpida da cabeca nao entra (desenhada por raymarching); olhos, cilios e cabelo sim
     float ladosExtras = 1.f;     // multiplica os lados dos tubos do heroi (silhueta mais redonda)
@@ -55,6 +56,12 @@ struct VertPele {
     Vec3f dirPelo{};      // direcao em que o pelo cresce (repouso); zero = sem pelo
     Vec3f tang{};         // cartao: direcao do fio; pele do rosto: coordenadas do rosto (x, y, 1)
     float tv = 0;         // cartao: v (0 na raiz, 1 na ponta)
+    // Fitas de cabelo: plano da pele mais próxima em repouso (normal para fora, distância até ele e o
+    // osso que move essa pele). Em movimento, o vértice nunca atravessa esse plano (apoioFolga 0 = livre).
+    // Montado em ConstrutorCabelo::fita; aplicado em posicaoDaFita (core) e apoiarNoCorpo (shader).
+    Vec3f apoioNormal{};
+    float apoioFolga = 0;
+    uint8_t apoioOsso = 0;
 };
 
 struct MalhaPele {

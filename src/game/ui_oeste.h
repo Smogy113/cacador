@@ -34,7 +34,34 @@ float suave(float t01);                            // ease-out cúbico, t fora d
 Rectangle escalar(Rectangle r, float s);           // escala em volta do centro
 Color misturar(Color a, Color b, float t);         // a -> b
 
+// ---------------------------------------------------------------- tela ampliada
+// Telas grandes (como a Bancada) são montadas num quadro virtual de medidas fixas e ampliadas para
+// a tela real, assim o texto cresce junto em 1080p, 1440p ou 4K sem refazer o layout.
+// Enquanto um EspacoAmpliado existir, o mouse de sobre()/clicou() é lido nesse quadro virtual.
+struct Ampliacao {
+    float zoom = 1.f;  // pixels reais por unidade do quadro virtual
+    float larguraVirtual() const;  // a tela inteira medida em unidades virtuais
+    float alturaVirtual() const;
+};
+// Maior zoom em que um quadro de largura x altura ocupa no máximo `ocupacao` (0..1) da tela.
+Ampliacao ampliacaoParaCaber(float largura, float altura, float ocupacao);
+
+class EspacoAmpliado {
+public:
+    // desenhar = true também amplia o desenho (BeginMode2D). Na atualização, use false: só o mouse muda.
+    // A raylib não empilha BeginMode2D: não abra um espaço com desenho dentro de outro.
+    EspacoAmpliado(Ampliacao a, bool desenhar);
+    ~EspacoAmpliado();
+    EspacoAmpliado(const EspacoAmpliado&) = delete;
+    EspacoAmpliado& operator=(const EspacoAmpliado&) = delete;
+
+private:
+    Ampliacao anterior_;
+    bool desenhar_;
+};
+
 // ---------------------------------------------------------------- mouse
+Vector2 mouse();  // posição do mouse no espaço atual (ampliado ou não)
 bool sobre(Rectangle r);
 bool clicou(Rectangle r);  // botão esquerdo pressionado sobre r neste quadro
 

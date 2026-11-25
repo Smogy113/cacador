@@ -21,12 +21,15 @@ TEST_CASE("cabelo: pontas atrasam na corrida, avancam na parada e descansam") {
     const Mat4 repouso = Mat4::id();
     fisica.atualizar(dt, repouso, repouso, repouso, {});
 
+    // Corrida a 3,9 m/s até o balanço da largada assentar: a ponta da nuca fica atrás, mas o ar não
+    // a estica até o limite (o cabelo não vira bandeira na horizontal).
     Mat4 corpo{};
-    for (int i = 1; i <= 18; ++i) {
+    for (int i = 1; i <= 60; ++i) {
         corpo = Mat4::trans({0, 0, .065f * i});
         fisica.atualizar(dt, corpo, corpo, corpo, {});
     }
-    CHECK(fisica.deformacao().ponta[2].z < -.025f);
+    CHECK(fisica.deformacao().ponta[2].z < -.008f);
+    CHECK(fisica.deformacao().ponta[2].z > -.09f);
     float avanco = 0.f;
     for (int i = 0; i < 12; ++i) {
         fisica.atualizar(dt, corpo, corpo, corpo, {});
@@ -85,7 +88,7 @@ TEST_CASE("cabelo: cortes com silhuetas diferentes geram o proprio perfil") {
     const auto careca = corpoHumanoBase({}, visual);
     CHECK(careca.cabelo.quantidade == 0);
 
-    visual.cabeloOndulado = true;
+    visual.penteado = Penteado::Ondulado;
     const auto ondulado = corpoHumanoBase({}, visual);
     MalhaPele comprido;
     loft::cabeloComprido(comprido, 1.f, 1.f, {}, true);
@@ -127,7 +130,7 @@ TEST_CASE("cabelo: cortes com silhuetas diferentes geram o proprio perfil") {
 
 TEST_CASE("cabelo: ondulado dobra no meio das mechas e conserva as raízes") {
     Visual visual;
-    visual.cabeloOndulado = true;
+    visual.penteado = Penteado::Ondulado;
     const auto malha = corpoHumanoBase({}, visual);
     int raizes = 0, centros = 0, centrosMoveis = 0;
     for (const auto& v : malha.v) {

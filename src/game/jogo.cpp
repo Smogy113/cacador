@@ -52,8 +52,8 @@ Jogo::Jogo(const OpcoesJogo& op) : op_(op), relogio_(op.hora) {
     r.equipamento = false;
     r.heroi = true;
     r.corpoBase = true;
-    r.semCabelo = !op.cabeloOndulado;
-    r.cabeloOndulado = op.cabeloOndulado;
+    r.semCabelo = op.penteado == Penteado::Sem;
+    r.penteado = op.penteado;
     r.cacadorDeFronteira = false;
     r.revolver = true;
     r.cabeloLongo = false;
@@ -616,7 +616,7 @@ void Jogo::trocarNivel(Nivel n) {
 #endif
     op_.nivel = n;
     configurarGrama();
-    if (!op_.arquivoConfig.empty()) salvarConfig(op_.arquivoConfig, {n, op_.cabeloOndulado});
+    if (!op_.arquivoConfig.empty()) salvarConfig(op_.arquivoConfig, {n, op_.penteado});
 }
 
 void Jogo::desenhar() {

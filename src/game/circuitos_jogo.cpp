@@ -52,8 +52,10 @@ Rgb corDe(Propriedade p) {
 const Rgb CINZA_CHUMBO{0.62f, 0.62f, 0.6f};
 
 // ---- Bancada da Fogueira: onde fica cada card. Usado pela atualização (cliques) e pelo desenho.
-// Painel fixo de 1060x620 no centro da tela, em quatro faixas:
+// Painel de 1060x620 unidades virtuais no centro da tela, em quatro faixas:
 //   cabeçalho | três colunas (I entalhe, II pasta, III doador + preparo) | tambor + resumo | rodapé
+// Todas as medidas (inclusive o tamanho das fontes) estão nessas unidades; ampliacaoBancada() converte
+// para pixels. Atualização e desenho abrem o mesmo oeste::EspacoAmpliado, então cliques e cards batem.
 struct LayoutFogueira {
     static constexpr int MAX_SLOTS = 6;
     static constexpr float W = 1060, H = 620, TOPO_COLUNAS = 88, ALT_COLUNAS = 330, TOPO_BASE = 432;
@@ -62,9 +64,12 @@ struct LayoutFogueira {
     Rectangle slots[MAX_SLOTS], resumo;
     Rectangle gravar, esvaziar, repor, fechar;
 };
-LayoutFogueira layoutFogueira(int nSlots) {
+// O painel ocupa até 92% da tela: em 1280x720 o zoom é ~1,07 e em 1920x1080, ~1,6.
+oeste::Ampliacao ampliacaoBancada() { return oeste::ampliacaoParaCaber(LayoutFogueira::W, LayoutFogueira::H, 0.92f); }
+
+LayoutFogueira layoutFogueira(int nSlots, oeste::Ampliacao amp) {
     LayoutFogueira L{};
-    const float px = (float(GetScreenWidth()) - L.W) * 0.5f, py = (float(GetScreenHeight()) - L.H) * 0.5f;
+    const float px = (amp.larguraVirtual() - L.W) * 0.5f, py = (amp.alturaVirtual() - L.H) * 0.5f;
     L.painel = {px, py, L.W, L.H};
     const float m = 24, gap = 16, colW = (L.W - 2 * m - 2 * gap) / 3.f, cy = py + L.TOPO_COLUNAS, cab = 34;
     for (int k = 0; k < 3; k++) L.colunas[k] = {px + m + float(k) * (colW + gap), cy, colW, L.ALT_COLUNAS};
@@ -254,8 +259,10 @@ void Jogo::atualizarPainelFogueira(float dt) {
     PainelFogueira& pn = painel_;
     pn.animT += dt;
     pn.retornoT = std::max(0.f, pn.retornoT - dt);
-    // O mouse usa o mesmo layout do desenho; cada clique equivale a uma tecla (o teclado segue igual).
-    const LayoutFogueira lay = layoutFogueira(arsenal_.slots());
+    // O mouse usa o mesmo layout e a mesma ampliação do desenho; cada clique equivale a uma tecla.
+    const oeste::Ampliacao amp = ampliacaoBancada();
+    const oeste::EspacoAmpliado espaco(amp, false);
+    const LayoutFogueira lay = layoutFogueira(arsenal_.slots(), amp);
     auto responder = [&](const std::string& t) {
         pn.retorno = t;
         pn.retornoT = 3.f;
@@ -886,16 +893,20 @@ void Jogo::desenharPainelFogueira() {
     const PainelFogueira& pn = painel_;
     const ParametrosCircuito& p = circuitos_.p;
     const Circuito& c = pn.circuito;
-    const LayoutFogueira L = layoutFogueira(arsenal_.slots());
     const float a = suave(pn.animT / 0.25f);  // fade e escala de entrada
-    const float W = float(GetScreenWidth()), H = float(GetScreenHeight());
+    // Escurece a cena em pixels reais; daqui para baixo tudo é medido no quadro virtual da bancada.
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{0, 0, 0, (unsigned char)(150.f * a)});
+    const oeste::Ampliacao amp = ampliacaoBancada();
+    const oeste::EspacoAmpliado espaco(amp, true);
+    const LayoutFogueira L = layoutFogueira(arsenal_.slots(), amp);
     const float px = L.painel.x, py = L.painel.y, cx = px + L.W * 0.5f;
     const Color OURO_CLARO{240, 200, 120, 255};
+    // Texto de cards bloqueados: o FERRO puro some sobre o fundo escuro, então fica a meio caminho do pergaminho.
+    const Color BLOQUEADO = misturar(FERRO, PERGAMINHO, 0.35f);
 
-    DrawRectangle(0, 0, int(W), int(H), Color{0, 0, 0, (unsigned char)(130.f * a)});  // escurece a cena
     painel(escalar(L.painel, 0.96f + 0.04f * a), a, 16.f);
     texto(Fonte::Titulo, "Bancada da Fogueira", cx, py + 14, 32, comAlfa(OURO_CLARO, a), CENTRO);
-    texto(Fonte::Texto, "Esquema de armeiro: entalhe + pasta + objeto doador, gravados numa bala", cx, py + 52, 17, comAlfa(CINZA, a), CENTRO);
+    texto(Fonte::Texto, "Esquema de armeiro: entalhe + pasta + objeto doador, gravados numa bala", cx, py + 52, 18, comAlfa(CINZA, a), CENTRO);
 
     // Card de opção (entalhe ou pasta): ícone à esquerda, nome e propriedade na 1ª linha, detalhe na 2ª.
     auto cardOpcao = [&](Rectangle r, const std::string& nm, const std::string& descricao, bool ativo, bool foco, bool sabe, auto icone) {
@@ -905,9 +916,9 @@ void Jogo::desenharPainelFogueira() {
         if (!sabe) iconeCadeado({ix + 18.f, iy + 14.f}, 9.f, PERGAMINHO);
         const auto [prop, detalhe] = dividirDescricao(descricao);
         const float tx = r.x + 76.f, top = r.y + r.height * 0.5f - 24.f;
-        texto(Fonte::Forte, nm, tx, top, 19, comAlfa(sabe ? PERGAMINHO : CINZA, a), ESQ, false);
-        texto(Fonte::Forte, maiusculas(prop), r.x + r.width - 10.f, top + 4.f, 12, comAlfa(sabe ? LATAO : FERRO, a), DIR, false);
-        texto(Fonte::Texto, sabe ? detalhe : "Bloqueado: inspecione uma pista no mundo", tx, top + 26.f, 15, comAlfa(sabe ? CINZA : FERRO, a), ESQ, false);
+        texto(Fonte::Forte, nm, tx, top, 20, comAlfa(sabe ? PERGAMINHO : CINZA, a), ESQ, false);
+        texto(Fonte::Forte, maiusculas(prop), r.x + r.width - 10.f, top + 4.f, 13, comAlfa(sabe ? LATAO : BLOQUEADO, a), DIR, false);
+        texto(Fonte::Texto, sabe ? detalhe : "Bloqueado: inspecione uma pista no mundo", tx, top + 26.f, 16, comAlfa(sabe ? CINZA : BLOQUEADO, a), ESQ, false);
     };
 
     // ---- I. entalhe geométrico
@@ -927,7 +938,7 @@ void Jogo::desenharPainelFogueira() {
     // ---- III. objeto doador (estoque) e qualidade do preparo
     const Rectangle& c3 = L.colunas[2];
     cabecalho("III", "Doador e preparo", c3.x, c3.y, c3.width, pn.linha == 3 || pn.linha == 4);
-    texto(Fonte::Texto, std::string("receita pede: ") + nome(doadorDaReceita(c.entalhe)), c3.x + c3.width, c3.y + 3, 14, comAlfa(CINZA, a), DIR, false);
+    texto(Fonte::Texto, std::string("receita pede: ") + nome(doadorDaReceita(c.entalhe)), c3.x + c3.width, c3.y + 3, 15, comAlfa(CINZA, a), DIR, false);
     for (int i = 0; i < N_DOADORES; i++) {
         const Doador d = Doador(i);
         const Rectangle& r = L.doadores[i];
@@ -935,12 +946,12 @@ void Jogo::desenharPainelFogueira() {
         card(r, sobre(r), ativo, pn.linha == 3, ativo && !exigido, a);
         iconeDoador(d, {r.x + r.width * 0.5f, r.y + 28.f}, 20.f, a);
         if (exigido) DrawPoly({r.x + r.width - 11.f, r.y + 11.f}, 4, 5.f, 0, comAlfa(LATAO, a));  // losango: o que a receita pede
-        texto(Fonte::Forte, nome(d), r.x + r.width * 0.5f, r.y + 52.f, 13, comAlfa(PERGAMINHO, a), CENTRO, false);
-        texto(Fonte::Texto, "x" + std::to_string(arsenal_.estoque(d)) + (ativo && !exigido ? "  não serve" : ""), r.x + r.width * 0.5f, r.y + 69.f, 14,
+        texto(Fonte::Forte, nome(d), r.x + r.width * 0.5f, r.y + 51.f, 15, comAlfa(PERGAMINHO, a), CENTRO, false);
+        texto(Fonte::Texto, "x" + std::to_string(arsenal_.estoque(d)) + (ativo && !exigido ? "  não serve" : ""), r.x + r.width * 0.5f, r.y + 69.f, 15,
               comAlfa(semEstoque || (ativo && !exigido) ? BRASA : CINZA, a), CENTRO, false);
     }
     const float qy = L.doadores[0].y + L.doadores[0].height + 12.f;
-    texto(Fonte::Forte, "QUALIDADE DO PREPARO", c3.x, qy, 14, comAlfa(pn.linha == 4 ? PERGAMINHO : CINZA, a), ESQ, false);
+    texto(Fonte::Forte, "QUALIDADE DO PREPARO", c3.x, qy, 15, comAlfa(pn.linha == 4 ? PERGAMINHO : CINZA, a), ESQ, false);
     DrawRectangleGradientH(int(c3.x), int(qy + 20), int(c3.width), 1, comAlfa(LATAO, 0.6f * a), comAlfa(LATAO, 0.f));
     for (int i = 0; i < 2; i++) {
         const Preparo pr = Preparo(i);
@@ -956,9 +967,9 @@ void Jogo::desenharPainelFogueira() {
             iconePavio(EstadoPavio::Seco, 0, ic, 14.f, tempo_);
             std::snprintf(det, sizeof det, "na hora · %.0f%% de rebote no disparo", p.chanceReboteRapido * 100.f);
         }
-        texto(Fonte::Forte, pr == Preparo::Cuidadoso ? "Preparo Cuidadoso (Seguro)" : "Preparo Rápido (Alto Risco de Rebote)", r.x + 62.f, r.y + 10.f, 16,
+        texto(Fonte::Forte, pr == Preparo::Cuidadoso ? "Preparo Cuidadoso (Seguro)" : "Preparo Rápido (Alto Risco de Rebote)", r.x + 62.f, r.y + 10.f, 17,
               comAlfa(PERGAMINHO, a), ESQ, false);
-        texto(Fonte::Texto, det, r.x + 62.f, r.y + 36.f, 15, comAlfa(pr == Preparo::Rapido ? BRASA : CINZA, a), ESQ, false);
+        texto(Fonte::Texto, det, r.x + 62.f, r.y + 36.f, 16, comAlfa(pr == Preparo::Rapido ? BRASA : CINZA, a), ESQ, false);
     }
 
     // ---- IV. tambor: os slots onde a bala é gravada
@@ -969,7 +980,7 @@ void Jogo::desenharPainelFogueira() {
         const bool sel = pn.slot == i;
         card(r, sobre(r), sel, pn.linha == 0, false, a);
         cartucho({r.x + r.width * 0.5f - 15.f, r.y + 8.f, 30.f, 70.f}, &s, sel ? 0.6f : 0.f);
-        texto(Fonte::Forte, "Slot " + std::to_string(i + 2), r.x + r.width * 0.5f, r.y + 82.f, 15, comAlfa(sel ? PERGAMINHO : CINZA, a), CENTRO, false);
+        texto(Fonte::Forte, "Slot " + std::to_string(i + 2), r.x + r.width * 0.5f, r.y + 81.f, 16, comAlfa(sel ? PERGAMINHO : CINZA, a), CENTRO, false);
     }
     // ---- resumo do efeito resultante, retorno da bancada e botões
     const Rectangle& rs = L.resumo;
@@ -977,23 +988,23 @@ void Jogo::desenharPainelFogueira() {
     const float rx = rs.x + PAD, tw = L.gravar.x - rx - PAD;
     iconeEntalhe(c.entalhe, {rx + 14.f, rs.y + 20.f}, 12.f, comAlfa(OURO_CLARO, a));
     iconeFrasco(c.pasta, {rx + 40.f, rs.y + 20.f}, 12.f, a);
-    texto(Fonte::Forte, nomeCombinacao(c), rx + 60.f, rs.y + 8.f, 18, comAlfa(PERGAMINHO, a), ESQ, false);
+    texto(Fonte::Forte, nomeCombinacao(c), rx + 60.f, rs.y + 8.f, 19, comAlfa(PERGAMINHO, a), ESQ, false);
     std::string desc = descreverEfeito(c, p);
     Color corDesc = c.valido() ? PERGAMINHO : BRASA;
     if (!c.valido()) desc = std::string("Receita inválida: ") + nome(c.entalhe) + " exige " + nome(doadorDaReceita(c.entalhe));
     if (!receitas_.permite(c)) {
         desc = "Receita desconhecida: inspecione pistas (equipamentos entalhados) para aprender.";
-        corDesc = FERRO;
+        corDesc = BLOQUEADO;
     }
-    texto(Fonte::Texto, desc, rx, rs.y + 36.f, 16, comAlfa(corDesc, a), ESQ, false);
+    texto(Fonte::Texto, desc, rx, rs.y + 36.f, 17, comAlfa(corDesc, a), ESQ, false);
     if (pn.gravando > 0.f) {  // barra do Preparo Cuidadoso
         const float feito = clamp01(1.f - pn.gravando / std::max(0.01f, p.tempoPreparoCuidadoso));
         barra({rx, rs.y + 62.f, tw, 10.f}, feito, LATAO, a);
         char b[64];
         std::snprintf(b, sizeof b, "Gravando com cuidado... %.1f s (E cancela)", pn.gravando);
-        texto(Fonte::Texto, b, rx, rs.y + 76.f, 14, comAlfa(CINZA, a), ESQ, false);
+        texto(Fonte::Texto, b, rx, rs.y + 76.f, 15, comAlfa(CINZA, a), ESQ, false);
     } else if (pn.retornoT > 0.f) {
-        texto(Fonte::Forte, pn.retorno, rx, rs.y + 62.f, 16, comAlfa(OURO_CLARO, a * std::min(1.f, pn.retornoT)), ESQ, false);
+        texto(Fonte::Forte, pn.retorno, rx, rs.y + 61.f, 17, comAlfa(OURO_CLARO, a * std::min(1.f, pn.retornoT)), ESQ, false);
     }
     // o que já está no slot e o risco que esta bala teria agora (com o pavio atual)
     const SlotMunicao& s = arsenal_.slot(pn.slot);
@@ -1002,7 +1013,7 @@ void Jogo::desenharPainelFogueira() {
     char b[160];
     std::snprintf(b, sizeof b, "Slot %d: %s%s   ·   risco no disparo agora: %.0f%%", pn.slot + 2, s.cheio ? nomeCombinacao(s.circuito).c_str() : "vazio",
                   s.imperfeita() ? " (imperfeita)" : "", chanceRebote(ensaio, pavio_, p) * 100.f);
-    if (pn.gravando <= 0.f) texto(Fonte::Texto, b, rx, rs.y + 86.f, 14, comAlfa(CINZA, a), ESQ, false);
+    if (pn.gravando <= 0.f) texto(Fonte::Texto, b, rx, rs.y + 85.f, 15, comAlfa(CINZA, a), ESQ, false);
     botao(L.gravar, "Enter", "Gravar", true, a);
     botao(L.esvaziar, "X", "Esvaziar", false, a);
     botao(L.repor, "R", "Repor", false, a);
@@ -1017,7 +1028,7 @@ void Jogo::desenharPainelFogueira() {
     for (int i = 0; i < N_PASTAS; i++)
         if (receitas_.conhece(Pasta(i))) sabe += std::string(" ") + nome(Pasta(i)) + ",";
     sabe.pop_back();
-    texto(Fonte::Texto, sabe, cx, py + L.H - 44.f, 15, comAlfa(CINZA, a), CENTRO, false);
-    texto(Fonte::Texto, "Setas/mouse: escolher · Enter: gravar · X: esvaziar · R: repor doadores (teste) · E: fechar", cx, py + L.H - 26.f, 15,
+    texto(Fonte::Texto, sabe, cx, py + L.H - 46.f, 16, comAlfa(CINZA, a), CENTRO, false);
+    texto(Fonte::Texto, "Setas/mouse: escolher · Enter: gravar · X: esvaziar · R: repor doadores (teste) · E: fechar", cx, py + L.H - 27.f, 16,
           comAlfa(CINZA, a), CENTRO, false);
 }

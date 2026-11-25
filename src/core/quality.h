@@ -1,11 +1,12 @@
 #pragma once
 #include <string>
+#include "core/penteado.h"
 
 enum class Nivel { Baixo, Medio, Alto };
 
 struct ConfigJogo {
     Nivel nivel = Nivel::Baixo;
-    bool cabeloOndulado = false;
+    Penteado penteado = Penteado::Sem;
 };
 
 struct Efeitos {

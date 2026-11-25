@@ -1,5 +1,6 @@
 #include "render/shaders.h"
 #include <string>
+#include "core/body.h"  // ossos (OSSO_* nos shaders de pele)
 #include "core/hair_profile.h"
 
 #if defined(PLATFORM_WEB)
@@ -1889,19 +1890,32 @@ mat4 matrizPele() {
 )"
 
 #if defined(PLATFORM_WEB)
-#define CAPACIDADE_CABELO "#define GUIAS_CABELO 32\n"
-static_assert(MAX_GUIAS_CABELO == 32, "Sincronizar com GUIAS_CABELO no shader");
+#define CAPACIDADE_CABELO "#define GUIAS_CABELO 26\n"
+static_assert(MAX_GUIAS_CABELO == 26, "Sincronizar com GUIAS_CABELO no shader");
 constexpr int MAX_VETORES_VERTICE = 128;
 #else
 #define CAPACIDADE_CABELO "#define GUIAS_CABELO 96\n"
 static_assert(MAX_GUIAS_CABELO == 96, "Sincronizar com GUIAS_CABELO no shader");
 constexpr int MAX_VETORES_VERTICE = 256;
 #endif
-static_assert(17 * 4 + 2 * 4 + MAX_GUIAS_CABELO * 3 / 2 + 3 <= MAX_VETORES_VERTICE, "Uniforms de vértice");
+// ossos + mvp/matModel + curvas das mechas + centro/raios/ativo + volumes justos do corpo
+static_assert(17 * 4 + 2 * 4 + MAX_GUIAS_CABELO * 3 / 2 + 3 + 8 <= MAX_VETORES_VERTICE, "Uniforms de vértice");
+static_assert(PEITO == 2 && PESCOCO == 3 && CABECA == 4, "Sincronizar OSSO_* em FISICA_MECHA");
+// Física das mechas na placa de vídeo. Espelho em C++: core/hair_physics (posicaoDaFita), que os
+// testes usam para conferir que o cabelo em movimento não entra no corpo. Mude os dois juntos.
 #define FISICA_MECHA CAPACIDADE_CABELO R"(
+#define OSSO_PEITO 2
+#define OSSO_PESCOCO 3
+#define OSSO_CABECA 4
 uniform vec4 cabeloCurvas[GUIAS_CABELO], cabeloPontasYZ[GUIAS_CABELO / 2];
 uniform vec3 cabeloCentro, cabeloRaios;
 uniform float cabeloAtivo;
+// Volumes justos (orelha direita: centro, raios; pescoço: a, b, raios; tronco: a, b, raios).
+// [0].w = 1 quando existem. Montado por volumesParaShader (core/hair_physics).
+uniform vec4 cabeloVolumes[8];
+// Apoio de cada vértice de fita (VertPele::apoio*): osso da pele mais próxima, normal dela e folga.
+ATTR vec4 vertexBoneIds;
+ATTR vec4 vertexBoneWeights;
 vec3 pontaGuia(int guia, float x) {
     int par = guia / 2;
     vec4 yz = cabeloPontasYZ[par];
@@ -1939,6 +1953,53 @@ vec3 deslocarMecha(float t, out vec3 inclinacao) {
     }
     return desloc;
 }
+// Ponto posado levado ao repouso do osso (osso rígido: rotação transposta).
+vec3 paraRepouso(mat4 osso, vec3 p) {
+    vec3 d = p - osso[3].xyz;
+    return vec3(dot(osso[0].xyz, d), dot(osso[1].xyz, d), dot(osso[2].xyz, d));
+}
+// O vértice não atravessa o plano da pele que estava mais perto dele em repouso; o plano segue o
+// osso dessa pele (nuca no pescoço, ombros no peito, rosto na cabeça). Folga 0 = sem apoio.
+vec3 apoiarNoCorpo(vec3 p) {
+    if (vertexBoneWeights.w <= 0.0) return p;
+    mat4 osso = ossos[int(vertexBoneIds.x + 0.5)];
+    vec3 normal = normalize(mat3(osso) * vertexBoneWeights.xyz);
+    vec3 apoio = (osso * vec4(vertexPosition - vertexBoneWeights.xyz * vertexBoneWeights.w, 1.0)).xyz;
+    float folga = dot(p - apoio, normal);
+    float minimo = min(vertexBoneWeights.w, 0.0015);  // FOLGA_MINIMA_DO_APOIO
+    return folga < minimo ? p + normal * (minimo - folga) : p;
+}
+// Escala de q num volume (cápsula a-b com raio por eixo; a == b vira elipsoide): 1 na casca.
+float escalaNoVolume(vec3 q, vec3 a, vec3 b, vec3 r, out vec3 eixo) {
+    vec3 qa = (q - a) / r, d = (b - a) / r;
+    float dd = dot(d, d);
+    float t = dd > 1e-12 ? clamp(dot(qa, d) / dd, 0.0, 1.0) : 0.0;
+    eixo = a + (b - a) * t;
+    return length(qa - d * t);
+}
+// Fora do volume preso ao osso, e nunca mais fundo nele do que o vértice estava em repouso.
+vec3 afastarDoVolume(vec3 p, mat4 osso, vec3 a, vec3 b, vec3 r) {
+    vec3 eixo, eixoRepouso;
+    vec3 q = paraRepouso(osso, p);
+    float s = escalaNoVolume(q, a, b, r, eixo);
+    float limite = min(1.0, escalaNoVolume(vertexPosition, a, b, r, eixoRepouso));
+    if (s >= limite) return p;
+    vec3 direcao = s > 1e-6 ? (q - eixo) / s : vec3(r.x, 0.0, 0.0);
+    return (osso * vec4(eixo + direcao * limite, 1.0)).xyz;
+}
+vec3 afastarDosVolumesJustos(vec3 p) {
+    if (cabeloVolumes[0].w <= 0.0) return p;
+    vec3 orelha = cabeloVolumes[0].xyz, orelhaE = vec3(-orelha.x, orelha.y, orelha.z);
+    p = afastarDoVolume(p, ossos[OSSO_CABECA], orelha, orelha, cabeloVolumes[1].xyz);
+    p = afastarDoVolume(p, ossos[OSSO_CABECA], orelhaE, orelhaE, cabeloVolumes[1].xyz);
+    p = afastarDoVolume(p, ossos[OSSO_PESCOCO], cabeloVolumes[2].xyz, cabeloVolumes[3].xyz, cabeloVolumes[4].xyz);
+    return afastarDoVolume(p, ossos[OSSO_PEITO], cabeloVolumes[5].xyz, cabeloVolumes[6].xyz, cabeloVolumes[7].xyz);
+}
+// Vértice de fita já posado: curva da física, apoio na pele e volumes justos (posicaoDaFita no core).
+vec3 moverMecha(mat4 S, vec3 posado, float w, out vec3 inclinacao) {
+    posado += mat3(S) * deslocarMecha(w, inclinacao);
+    return afastarDosVolumesJustos(apoiarNoCorpo(posado));
+}
 )"
 
 const char* VS_PELE = CORPO_SKIN FISICA_MECHA R"(
@@ -1961,7 +2022,7 @@ void main() {
     if (cabeloAtivo > 0.5 && vertexTexCoord2.y < 0.0) {
         float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
         vec3 inclinacao;
-        pl.xyz += mat3(S) * deslocarMecha(w, inclinacao);
+        pl.xyz = moverMecha(S, pl.xyz, w, inclinacao);
         float arco = fract(vertexTexCoord2.x);
         float inversoArco = (1.0 - arco) / max(arco, 0.017);
         vec3 repouso = tangente / (0.05 + w);
@@ -2008,7 +2069,7 @@ void main() {
     if (cabeloAtivo > 0.5 && vertexTexCoord2.y < 0.0) {
         float w = clamp(length(vertexTangent.xyz) - 0.05, 0.0, 1.0);
         vec3 inclinacao;
-        pl.xyz += mat3(S) * deslocarMecha(w, inclinacao);
+        pl.xyz = moverMecha(S, pl.xyz, w, inclinacao);
     }
     gl_Position = mvp * pl;
 }

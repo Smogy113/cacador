@@ -40,24 +40,36 @@ TEST_CASE("config inválida usa padrão") {
     const char* p = "teste_config_lixo.txt";
     { std::ofstream f(p); f << "qualidade=ultra\nbobagem\n"; }
     CHECK(lerConfig(p, {}).nivel == Nivel::Baixo);
-    CHECK_FALSE(lerConfig(p, {}).cabeloOndulado);
+    CHECK(lerConfig(p, {}).penteado == Penteado::Sem);
     std::remove(p);
 }
 TEST_CASE("salvar e ler config") {
     const char* p = "teste_config.txt";
     { std::ofstream f(p); f << "qualidade=medio\n"; }
     CHECK(lerConfig(p, {}).nivel == Nivel::Medio);
-    CHECK_FALSE(lerConfig(p, {}).cabeloOndulado);
-    salvarConfig(p, {Nivel::Alto, true});
+    CHECK(lerConfig(p, {}).penteado == Penteado::Sem);
+    salvarConfig(p, {Nivel::Alto, Penteado::Ondulado});
     CHECK(temConfig(p));
     CHECK(lerConfig(p, {}).nivel == Nivel::Alto);
-    CHECK(lerConfig(p, {}).cabeloOndulado);
-    salvarConfig(p, {Nivel::Medio, true});
-    CHECK(lerConfig(p, {}).cabeloOndulado);
+    CHECK(lerConfig(p, {}).penteado == Penteado::Ondulado);
+    salvarConfig(p, {Nivel::Medio, Penteado::Longo});
+    CHECK(lerConfig(p, {}).penteado == Penteado::Longo);
     CHECK(lerConfig(p, {}).nivel == Nivel::Medio);
-    salvarConfig(p, {Nivel::Medio, false});
-    CHECK_FALSE(lerConfig(p, {Nivel::Baixo, true}).cabeloOndulado);
+    salvarConfig(p, {Nivel::Medio, Penteado::Sem});
+    CHECK(lerConfig(p, {Nivel::Baixo, Penteado::Ondulado}).penteado == Penteado::Sem);
     std::remove(p);
+}
+TEST_CASE("penteado: nomes do config.txt e do --cabelo") {
+    for (Penteado pt : PENTEADOS) {
+        Penteado lido = Penteado::Sem;
+        CHECK(lerPenteado(nomePenteado(pt), lido));
+        CHECK(lido == pt);
+    }
+    Penteado p = Penteado::Longo;
+    CHECK(lerPenteado("ONDULADO", p));
+    CHECK(p == Penteado::Ondulado);
+    CHECK_FALSE(lerPenteado("moicano", p));
+    CHECK(p == Penteado::Ondulado);  // nome desconhecido não mexe
 }
 TEST_CASE("AMD integrada não começa no Alto") {
     CHECK(sugerirNivel("AMD Radeon(TM) Graphics") != Nivel::Alto);

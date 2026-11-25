@@ -6,7 +6,11 @@ namespace {
 using estilo::Fonte;
 constexpr Color FUNDO{18, 17, 15, 255};
 constexpr const char* PRINCIPAL[] = {"Jogar", "Personagem", "Configurações", "Sair"};
-constexpr const char* CABELOS[] = {"Sem cabelo", "Ondulado", "Voltar"};
+// Tela Personagem: um item por penteado (core/penteado.h) e "Voltar" no fim.
+constexpr int NUM_PERSONAGEM = N_PENTEADOS + 1;
+const char* const CABELOS[NUM_PERSONAGEM] = {rotuloPenteado(PENTEADOS[0]), rotuloPenteado(PENTEADOS[1]),
+                                             rotuloPenteado(PENTEADOS[2]), "Voltar"};
+static_assert(N_PENTEADOS == 3, "Acrescente o novo penteado em CABELOS");
 constexpr const char* QUALIDADE[] = {"Baixo", "Médio", "Alto", "Voltar"};
 #if defined(PLATFORM_WEB)
 constexpr int NUM_PRINCIPAL = 3;
@@ -35,7 +39,7 @@ Rectangle MenuInicial::item(int indice) const {
 }
 
 MenuInicial::Acao MenuInicial::atualizar(ConfigJogo& config) {
-    int total = tela_ == Tela::Principal ? NUM_PRINCIPAL : (tela_ == Tela::Personagem ? 3 : 4);
+    int total = tela_ == Tela::Principal ? NUM_PRINCIPAL : (tela_ == Tela::Personagem ? NUM_PERSONAGEM : 4);
     auto voltar = [&] {
         foco_ = tela_ == Tela::Personagem ? 1 : 2;
         tela_ = Tela::Principal;
@@ -63,11 +67,11 @@ MenuInicial::Acao MenuInicial::atualizar(ConfigJogo& config) {
 
     if (tela_ != Tela::Principal) {
         if (acionado == total - 1) voltar();
-        else if (tela_ == Tela::Personagem) config.cabeloOndulado = acionado == 1;
+        else if (tela_ == Tela::Personagem) config.penteado = PENTEADOS[acionado];
         else config.nivel = static_cast<Nivel>(acionado);
     } else if (acionado == 1) {
         tela_ = Tela::Personagem;
-        foco_ = config.cabeloOndulado ? 1 : 0;
+        foco_ = static_cast<int>(config.penteado);
     } else if (acionado == 2) {
         tela_ = Tela::Configuracoes;
         foco_ = static_cast<int>(config.nivel);
@@ -103,8 +107,8 @@ void MenuInicial::desenhar(const ConfigJogo& config, bool carregando) const {
     int total = NUM_PRINCIPAL, escolhido = -1;
     if (tela_ == Tela::Personagem) {
         opcoes = CABELOS;
-        total = 3;
-        escolhido = config.cabeloOndulado ? 1 : 0;
+        total = NUM_PERSONAGEM;
+        escolhido = static_cast<int>(config.penteado);
         estilo::texto(Fonte::Forte, "Cabelo", x + 2 * s, y + 121.f * s, 24.f * s, estilo::MARFIM_ESC);
     } else if (tela_ == Tela::Configuracoes) {
         opcoes = QUALIDADE;

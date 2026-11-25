@@ -226,6 +226,31 @@ comando abaixo. [Testes de prédios](tests/test_predio.cpp) · [Capturas de refe
 ./build/testes --test-case='predio:*,porta:*,interior:*,telhado:*'
 ```
 
+### Cabelo do caçador
+
+Três penteados (`src/core/penteado.h`): sem cabelo, ondulado (`hair.cpp`, na altura do queixo) e
+longo (`cabelo_longo.cpp`, até os ombros). Eles aparecem no menu Personagem, no `config.txt`
+(`cabelo=longo`) e na linha de comando (`--cabelo longo`).
+
+Cada penteado é feito de fitas presas à cabeça. A física (`hair_physics.cpp`) move alguns guias e
+o vertex shader (`FISICA_MECHA` em `src/render/shaders.cpp`) curva as fitas a partir deles. Para o
+cabelo não atravessar o corpo, há três camadas:
+
+1. **Montagem** (`cabelo_corpo.h`, `superficie.h`): as fitas são montadas fora da pele de verdade
+   e das orelhas, que entram como volumes sólidos. O cabelo longo cai até assentar nos ombros.
+2. **Apoio por vértice**: cada vértice guarda o plano da pele mais próxima e o osso que a move
+   (`VertPele::apoio*`). Em movimento, ele não atravessa esse plano.
+3. **Volumes justos**: orelhas, pescoço e alto do tronco (`ColisoresCabelo`, medidas em
+   `cabelo_corpo.h`) seguram os cantos côncavos. A física e o shader usam os mesmos volumes.
+
+`posicaoDaFita` (core) repete em C++ a conta do shader. Os testes em `tests/test_cabelo_corpo.cpp`
+usam essa função para conferir o cabelo em repouso e em movimento: corrida, meia-volta e cabeça
+girando. Se mexer no shader, mexa nela também.
+
+```bash
+./build/testes --test-case='cabelo*,superficie*,base humana*'
+```
+
 ## Como compilar
 
 Precisa de CMake e de um compilador C++17. A raylib e o doctest são baixados pelo próprio build.
@@ -243,7 +268,9 @@ Opções úteis para testes: `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidad
 `--montado`, `--abrir-quadro`, `--mapa arquivo.txt`, `--recompensa N` (aceita o cartaz N),
 `--tiroteio` (começa perto do bando, já em combate), `--mirar`, `--andar` e `--correr` (o caçador
 anda sozinho para a frente, para capturar a marcha), `--estudio --retrato 0.5` (só o
-caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`.
+caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`,
+`--resolucao L A` (abre a janela nesse tamanho, por exemplo `--resolucao 1920 1080` para conferir a
+interface em Full HD).
 
 No Windows sem WSL, o MinGW-w64 do WinLibs já traz GCC, CMake e Ninja (`winget install BrechtSanders.WinLibs.POSIX.UCRT`).
 Com a pasta `mingw64/bin` dele no `PATH`, `cmake -B build -G Ninja && cmake --build build` gera o jogo e os testes.
@@ -286,4 +313,4 @@ Os argumentos vão na URL, separados por `&` ([web/argumentos.js](web/argumentos
 Para repetir medições e comparar capturas entre versões, veja o [guia de desempenho](docs/DESEMPENHO.md).
 
 Use `--direto` para abrir uma partida sem passar pelo menu inicial e
-`--cabelo ondulado` ou `--cabelo sem` para escolher o visual daquela execução.
+`--cabelo sem`, `--cabelo ondulado` ou `--cabelo longo` para escolher o visual daquela execução.

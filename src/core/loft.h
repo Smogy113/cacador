@@ -5,6 +5,7 @@
 #include <functional>
 #include <vector>
 #include "core/body.h"
+#include "core/cabelo_corpo.h"
 
 namespace loft {
 
@@ -114,16 +115,23 @@ inline Rgb mix(Rgb a, Rgb b, float t) { return lerp(a, b, clamp01(t)); }
 std::vector<Anel> suavizar(const std::vector<Anel>& an, int sub);
 // Cabeca com proporcoes de um rosto real (head_hd.cpp)
 void cabecaHD(Construtor& k, float s, float ms, const Visual& vis);
-void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples);
-void cabeloOndulado(MalhaPele& m, float escala, Rgb cor);
+void cabeloComprido(MalhaPele& m, float s, float ms, Rgb cor, bool simples);  // cabeças HD (head_hd.cpp)
+// Penteados da base humana (corpoHumanoBase). A malha já deve ter a pele: as mechas a contornam.
+void cabeloOndulado(MalhaPele& m, float escala, Rgb cor);  // hair.cpp: na altura do queixo
+void cabeloLongo(MalhaPele& m, float escala, Rgb cor);     // cabelo_longo.cpp: até os ombros
 
 struct PontoCabelo { Vec3f p; float flex; };
 // O corte fornece fitas com flexibilidade crescente da raiz à ponta.
 // O limiar de fixação define até onde a fita acompanha rigidamente o couro cabeludo.
 // Use um construtor por malha e finalize depois de adicionar todas as fitas.
+// Os pontos das fitas estão no espaço de 1,80 m; o construtor aplica a escala do personagem.
 class ConstrutorCabelo {
 public:
     ConstrutorCabelo(MalhaPele& malha, Vec3f centro, float escala, float massa, float limiarFixacao = .12f);
+    // A partir daqui, as fitas ficam fora do corpo (pele, orelhas, rosto, pescoço, ombros): cada ponto
+    // a pelo menos `folga` metros dele. O corpo usa as coordenadas finais da malha (já escaladas) e
+    // também entrega à física o volume das orelhas (finalizar).
+    void respeitarCorpo(const CorpoDoCabelo& corpo, float folga = .003f);
     void fita(const std::vector<PontoCabelo>& pontos, float largura, Rgb cor, float ao, bool fina = false);
     void finalizar();
 
@@ -135,8 +143,14 @@ private:
     MalhaPele& m_;
     Vec3f centro_;
     float escala_, massa_, limiarFixacao_;
+    const CorpoDoCabelo* corpo_ = nullptr;
+    float folga_ = 0.f;
     std::vector<Fita> fitas_;
     Vec3f escalar(Vec3f p) const;
+    Vec3f desescalar(Vec3f p) const;
+    std::vector<PontoCabelo> afastarDoCorpo(const std::vector<PontoCabelo>& pontos) const;
+    void definirApoio(VertPele& v) const;  // plano da pele mais próxima (ver VertPele::apoioNormal)
+    void subdividirPertoDoCorpo(const PontoCabelo& a, const PontoCabelo& b, int profundidade, std::vector<PontoCabelo>& saida) const;
 };
 // Cascas de pelo para todo vertice com pelos > 0 (chamar depois das normais)
 void cascasDePelo(MalhaPele& m, Rgb corPelo);

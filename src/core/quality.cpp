@@ -56,8 +56,7 @@ ConfigJogo lerConfig(const std::string& caminho, ConfigJogo config) {
             if (valor == "medio") config.nivel = Nivel::Medio;
             if (valor == "alto") config.nivel = Nivel::Alto;
         } else if (chave == "cabelo") {
-            if (valor == "sem") config.cabeloOndulado = false;
-            if (valor == "ondulado") config.cabeloOndulado = true;
+            lerPenteado(valor, config.penteado);  // nome desconhecido: mantém o padrão
         }
     }
     return config;
@@ -66,5 +65,5 @@ ConfigJogo lerConfig(const std::string& caminho, ConfigJogo config) {
 void salvarConfig(const std::string& caminho, ConfigJogo config) {
     std::ofstream f(caminho);
     f << "qualidade=" << nomeNivel(config.nivel) << "\n"
-      << "cabelo=" << (config.cabeloOndulado ? "ondulado" : "sem") << "\n";
+      << "cabelo=" << nomePenteado(config.penteado) << "\n";
 }

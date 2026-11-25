@@ -18,7 +18,7 @@ namespace {
 
 struct UniformesCabelo {
     unsigned int shader = 0;
-    int ativo, curvas, pontasYZ, centro, raios;
+    int ativo, curvas, pontasYZ, centro, raios, volumes;
 };
 
 const UniformesCabelo& uniformesCabelo(Shader shader) {
@@ -29,8 +29,28 @@ const UniformesCabelo& uniformesCabelo(Shader shader) {
     auto& loc = cache[proximo++ % cache.size()];
     loc = {shader.id, GetShaderLocation(shader, "cabeloAtivo"), GetShaderLocation(shader, "cabeloCurvas[0]"),
            GetShaderLocation(shader, "cabeloPontasYZ[0]"), GetShaderLocation(shader, "cabeloCentro"),
-           GetShaderLocation(shader, "cabeloRaios")};
+           GetShaderLocation(shader, "cabeloRaios"), GetShaderLocation(shader, "cabeloVolumes[0]")};
     return loc;
+}
+
+// Apoio de cada vértice de fita (VertPele::apoio*) nos atributos de skinning da raylib, que este
+// projeto não usa de outro jeito: boneIds.x = osso da pele; boneWeights = normal (xyz) e folga (w).
+// Sem nenhum apoio na malha, nada é enviado e o shader lê zero (sem apoio).
+void carregarApoios(const MalhaPele& p, Mesh& m) {
+    const bool temApoio = std::any_of(p.v.begin(), p.v.end(), [](const VertPele& v) { return v.apoioFolga > 0.f; });
+    if (!temApoio) return;
+    const size_t n = p.v.size();
+    m.boneIds = (unsigned char*)MemAlloc(4 * n);
+    m.boneWeights = (float*)MemAlloc(sizeof(float) * 4 * n);
+    for (size_t i = 0; i < n; i++) {
+        const VertPele& v = p.v[i];
+        m.boneIds[i * 4] = v.apoioOsso;
+        m.boneIds[i * 4 + 1] = m.boneIds[i * 4 + 2] = m.boneIds[i * 4 + 3] = 0;
+        m.boneWeights[i * 4] = v.apoioNormal.x;
+        m.boneWeights[i * 4 + 1] = v.apoioNormal.y;
+        m.boneWeights[i * 4 + 2] = v.apoioNormal.z;
+        m.boneWeights[i * 4 + 3] = v.apoioFolga;
+    }
 }
 
 void enviarCabelo(Shader shader, const UniformesCabelo& loc, const FisicaCabelo& cabelo) {
@@ -59,6 +79,8 @@ void enviarCabelo(Shader shader, const UniformesCabelo& loc, const FisicaCabelo&
     SetShaderValueV(shader, loc.pontasYZ, pontasYZ, SHADER_UNIFORM_VEC4, int(pares));
     SetShaderValue(shader, loc.centro, centroShader, SHADER_UNIFORM_VEC3);
     SetShaderValue(shader, loc.raios, raiosShader, SHADER_UNIFORM_VEC3);
+    const std::array<float, 32> volumes = volumesParaShader(perfil.colisores);
+    SetShaderValueV(shader, loc.volumes, volumes.data(), SHADER_UNIFORM_VEC4, 8);
 }
 
 }  // namespace
@@ -98,6 +120,7 @@ void MalhaEsqueleto::carregar(const MalhaPele& p, bool dinamica) {
         m.colors[i * 4] = c8(v.cor.r); m.colors[i * 4 + 1] = c8(v.cor.g); m.colors[i * 4 + 2] = c8(v.cor.b); m.colors[i * 4 + 3] = c8(v.pelos);
     }
     std::copy(p.idx.begin(), p.idx.end(), m.indices);
+    carregarApoios(p, m);
     UploadMesh(&m, dinamica);
     mesh_ = m;
     cabelo_ = p.cabelo.quantidade ? std::make_unique<FisicaCabelo>(p.cabelo) : nullptr;

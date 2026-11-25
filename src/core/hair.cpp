@@ -1,4 +1,5 @@
 #include "core/loft.h"
+#include "core/cabelo_cranio.h"
 #include <algorithm>
 #include <cmath>
 
@@ -33,7 +34,61 @@ Vec3f ConstrutorCabelo::escalar(Vec3f p) const {
     return {p.x * escala_ * massa_, p.y * escala_, p.z * escala_ * massa_};
 }
 
-void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, Rgb cor, float ao, bool fina) {
+Vec3f ConstrutorCabelo::desescalar(Vec3f p) const {
+    return {p.x / (escala_ * massa_), p.y / escala_, p.z / (escala_ * massa_)};
+}
+
+void ConstrutorCabelo::respeitarCorpo(const CorpoDoCabelo& corpo, float folga) {
+    corpo_ = &corpo;
+    folga_ = folga;
+}
+
+namespace {
+// Trechos mais longos que isto, quase encostados no corpo, são subdivididos: a corda de 12 mm sobre
+// uma curva de raio ~1,5 cm (mais a folga) afunda pouco mais de 1 mm.
+constexpr float SEGMENTO_MAXIMO_RENTE = .012f;
+constexpr float RENTE = .008f;  // "rente" = a menos de 8 mm do corpo
+constexpr int SUBDIVISOES_MAXIMAS = 4;  // um trecho vira no máximo 16
+}  // namespace
+
+void ConstrutorCabelo::subdividirPertoDoCorpo(const PontoCabelo& a, const PontoCabelo& b, int profundidade,
+                                              std::vector<PontoCabelo>& saida) const {
+    const Vec3f pa = escalar(a.p), pb = escalar(b.p);
+    const bool longo = len(pb - pa) > SEGMENTO_MAXIMO_RENTE && std::min(corpo_->distancia(pa), corpo_->distancia(pb)) < RENTE;
+    if (profundidade < SUBDIVISOES_MAXIMAS && (longo || corpo_->atravessa(pa, pb))) {
+        const PontoCabelo meio{desescalar(corpo_->paraFora((pa + pb) * .5f, folga_)), (a.flex + b.flex) * .5f};
+        subdividirPertoDoCorpo(a, meio, profundidade + 1, saida);
+        subdividirPertoDoCorpo(meio, b, profundidade + 1, saida);
+    } else {
+        saida.push_back(b);
+    }
+}
+
+void ConstrutorCabelo::definirApoio(VertPele& v) const {
+    // Mais longe que isto, o corpo não alcança o vértice nem com a mecha toda dobrada para ele.
+    constexpr float ALCANCE_DO_APOIO = .09f;
+    // Só a pele: orelhas e pescoço já são volumes inteiros na placa de vídeo (ColisoresCabelo).
+    const Superficie::Contato c = corpo_->pele().maisProximo(v.pos, ALCANCE_DO_APOIO);
+    if (c.distancia >= ALCANCE_DO_APOIO) return;
+    v.apoioNormal = c.normal;
+    v.apoioFolga = std::max(dot(v.pos - c.ponto, c.normal), 1e-4f);  // distância até o plano tangente
+    v.apoioOsso = c.osso;
+}
+
+std::vector<PontoCabelo> ConstrutorCabelo::afastarDoCorpo(const std::vector<PontoCabelo>& pontos) const {
+    if (!corpo_ || pontos.empty()) return pontos;
+    std::vector<PontoCabelo> fora = pontos;
+    for (auto& p : fora) p.p = desescalar(corpo_->paraFora(escalar(p.p), folga_));
+    std::vector<PontoCabelo> saida{fora[0]};
+    for (size_t i = 1; i < fora.size(); ++i) {
+        const PontoCabelo anterior = saida.back();  // cópia: a subdivisão aumenta `saida`
+        subdividirPertoDoCorpo(anterior, fora[i], 0, saida);
+    }
+    return saida;
+}
+
+void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pontos, float largura, Rgb cor, float ao, bool fina) {
+    const std::vector<PontoCabelo> pts = afastarDoCorpo(pontos);
     size_t inicio = m_.v.size(), n = pts.size();
     // As mechas finas dispensam a coluna central que abaula as fitas mais largas.
     const size_t colunas = fina ? 2 : 3;
@@ -56,9 +111,13 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
         Vec3f p = pts[i].p;
         Vec3f anterior = pts[i ? i - 1 : 0].p, seguinte = pts[std::min(i + 1, n - 1)].p;
         Vec3f tg = normalizar(seguinte - anterior);
-        Vec3f nr = normalizar(p - centro_);
+        // A face da fita olha para fora da cabeça. Bem abaixo do centro (cabelo comprido caindo), a
+        // referência desce junto para a normal não ficar paralela ao fio, que ali aponta para baixo.
+        const Vec3f referencia{centro_.x, std::min(centro_.y, p.y + .08f), centro_.z};
+        Vec3f nr = normalizar(p - referencia);
         Vec3f lado = normalizar(cross(tg, nr));
-        float t = float(i) / (n - 1);
+        // Fração do comprimento (não do índice): trechos subdivididos perto da pele não mudam o afinamento.
+        float t = arco[i] / std::max(arco.back(), 1e-6f);
         float w = largura * lerp(.79f, 1.f, smoothstep(0.f, .25f, t)) * (1.f - .69f * smoothstep(.58f, 1.f, t));
         float progresso = clamp01((arco[i] - raiz) / std::max(comprimentoLivre, .001f));
         Vec3f tangente = normalizar(escalar(tg)) * (.05f + progresso);
@@ -70,6 +129,11 @@ void ConstrutorCabelo::fita(const std::vector<PontoCabelo>& pts, float largura, 
             Vec3f normal = normalizar(nr + lado * (transversal * .38f));
             VertPele v;
             v.pos = escalar(x);
+            // As bordas da fita também ficam fora da pele (um pouco mais rentes que o eixo da mecha).
+            if (corpo_) {
+                v.pos = corpo_->paraFora(v.pos, folga_ * .7f);
+                definirApoio(v);
+            }
             v.normal = normalizar({normal.x / massa_, normal.y, normal.z / massa_});
             v.cor = cor;
             v.material = MAT_CARTAO + .5f;
@@ -120,6 +184,16 @@ void ConstrutorCabelo::finalizar() {
     c.raioCranio = .081f * escala_ * massa_;
     c.raioPescoco = .068f * escala_ * massa_;
     c.raioOmbros = .09f * escala_ * massa_;
+    if (corpo_) {  // volumes justos: o mesmo da orelha que afastou as fitas na montagem, e o pescoço
+        c.orelha = corpo_->orelhaDireita().centro;
+        c.raiosOrelha = corpo_->orelhaDireita().raios;
+        c.pescocoA = PESCOCO_BASE_A * escala_;
+        c.pescocoB = PESCOCO_BASE_B * escala_;
+        c.raiosPescocoJusto = PESCOCO_BASE_RAIOS * escala_;
+        c.troncoA = TRONCO_BASE_A * escala_;
+        c.troncoB = TRONCO_BASE_B * escala_;
+        c.raiosTronco = TRONCO_BASE_RAIOS * escala_;
+    }
 
     // Amostra as curvas mais afastadas das já escolhidas no espaço de repouso.
     // Isso cobre direções e comprimentos distintos com um orçamento fixo.
@@ -162,110 +236,19 @@ void ConstrutorCabelo::finalizar() {
     }
 }
 
-namespace {
-constexpr Vec3f CENTRO{0, 1.698f, .055f};
-constexpr float RAD = PI_F / 180.f;
 
-struct FaceCranio {
-    Vec3f a, u, v;  // primeiro vertice relativo ao centro e duas arestas
-};
-
-Vec3f direcao(float giro, float altura) {
-    float g = giro * RAD, h = altura * RAD;
-    return {std::cos(h) * std::sin(g), std::sin(h), std::cos(h) * std::cos(g)};
-}
-
-float linhaDoCabelo(float giro) {
-    float absGiro = std::abs(giro);
-    // A linha desce na testa e recua um pouco nas entradas antes das costeletas.
-    float frente = 22.f + 3.f * smoothstep(8.f, 45.f, absGiro);
-    return lerp(frente, 18.f, smoothstep(44.f, 71.f, absGiro))
-         - 55.f * smoothstep(75.f, 166.f, absGiro) + 1.1f * std::cos(giro * .21f + .55f);
-}
-
-float volumeCoroa(Vec3f d) {
-    float volume = .007f * smoothstep(.03f, .30f, std::abs(d.x)) * smoothstep(.1f, .8f, d.y);
-    float pertoDaRisca = 1.f - smoothstep(.03f, .25f, std::abs(d.x));
-    float folgaNaRisca = .002f * smoothstep(.25f, .7f, d.z) + .0015f * smoothstep(.70f, .98f, d.y);
-    return .0035f + volume + pertoDaRisca * folgaNaRisca;
-}
-
-class Cranio {
-public:
-    Cranio(const MalhaPele& m, float escala) {
-        const float inversa = 1.f / escala;
-        for (size_t i = 0; i < m.idx.size(); i += 3) {
-            Vec3f a = m.v[m.idx[i]].pos * inversa;
-            Vec3f b = m.v[m.idx[i + 1]].pos * inversa;
-            Vec3f c = m.v[m.idx[i + 2]].pos * inversa;
-            if (std::min({a.y, b.y, c.y}) >= 1.58f) faces_.push_back({a - CENTRO, b - a, c - a});
-        }
-    }
-
-    Vec3f superficie(Vec3f d, float folga) const {
-        float alcance = 0.f;
-        for (const auto& f : faces_) {
-            Vec3f p = cross(d, f.v);
-            float det = dot(f.u, p);
-            if (std::abs(det) < 1e-10f) continue;
-            Vec3f origem = f.a * -1.f;
-            float u = dot(origem, p) / det;
-            if (u < 0.f || u > 1.f) continue;
-            Vec3f q = cross(origem, f.u);
-            float v = dot(d, q) / det;
-            if (v < 0.f || u + v > 1.f) continue;
-            alcance = std::max(alcance, dot(f.v, q) / det);
-        }
-        return CENTRO + d * ((alcance > 0.f ? alcance : .088f) + folga);
-    }
-
-private:
-    std::vector<FaceCranio> faces_;
-};
-
-void couroCabeludo(MalhaPele& m, const Cranio& cranio, float escala, Rgb cor) {
-    constexpr int VOLTA = 40, ANEIS = 9;
-    uint16_t base = uint16_t(m.v.size());
-    auto adicionar = [&](Vec3f d, float risca) {
-        VertPele v;
-        v.pos = cranio.superficie(d, volumeCoroa(d)) * escala;
-        v.normal = d;
-        v.osso[0] = v.osso[1] = CABECA;
-        v.material = MAT_CABELO;
-        v.cor = lerp(cor * .88f, cor * 1.52f, risca);
-        v.ao = .82f;
-        m.v.push_back(v);
-    };
-    for (int i = 0; i < ANEIS; ++i) {
-        for (int j = 0; j < VOLTA; ++j) {
-            float giro = j * 360.f / VOLTA - 180.f;
-            Vec3f d = direcao(giro, lerp(linhaDoCabelo(giro), 90.f, float(i) / ANEIS));
-            float risca = (1.f - smoothstep(.004f, .053f, std::abs(d.x))) * smoothstep(-.17f, .65f, d.z) * .7f;
-            adicionar(d, risca);
-        }
-    }
-    uint16_t topo = uint16_t(m.v.size());
-    adicionar({0, 1, 0}, .2f);
-    for (int i = 0; i < ANEIS; ++i) {
-        for (int j = 0; j < VOLTA; ++j) {
-            uint16_t a = base + i * VOLTA + j, b = base + i * VOLTA + (j + 1) % VOLTA;
-            if (i == ANEIS - 1) m.idx.insert(m.idx.end(), {a, b, topo});
-            else {
-                uint16_t c = b + VOLTA, d = a + VOLTA;
-                m.idx.insert(m.idx.end(), {a, b, c, a, c, d});
-            }
-        }
-    }
-}
-}  // namespace
+using namespace cranio;
 
 void cabeloOndulado(MalhaPele& m, float escala, Rgb cor) {
     Cranio cranio(m, escala);
-    couroCabeludo(m, cranio, escala, cor);
+    // O corpo é lido antes de o penteado entrar na malha (só pele: cabeça, orelhas, pescoço, ombros).
+    const CorpoDoCabelo corpo = corpoDaBaseHumana(m, escala);
+    couroCabeludo(m, cranio, corpo, escala, cor);
     // O arco sobre a cabeça chega a .10 de flexibilidade. A dobra começa no arco,
     // com a primeira parte presa à risca e a superfície da cabeça protegida no shader.
     constexpr float LIMIAR_FIXACAO_ONDULADO = .04f;
     ConstrutorCabelo cabelo(m, CENTRO, escala, 1.f, LIMIAR_FIXACAO_ONDULADO);
+    cabelo.respeitarCorpo(corpo);
 
     // As camadas mais curtas começam junto da risca. As mechas inferiores saem da
     // lateral do couro e terminam em outra altura, com curvaturas alternadas.

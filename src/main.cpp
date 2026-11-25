@@ -25,6 +25,7 @@ struct Opcoes {
     std::string screenshot;
     int frames = 0;
     int congelarNoQuadro = 0;  // > 0: a lógica para nesse quadro e a tela continua (capturas no navegador)
+    int larguraJanela = 1280, alturaJanela = 720;  // --resolucao L A (prints na resolução de quem joga)
     OpcoesJogo jogo;
 };
 
@@ -35,6 +36,10 @@ static Opcoes lerArgs(int argc, char** argv) {
         auto prox = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : "0"; };
         if (a == "--screenshot") { o.screenshot = prox(); o.jogo.congelarHora = true; o.jogo.semEntrada = true; }
         else if (a == "--frames") o.frames = std::max(1, std::atoi(prox()));
+        else if (a == "--resolucao") {
+            o.larguraJanela = std::max(320, std::atoi(prox()));
+            o.alturaJanela = std::max(240, std::atoi(prox()));
+        }
         else if (a == "--hora") o.jogo.hora = (float)std::atof(prox());
         else if (a == "--pos") { o.jogo.temPos = true; o.jogo.x = (float)std::atof(prox()); o.jogo.z = (float)std::atof(prox()); }
         else if (a == "--girar-camera") o.jogo.girarCamera = (float)std::atof(prox());
@@ -68,11 +73,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         else if (a == "--sem-entrada") { o.jogo.semEntrada = true; o.jogo.congelarHora = true; }
         else if (a == "--congelar-no-quadro") o.congelarNoQuadro = std::max(1, std::atoi(prox()));
         else if (a == "--cabelo") {
-            std::string c = prox();
-            if (c == "sem" || c == "ondulado") {
-                o.jogo.cabeloOndulado = c == "ondulado";
-                o.cabeloDado = true;
-            }
+            if (lerPenteado(prox(), o.jogo.penteado)) o.cabeloDado = true;  // sem | ondulado | longo
         } else if (a == "--qualidade") {
             std::string q = prox();
             o.jogo.nivel = q == "alto" ? Nivel::Alto : (q == "medio" ? Nivel::Medio : Nivel::Baixo);
@@ -118,12 +119,12 @@ static void quadroAplicacao() {
         iniciarJogo();
         return;
     }
-    ConfigJogo anterior{g_op.jogo.nivel, g_op.jogo.cabeloOndulado};
+    ConfigJogo anterior{g_op.jogo.nivel, g_op.jogo.penteado};
     ConfigJogo config = anterior;
     auto acao = g_menu.atualizar(config);
     g_op.jogo.nivel = config.nivel;
-    g_op.jogo.cabeloOndulado = config.cabeloOndulado;
-    if ((anterior.nivel != config.nivel || anterior.cabeloOndulado != config.cabeloOndulado)
+    g_op.jogo.penteado = config.penteado;
+    if ((anterior.nivel != config.nivel || anterior.penteado != config.penteado)
         && !g_op.jogo.arquivoConfig.empty())
         salvarConfig(g_op.jogo.arquivoConfig, config);
     if (acao == MenuInicial::Acao::Sair) {
@@ -202,7 +203,7 @@ int main(int argc, char** argv) {
     unsigned int flags = FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE;
     if (!g_op.benchmark) flags |= FLAG_VSYNC_HINT;
     SetConfigFlags(flags);
-    InitWindow(1280, 720, "Caçador");
+    InitWindow(g_op.larguraJanela, g_op.alturaJanela, "Caçador");
     if (!IsWindowReady()) {
 #if defined(_WIN32)
         MessageBoxA(nullptr, "Nao foi possivel abrir a janela do jogo.\n\nO Cacador precisa de uma placa de video com OpenGL 3.3.\nAtualize o driver de video e tente de novo.", "Cacador", 0x10);
@@ -219,7 +220,7 @@ int main(int argc, char** argv) {
     const char* cfg = "config.txt";
     bool temPreferencias = temConfig(cfg);
     ConfigJogo config = lerConfig(cfg, {});
-    if (!g_op.cabeloDado) g_op.jogo.cabeloOndulado = config.cabeloOndulado;
+    if (!g_op.cabeloDado) g_op.jogo.penteado = config.penteado;
     if (!g_op.qualidadeDada) {
         const unsigned char* r = glGetString(0x1F01);  // GL_RENDERER
         std::string placa = r ? (const char*)r : "";
@@ -228,7 +229,7 @@ int main(int argc, char** argv) {
     }
     if (!g_op.qualidadeDada && !g_op.cabeloDado) {
         g_op.jogo.arquivoConfig = cfg;
-        if (!temPreferencias) salvarConfig(cfg, {g_op.jogo.nivel, g_op.jogo.cabeloOndulado});
+        if (!temPreferencias) salvarConfig(cfg, {g_op.jogo.nivel, g_op.jogo.penteado});
     }
     // O backend de audio, inclusive WebAudio, e inicializado antes do loop.
     if (g_op.screenshot.empty() && !g_op.benchmark) InitAudioDevice();

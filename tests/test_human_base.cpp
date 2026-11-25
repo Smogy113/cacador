@@ -33,24 +33,44 @@ TEST_CASE("base humana compacta: anatomia completa dentro do orçamento") {
     CHECK(maximo == doctest::Approx(1.8f).epsilon(.002));
 }
 
-TEST_CASE("base humana: cabelo ondulado acrescenta uma camada presa a cabeca") {
+TEST_CASE("base humana: os penteados acrescentam uma camada presa a cabeca") {
+    // Orçamento de triângulos de cada penteado. Os trechos rentes à orelha, ao pescoço e aos ombros
+    // são subdivididos para nenhuma aresta cortar a pele (ConstrutorCabelo::respeitarCorpo).
+    const std::pair<Penteado, size_t> orcamentos[] = {{Penteado::Ondulado, 9000}, {Penteado::Longo, 11500}};
     Visual visual;
-    MalhaPele base = corpoHumanoBase({}, visual);
-    visual.cabeloOndulado = true;
-    MalhaPele penteado = corpoHumanoBase({}, visual);
-    REQUIRE(penteado.v.size() > base.v.size());
-    CHECK(penteado.triangulos() > base.triangulos());
-    CHECK(penteado.triangulos() - base.triangulos() <= 6500);
-    CHECK(penteado.v.size() < 65535);
-    CHECK(std::equal(base.idx.begin(), base.idx.end(), penteado.idx.begin()));
-    for (size_t i = base.v.size(); i < penteado.v.size(); ++i) {
-        const auto& v = penteado.v[i];
-        CHECK(v.osso[0] == CABECA);
-        CHECK(v.osso[1] == CABECA);
-        CHECK(std::isfinite(v.pos.x));
-        CHECK(std::isfinite(v.pos.y));
-        CHECK(std::isfinite(v.pos.z));
+    const MalhaPele base = corpoHumanoBase({}, visual);
+    for (const auto& [qual, orcamento] : orcamentos) {
+        CAPTURE(std::string(nomePenteado(qual)));
+        visual.penteado = qual;
+        const MalhaPele penteado = corpoHumanoBase({}, visual);
+        REQUIRE(penteado.v.size() > base.v.size());
+        CHECK(penteado.triangulos() > base.triangulos());
+        CHECK(penteado.triangulos() - base.triangulos() <= orcamento);
+        CHECK(penteado.v.size() < 65535);
+        CHECK(std::equal(base.idx.begin(), base.idx.end(), penteado.idx.begin()));
+        for (size_t i = base.v.size(); i < penteado.v.size(); ++i) {
+            const auto& v = penteado.v[i];
+            CHECK(v.osso[0] == CABECA);
+            CHECK(v.osso[1] == CABECA);
+            CHECK(std::isfinite(v.pos.x));
+            CHECK(std::isfinite(v.pos.y));
+            CHECK(std::isfinite(v.pos.z));
+        }
     }
+}
+
+TEST_CASE("base humana: o cabelo longo chega aos ombros e cai por tras deles") {
+    Visual visual;
+    visual.penteado = Penteado::Longo;
+    const MalhaPele m = corpoHumanoBase({}, visual);
+    float pontaMaisBaixa = 2.f, pontaMaisNaFrente = -1.f;
+    for (const auto& v : m.v) {
+        if (v.guiaCabelo[0] == SEM_GUIA_CABELO || v.tv < 1.f) continue;
+        pontaMaisBaixa = std::min(pontaMaisBaixa, v.pos.y);
+        if (std::abs(v.pos.x) > .09f) pontaMaisNaFrente = std::max(pontaMaisNaFrente, v.pos.z);  // pontas laterais
+    }
+    CHECK(pontaMaisBaixa < 1.46f);       // altura dos ombros (o ondulado para no queixo, ~1,60 m)
+    CHECK(pontaMaisNaFrente < .07f);     // nenhuma ponta lateral pendurada na frente do peito
 }
 
 TEST_CASE("base humana: A-pose no estúdio e braços baixos na animação") {
