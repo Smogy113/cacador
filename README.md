@@ -270,7 +270,8 @@ Opções úteis para testes: `--hora H`, `--pos X Z`, `--yaw graus`, `--qualidad
 anda sozinho para a frente, para capturar a marcha), `--estudio --retrato 0.5` (só o
 caçador, de perto), `--sem-raio` (cabeça de triângulos), `--sem-luz-personagem`, `--sem-foco`, `--sem-paredes`,
 `--resolucao L A` (abre a janela nesse tamanho, por exemplo `--resolucao 1920 1080` para conferir a
-interface em Full HD).
+interface em Full HD), `--menu [principal|personagem|configuracoes]` (abre no menu inicial, nessa tela;
+com `--screenshot`, tira o print do cartaz).
 
 No Windows sem WSL, o MinGW-w64 do WinLibs já traz GCC, CMake e Ninja (`winget install BrechtSanders.WinLibs.POSIX.UCRT`).
 Com a pasta `mingw64/bin` dele no `PATH`, `cmake -B build -G Ninja && cmake --build build` gera o jogo e os testes.

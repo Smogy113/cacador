@@ -26,6 +26,7 @@ struct Opcoes {
     int frames = 0;
     int congelarNoQuadro = 0;  // > 0: a lógica para nesse quadro e a tela continua (capturas no navegador)
     int larguraJanela = 1280, alturaJanela = 720;  // --resolucao L A (prints na resolução de quem joga)
+    std::string telaMenu;  // --menu [principal|personagem|configuracoes]: print do menu inicial
     OpcoesJogo jogo;
 };
 
@@ -36,6 +37,7 @@ static Opcoes lerArgs(int argc, char** argv) {
         auto prox = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : "0"; };
         if (a == "--screenshot") { o.screenshot = prox(); o.jogo.congelarHora = true; o.jogo.semEntrada = true; }
         else if (a == "--frames") o.frames = std::max(1, std::atoi(prox()));
+        else if (a == "--menu") o.telaMenu = (i + 1 < argc && argv[i + 1][0] != '-') ? argv[++i] : "principal";
         else if (a == "--resolucao") {
             o.larguraJanela = std::max(320, std::atoi(prox()));
             o.alturaJanela = std::max(240, std::atoi(prox()));
@@ -135,6 +137,7 @@ static void quadroAplicacao() {
     BeginDrawing();
     g_menu.desenhar(config, g_carregando);
     EndDrawing();
+    g_frame++;
 }
 
 struct Medicao {
@@ -233,7 +236,10 @@ int main(int argc, char** argv) {
     }
     // O backend de audio, inclusive WebAudio, e inicializado antes do loop.
     if (g_op.screenshot.empty() && !g_op.benchmark) InitAudioDevice();
-    if (g_op.direto || g_op.jogo.semEntrada || g_op.jogo.estudio) {
+    if (!g_op.telaMenu.empty()) {  // print do menu: nada de partida, o menu na tela pedida
+        g_menu.carregar();
+        g_menu.abrir(g_op.telaMenu);
+    } else if (g_op.direto || g_op.jogo.semEntrada || g_op.jogo.estudio) {
         BeginDrawing();
         ClearBackground({18, 16, 14, 255});
         DrawText("Carregando o mundo...", 40, GetScreenHeight() - 70, 28, {220, 200, 160, 255});
@@ -256,9 +262,11 @@ int main(int argc, char** argv) {
         if (!g_op.screenshot.empty() && g_frame >= (g_op.frames ? g_op.frames : 30)) {
             Image img = LoadImageFromScreen();
             ExportImage(img, g_op.screenshot.c_str());
-            g_jogo->imprimirPerfil();
             UnloadImage(img);
-            std::printf("triangulos=%zu chamadas=%d\n", g_jogo->triangulos(), g_jogo->chamadas());
+            if (g_jogo) {
+                g_jogo->imprimirPerfil();
+                std::printf("triangulos=%zu chamadas=%d\n", g_jogo->triangulos(), g_jogo->chamadas());
+            }
             break;
         }
     }
