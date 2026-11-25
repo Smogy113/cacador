@@ -309,10 +309,21 @@ const vec2 discoSombra[12] = vec2[12](
     vec2(0.396443814, -0.847249866), vec2(0.293014765, 0.934064090));
 #endif
 float gGrama = 0.0;  // uma leitura de sombra por fragmento da grama
+// Lado oposto ao sol: em geral, sombra total. Na pele do heroi nao: ela recebe luz "embrulhada" alem do
+// terminador (difSol com sss), que ja some suave ate ndl = -0,45; cortar aqui, com a normal cheia de
+// poros, deixava manchas duras e serrilhadas no rosto, no peito e nos ombros. Quem sombreia o corpo
+// e o mapa de perto (sombra de bloqueadores reais), e o mapa grande continua valendo para o cenario.
+bool costasParaOSol(float nl) {
+#ifdef PERSONAGEM
+    if (usarSombraPerto > 0.5) return false;
+#endif
+    return nl <= 0.0;
+}
 #if !defined(GL_ES)
 float sombraFiltrada(vec3 p, vec3 n) {
     float nl = dot(n, dirSombra);
-    if (nl <= 0.0 && gGrama < 0.5) return 0.0;
+    if (costasParaOSol(nl) && gGrama < 0.5) return 0.0;
+    nl = max(nl, 0.0);
     // A projecao da luz e ortografica. Corrige a profundidade de cada amostra
     // no plano da superficie, para a penumbra acompanhar encostas e paredes.
     vec3 q = (matLuz * vec4(p + n * (0.2 * texelMetros), 1.0)).xyz * 0.5 + 0.5;
@@ -353,7 +364,7 @@ float sombraEm(vec3 p, vec3 n) {
     if (usarFiltroSombra > 0.5) return sombraFiltrada(p, n);
 #endif
     float nl = clamp(dot(n, dirSombra), 0.0, 1.0);
-    if (nl <= 0.0) return 0.0;
+    if (costasParaOSol(nl)) return 0.0;
     vec4 pl = matLuz * vec4(p + n * (0.05 + 0.2 * (1.0 - nl)), 1.0);
     vec3 q = pl.xyz / pl.w * 0.5 + 0.5;
     if (q.x <= 0.0 || q.x >= 1.0 || q.y <= 0.0 || q.y >= 1.0 || q.z >= 1.0) return 1.0;
@@ -1819,6 +1830,10 @@ void main() {
     if (usarAO > 0.5 && prof < alcanceAO) {
         vec2 ao = TEX(texAO, fragTexCoord).rg;
         float peso = 1.0 - smoothstep(0.3, 1.2, abs(prof - ao.g * alcanceAO));
+        // O raio do SSAO (0,7 m) tem a escala de paredes e casas. No heroi, perto da distancia de foco,
+        // os proprios bracos e pernas o escureceriam em manchas, inclusive sob o sol (o AO multiplica a
+        // cor final, nao so a luz indireta). Ele ja tem a sombra de perto, entao o AO ali e so um toque.
+        if (distFoco > 0.0) peso *= mix(1.0, 0.25, 1.0 - smoothstep(0.35, 0.9, abs(prof - distFoco)));
         c *= mix(1.0, ao.r, peso);
     }
     if (forcaBrilho > 0.0) c += TEX(texBrilho, fragTexCoord).rgb * forcaBrilho;
